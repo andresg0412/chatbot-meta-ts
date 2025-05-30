@@ -1,0 +1,52 @@
+import { createBot, createProvider, createFlow, addKeyword, utils, EVENTS } from '@builderbot/bot';
+
+const welcomeFlow = addKeyword(EVENTS.WELCOME)
+    .addAnswer(`Hola Bienvenido al centro de salud psicologico`)
+    .addAnswer(
+        'Aqui va un mensaje',
+        {
+            capture: false
+        },
+        async (ctx, { provider }) => {
+            const list = {
+                "header": {
+                    "type": "text",
+                    "text": "Esta es una lista"
+                },
+                "body": {
+                    "text": "Te voy a enviar unas opciones"
+                },
+                "footer": {
+                    "text": ""
+                },
+                "action": {
+                    "button": "Opciones",
+                    "sections": [
+                        {
+                            "title": "Lista 1",
+                            "rows": [
+                                {
+                                    "id": "56554654564",
+                                    "title": "Titulo 1",
+                                    "description": "Descripción 1"
+                                }
+                            ]
+                        },
+                        {
+                            "title": "Lista 2",
+                            "rows": [
+                                {
+                                    "id": "<LIST_SECTION_2_ROW_1_ID>",
+                                    "title": "Titulo 2",
+                                    "description": "Descripción 2"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+            await provider.sendList(ctx.from, list)
+        }
+    );
+
+export { welcomeFlow };
