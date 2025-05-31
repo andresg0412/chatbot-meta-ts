@@ -13,9 +13,17 @@ import {
     step6Reprogramar,
     step7Reprogramar,
     stepConfirmaReprogramar,
+    step8ConfirmaReprogramar,
+    step9ConfirmaReprogramar,
     noConfirmaReprogramar,
-    salidaNoConfirmaReprogramar,
+    seleccionaCitaReprogramar,
+    confirmarReprogramarCita,
+    revisarPagoConsulta,
+    noConfirmaReprogramarCita,
+    preguntarConfirmarBotones,
 } from './flujos/reprogramarCita';
+
+import { volverMenuPrincipal } from './flujos/common/volverMenuPrincipal';
 
 export default createFlow([
     welcomeFlow,
@@ -31,6 +39,13 @@ export default createFlow([
     step6Reprogramar,
     step7Reprogramar,
     stepConfirmaReprogramar,
+    step8ConfirmaReprogramar,
+    step9ConfirmaReprogramar,
     noConfirmaReprogramar,
-    salidaNoConfirmaReprogramar,
+    seleccionaCitaReprogramar,
+    confirmarReprogramarCita,
+    revisarPagoConsulta,
+    noConfirmaReprogramarCita,
+    preguntarConfirmarBotones,
+    volverMenuPrincipal,
 ]);

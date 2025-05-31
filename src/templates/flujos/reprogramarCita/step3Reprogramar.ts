@@ -90,6 +90,7 @@ const step3Reprogramar = addKeyword(EVENTS.ACTION)
         {capture: true },
         async (ctx, { state, gotoFlow }) => {
             const numeroDoc = ctx.body;
+            console.log('Número de documento recibido:', numeroDoc);
             await state.update({ numeroDoc, esperaNumeroDoc: false });
             await state.update({ esperaSeleccionCita: true });
             return gotoFlow(step4Reprogramar);

@@ -1,7 +1,20 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
+import { seleccionaCitaReprogramar } from './seleccionaCitaReprogramar';
+
+const step9ConfirmaReprogramar = addKeyword(EVENTS.ACTION)
+    .addAnswer('Por favor, escribe el número de la cita en la que deseas agendar tu cita médica.',
+        {capture: true },
+        async (ctx, { state, gotoFlow }) => {
+            const citaSeleccionada = ctx.body;
+            console.log('citaSeleccionada:', citaSeleccionada);
+            await state.update({ citaSeleccionada, esperaSeleccionCita: false });
+            await state.update({ esperaSeleccionCita: false });
+            return gotoFlow(seleccionaCitaReprogramar);
+        }
+    )
 
 const step8ConfirmaReprogramar = addKeyword(EVENTS.ACTION)
-    .addAction(async (ctx, { state, flowDynamic }) => {
+    .addAction(async (ctx, { state, flowDynamic, gotoFlow }) => {
         const citasDisponibles = state.getMyState().citasDisponiblesReprogramar;
         if (!citasDisponibles || citasDisponibles.length === 0) {
             await flowDynamic('No hay citas disponibles para reprogramar.');
@@ -14,7 +27,7 @@ const step8ConfirmaReprogramar = addKeyword(EVENTS.ACTION)
         mensaje += '0. Ver más';
         await flowDynamic(mensaje);
         await state.update({ esperaSeleccionCita: true });
-        return;
+        return gotoFlow(step9ConfirmaReprogramar);
     });
 
 const stepConfirmaReprogramar = addKeyword(EVENTS.ACTION)
@@ -47,4 +60,8 @@ const stepConfirmaReprogramar = addKeyword(EVENTS.ACTION)
     );
 
 
-export { stepConfirmaReprogramar };
+export {
+    stepConfirmaReprogramar,
+    step8ConfirmaReprogramar,
+    step9ConfirmaReprogramar
+};

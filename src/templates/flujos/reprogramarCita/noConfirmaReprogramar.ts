@@ -1,26 +1,6 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { menuFlow } from '../../menuFlow';
-
-const salidaNoConfirmaReprogramar = addKeyword(EVENTS.ACTION)
-    .addAnswer(
-        '¿Que deseas hacer?',
-        {
-            capture: true,
-            buttons: [
-                { body: 'Volver al menú' },
-                { body: 'Salir' },
-            ],
-        },
-        async (ctx, ctxFn) => {
-            if (ctx.body === 'Volver al menú'){
-                return ctxFn.gotoFlow(menuFlow)
-            }
-            if (ctx.body === 'Salir'){
-                await ctxFn.flowDynamic('Gracias por usar nuestro servicio. ¡Hasta luego!');
-                return ctxFn.endFlow();
-            }
-        }
-    );
+import { volverMenuPrincipal } from '../common/volverMenuPrincipal';
 
 
 const noConfirmaReprogramar = addKeyword(EVENTS.ACTION)
@@ -39,7 +19,7 @@ const noConfirmaReprogramar = addKeyword(EVENTS.ACTION)
             mensaje += `${idx + 1}. Fecha: ${cita.fecha}, Hora: ${cita.hora}, Lugar: ${cita.lugar}\n`;
         });
         await flowDynamic(mensaje);
-        return gotoFlow(salidaNoConfirmaReprogramar);
+        return gotoFlow(volverMenuPrincipal);
     });
 
-export { noConfirmaReprogramar, salidaNoConfirmaReprogramar };
+export { noConfirmaReprogramar };

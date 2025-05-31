@@ -137,3 +137,23 @@ const step3Reprogramar = addKeyword(EVENTS.ACTION)
 
 
 
+//ESPERA Y CAPTURA LA RESPUESTA DEL USUARIO, LO GUARDA EN EL ESTADO, ENVIA MENSAJE Y QUEDA EN ESPERA DE RESPUESTA DEL USUARIO
+const step4Reprogramar = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { state, flowDynamic, gotoFlow }) => {
+        // Obtener tipo y número de documento del estado
+        const { tipoDoc, numeroDoc } = state.getMyState();
+        // Simular consulta a la API
+        const citas = await consultarCitasPorDocumento(tipoDoc, numeroDoc);
+        await state.update({ citas });
+        if (!citas || citas.length === 0) {
+            await flowDynamic('No se encontraron citas agendadas con ese documento.');
+            return;
+        }
+        let mensaje = 'Estas son tus citas agendadas:\n';
+        citas.forEach((cita, idx) => {
+            mensaje += `${idx + 1}. Fecha: ${cita.fecha}, Hora: ${cita.hora}, Lugar: ${cita.lugar}\n`;
+        });
+        await flowDynamic(mensaje);
+        await state.update({ esperaSeleccionCita: true });
+        return gotoFlow(step5Reprogramar);
+    });
