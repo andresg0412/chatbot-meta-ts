@@ -6,9 +6,6 @@ import { noAceptaPoliticas } from './flujos/principal/noAceptaPoliticas';
 import { menuConocerIpsFlow } from './flujos/conocerIps/menuConocerIpsflow';
 import {
     step1Reprogramar,
-    step2Reprogramar,
-    step3Reprogramar,
-    step4Reprogramar,
     step5Reprogramar,
     step6Reprogramar,
     step7Reprogramar,
@@ -25,6 +22,23 @@ import {
 
 import { volverMenuPrincipal } from './flujos/common/volverMenuPrincipal';
 
+import {
+    step1CencelarCita,
+    step5CancelarCita,
+    step6CancelarCita,
+    step7CancelarCita,
+    stepConfirmaCancelarCita,
+    stepOpcionReprogramar,
+} from './flujos/cancelarCita';
+
+import {
+    datosinicialesComunes,
+    datosinicialesComunes2,
+    datosinicialesComunes3,
+    datosinicialesComunes4,
+    datosinicialesComunes5,
+} from './flujos/common/datosInicialesComunes';
+
 export default createFlow([
     welcomeFlow,
     politicaDatosFlow,
@@ -32,12 +46,19 @@ export default createFlow([
     menuFlow,
     menuConocerIpsFlow,
     step1Reprogramar,
-    step2Reprogramar,
-    step3Reprogramar,
-    step4Reprogramar,
+    step1CencelarCita,
+    datosinicialesComunes,
+    datosinicialesComunes2,
+    datosinicialesComunes3,
+    datosinicialesComunes4,
+    datosinicialesComunes5,
     step5Reprogramar,
     step6Reprogramar,
     step7Reprogramar,
+    step5CancelarCita,
+    step6CancelarCita,
+    step7CancelarCita,
+    stepOpcionReprogramar,
     stepConfirmaReprogramar,
     step8ConfirmaReprogramar,
     step9ConfirmaReprogramar,
@@ -48,4 +69,5 @@ export default createFlow([
     noConfirmaReprogramarCita,
     preguntarConfirmarBotones,
     volverMenuPrincipal,
+    stepConfirmaCancelarCita,
 ]);

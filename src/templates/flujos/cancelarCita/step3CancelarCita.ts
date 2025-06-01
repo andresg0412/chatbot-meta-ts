@@ -1,6 +1,7 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
-import { stepConfirmaReprogramar } from './stepConfirmaReprogramar';
-import { noConfirmaReprogramar } from './noConfirmaReprogramar';
+import { volverMenuPrincipal } from '../common/volverMenuPrincipal';
+import { stepOpcionReprogramar } from './stepOpcionReprogramar';
+
 
 // Simulación de consulta a API externa para obtener citas agendadas
 async function consultarCitasPorDocumento(tipoDoc: string, numeroDoc: string) {
@@ -11,9 +12,20 @@ async function consultarCitasPorDocumento(tipoDoc: string, numeroDoc: string) {
     ];
 }
 
-const step7Reprogramar = addKeyword(EVENTS.ACTION)
+const stepConfirmaCancelarCita = addKeyword(EVENTS.ACTION)
     .addAnswer(
-        '¿Estás seguto que deseas reprogramar tu cita?',
+        'Tu cita ha sido cancelada exitosamente. Quedo atenta a tu nueva disponibilidad.',
+        {
+            capture: false
+        },
+        async (ctx, ctxFn) => {
+            return ctxFn.gotoFlow(volverMenuPrincipal);
+        }
+    );
+
+const step7CancelarCita = addKeyword(EVENTS.ACTION)
+    .addAnswer(
+        '¿Estás seguto que deseas cancelar tu cita?',
         {
             capture: true,
             buttons: [
@@ -21,18 +33,20 @@ const step7Reprogramar = addKeyword(EVENTS.ACTION)
                 { body: 'No' },
             ],
         },
-        async (ctx, ctxFn) => {
+        async (ctx, { provider, state, gotoFlow }) => {
             if (ctx.body === 'Si'){
-                return ctxFn.gotoFlow(stepConfirmaReprogramar)
+                // Ejecutar API para cancelar la cita
+                return gotoFlow(stepConfirmaCancelarCita)
             }
             if (ctx.body === 'No'){
-                return ctxFn.gotoFlow(noConfirmaReprogramar)
+                await state.update({ flujoSeleccionadoMenu: 'reprogramarCita' });
+                return gotoFlow(stepOpcionReprogramar)
             }
         }
 
     );
 
-const step6Reprogramar = addKeyword(EVENTS.ACTION)
+const step6CancelarCita = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { state, flowDynamic, gotoFlow }) => {
             // Obtener el número de cita seleccionado por el usuario
             const numeroCita = ctx.body ? parseInt(ctx.body, 10) : null;
@@ -43,11 +57,11 @@ const step6Reprogramar = addKeyword(EVENTS.ACTION)
             }
             const citaSeleccionada = citas[numeroCita - 1];
             await state.update({ citaSeleccionada });
-            return gotoFlow(step7Reprogramar);
+            return gotoFlow(step7CancelarCita);
         });
 
-const step5Reprogramar = addKeyword(EVENTS.ACTION)
-    .addAnswer('Por favor, escribe el número de la cita que deseas reprogramar:',
+const step5CancelarCita = addKeyword(EVENTS.ACTION)
+    .addAnswer('Por favor, escribe el número de la cita que deseas cancelar:',
         { capture: true },
         async (ctx, { state, flowDynamic, gotoFlow }) => {
             const esperaSeleccionCita = state.getMyState().esperaSeleccionCita;
@@ -56,13 +70,13 @@ const step5Reprogramar = addKeyword(EVENTS.ACTION)
                 return;
             }
             await state.update({ esperaSeleccionCita: false });
-            return gotoFlow(step6Reprogramar);
+            return gotoFlow(step6CancelarCita);
         }
     )
 
 
 // Este step captura el número de documento, lo guarda en el estado y pasa al siguiente paso (step3)
-/*const step4Reprogramar = addKeyword(EVENTS.ACTION)
+/*const step4CancelarCita = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { state, flowDynamic, gotoFlow }) => {
         // Obtener tipo y número de documento del estado
         const { tipoDoc, numeroDoc } = state.getMyState();
@@ -79,13 +93,13 @@ const step5Reprogramar = addKeyword(EVENTS.ACTION)
         });
         await flowDynamic(mensaje);
         await state.update({ esperaSeleccionCita: true });
-        return gotoFlow(step5Reprogramar);
+        return gotoFlow(step5CancelarCita);
     });*/
 
 
 
 // Este step captura el número de documento, lo guarda en el estado y pasa al siguiente paso (step3)
-/*const step3Reprogramar = addKeyword(EVENTS.ACTION)
+/*const step3CancelarCita = addKeyword(EVENTS.ACTION)
     .addAnswer('Ahora, por favor digita tu número de documento:',
         {capture: true },
         async (ctx, { state, gotoFlow }) => {
@@ -93,8 +107,8 @@ const step5Reprogramar = addKeyword(EVENTS.ACTION)
             console.log('Número de documento recibido:', numeroDoc);
             await state.update({ numeroDoc, esperaNumeroDoc: false });
             await state.update({ esperaSeleccionCita: true });
-            return gotoFlow(step4Reprogramar);
+            return gotoFlow(step4CancelarCita);
         }
     )*/
 
-export { step5Reprogramar, step6Reprogramar, step7Reprogramar };
+export { step5CancelarCita, step6CancelarCita, step7CancelarCita, stepConfirmaCancelarCita };
