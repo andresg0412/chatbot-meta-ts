@@ -39,6 +39,7 @@ import {
     datosinicialesComunes5,
 } from './flujos/common/datosInicialesComunes';
 import { pasoAgenteFlow } from './flujos/pasoAgente';
+import { ejecutarPlantillaDiariaFlow, confirmarCitaFlow } from './flujos/campahna';
 
 export default createFlow([
     welcomeFlow,
@@ -72,4 +73,6 @@ export default createFlow([
     volverMenuPrincipal,
     stepConfirmaCancelarCita,
     pasoAgenteFlow,
+    ejecutarPlantillaDiariaFlow,
+    confirmarCitaFlow,
 ]);
