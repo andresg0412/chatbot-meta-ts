@@ -38,6 +38,7 @@ import {
     datosinicialesComunes4,
     datosinicialesComunes5,
 } from './flujos/common/datosInicialesComunes';
+import { pasoAgenteFlow } from './flujos/pasoAgente';
 
 export default createFlow([
     welcomeFlow,
@@ -70,4 +71,5 @@ export default createFlow([
     preguntarConfirmarBotones,
     volverMenuPrincipal,
     stepConfirmaCancelarCita,
+    pasoAgenteFlow,
 ]);
