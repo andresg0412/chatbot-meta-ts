@@ -21,7 +21,7 @@ const step8ConfirmaReprogramar = addKeyword(EVENTS.ACTION)
             return;
         }
         let mensaje = '';
-        citasDisponibles.forEach((cita, idx) => {
+        citasDisponibles.forEach((cita: any, idx: any) => {
             mensaje += `${idx + 1}. Fecha: ${cita.fecha}, Hora: ${cita.hora}, Lugar: ${cita.lugar}\n`;
         });
         mensaje += '0. Ver más';

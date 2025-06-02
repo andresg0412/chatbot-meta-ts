@@ -49,7 +49,7 @@ const step7CancelarCita = addKeyword(EVENTS.ACTION)
 const step6CancelarCita = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { state, flowDynamic, gotoFlow }) => {
             // Obtener el número de cita seleccionado por el usuario
-            const numeroCita = ctx.body ? parseInt(ctx.body, 10) : null;
+            const numeroCita = ctx.body ? parseInt(ctx.body, 10) : 0;
             const { citas } = state.getMyState();
             if (!citas || !citas[numeroCita - 1]) {
                 await flowDynamic('Número de cita inválido. Por favor, intenta nuevamente.');

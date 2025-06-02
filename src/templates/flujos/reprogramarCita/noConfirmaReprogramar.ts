@@ -15,7 +15,7 @@ const noConfirmaReprogramar = addKeyword(EVENTS.ACTION)
             return;
         }
         let mensaje = 'Recuerda que tienes las siguientes citas agendadas:\n';
-        citas.forEach((cita, idx) => {
+        citas.forEach((cita: any, idx: any) => {
             mensaje += `${idx + 1}. Fecha: ${cita.fecha}, Hora: ${cita.hora}, Lugar: ${cita.lugar}\n`;
         });
         await flowDynamic(mensaje);

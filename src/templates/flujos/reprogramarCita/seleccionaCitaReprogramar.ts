@@ -61,7 +61,7 @@ const seleccionaCitaReprogramar = addKeyword(EVENTS.ACTION)
         // obtener las citas que se enviaron en el paso anterior
         const citas = state.getMyState().citas;
         // obtener la respuesta del usuario
-        const numeroCita = ctx.body ? parseInt(ctx.body, 10) : null;
+        const numeroCita = ctx.body ? parseInt(ctx.body, 10) : 0;
         if (!citas || !citas[numeroCita - 1]) {
             await flowDynamic('Número de cita inválido. Por favor, intenta nuevamente.');
             return;
