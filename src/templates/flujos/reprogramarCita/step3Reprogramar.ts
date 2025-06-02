@@ -13,7 +13,7 @@ async function consultarCitasPorDocumento(tipoDoc: string, numeroDoc: string) {
 
 const step7Reprogramar = addKeyword(EVENTS.ACTION)
     .addAnswer(
-        '¿Estás seguto que deseas reprogramar tu cita?',
+        '¿Estás seguto que deseas reprogramar tu cita? 🤔',
         {
             capture: true,
             buttons: [
@@ -47,7 +47,7 @@ const step6Reprogramar = addKeyword(EVENTS.ACTION)
         });
 
 const step5Reprogramar = addKeyword(EVENTS.ACTION)
-    .addAnswer('Por favor, escribe el número de la cita que deseas reprogramar:',
+    .addAnswer('Por favor, digita el número de la cita que deseas reprogramar 🗓️:',
         { capture: true },
         async (ctx, { state, flowDynamic, gotoFlow }) => {
             const esperaSeleccionCita = state.getMyState().esperaSeleccionCita;

@@ -25,7 +25,7 @@ const stepConfirmaCancelarCita = addKeyword(EVENTS.ACTION)
 
 const step7CancelarCita = addKeyword(EVENTS.ACTION)
     .addAnswer(
-        '¿Estás seguto que deseas cancelar tu cita?',
+        '¿Estás seguto que deseas cancelar tu cita? 🤔',
         {
             capture: true,
             buttons: [
@@ -61,7 +61,7 @@ const step6CancelarCita = addKeyword(EVENTS.ACTION)
         });
 
 const step5CancelarCita = addKeyword(EVENTS.ACTION)
-    .addAnswer('Por favor, escribe el número de la cita que deseas cancelar:',
+    .addAnswer('Por favor, escribe el número de la cita que deseas cancelar 🗓️:',
         { capture: true },
         async (ctx, { state, flowDynamic, gotoFlow }) => {
             const esperaSeleccionCita = state.getMyState().esperaSeleccionCita;

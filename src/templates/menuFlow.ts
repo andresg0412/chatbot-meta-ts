@@ -2,7 +2,7 @@ import { createBot, createProvider, createFlow, addKeyword, utils, EVENTS } from
 
 const menuFlow = addKeyword(EVENTS.ACTION)
     .addAnswer(
-        '¿Que deseas hacer hoy?',
+        '¿Que deseas hacer hoy? 😊',
         {
             capture: false
         },
@@ -31,17 +31,17 @@ const menuFlow = addKeyword(EVENTS.ACTION)
                                 },
                                 {
                                     "id": "280525002",
-                                    "title": "Agendar Cita",
+                                    "title": "Agendar cita",
                                     "description": ""
                                 },
                                 {
                                     "id": "280525003",
-                                    "title": "Reprogramar Cita",
+                                    "title": "Reprogramar cita",
                                     "description": ""
                                 },
                                 {
                                     "id": "280525004",
-                                    "title": "Cancelar Cita",
+                                    "title": "Cancelar cita",
                                     "description": ""
                                 },
                                 {

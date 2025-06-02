@@ -16,7 +16,7 @@ const volverMenuPrincipal = addKeyword(EVENTS.ACTION)
                 return ctxFn.gotoFlow(menuFlow)
             }
             if (ctx.body === 'Salir'){
-                await ctxFn.flowDynamic('Agradecemos tu preferencia. Nuestra misión es orientarte en cada momento de tu vida. \n Recuerda que cuando lo desees puedes escribir *"hola"* para conversar nuevamente.');
+                await ctxFn.flowDynamic('🌟 Agradecemos tu preferencia. Nuestra misión es orientarte en cada momento de tu vida. \nRecuerda que cuando lo desees puedes escribir *"hola"* para conversar nuevamente.');
                 return ctxFn.endFlow();
             }
         }

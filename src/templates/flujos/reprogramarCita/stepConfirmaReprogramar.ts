@@ -2,7 +2,7 @@ import { addKeyword, EVENTS } from '@builderbot/bot';
 import { seleccionaCitaReprogramar } from './seleccionaCitaReprogramar';
 
 const step9ConfirmaReprogramar = addKeyword(EVENTS.ACTION)
-    .addAnswer('Por favor, escribe el número de la cita en la que deseas agendar tu cita médica.',
+    .addAnswer('Por favor, escribe el número de la cita en la que deseas agendar tu cita médica. 🔍📋',
         {capture: true },
         async (ctx, { state, gotoFlow }) => {
             const citaSeleccionada = ctx.body;
@@ -32,7 +32,7 @@ const step8ConfirmaReprogramar = addKeyword(EVENTS.ACTION)
 
 const stepConfirmaReprogramar = addKeyword(EVENTS.ACTION)
     .addAnswer(
-        'A continuación le mostrare las fechas disponibles para reprogramar su cita:',
+        'A continuación te mostrare las fechas disponibles para reprogramar:',
         {
             capture: false,
         },

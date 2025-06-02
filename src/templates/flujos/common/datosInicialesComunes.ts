@@ -26,6 +26,8 @@ const datosinicialesComunes5 = addKeyword(EVENTS.ACTION)
 
 const datosinicialesComunes4 = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { state, flowDynamic, gotoFlow }) => {
+        // Obtener nombre del contexto
+        const nombre = ctx.pushName ? ctx.pushName : 'Usuario';
         // Obtener tipo y número de documento del estado
         const { tipoDoc, numeroDoc } = state.getMyState();
         // Simular consulta a la API
@@ -35,7 +37,7 @@ const datosinicialesComunes4 = addKeyword(EVENTS.ACTION)
             await flowDynamic('No se encontraron citas agendadas con ese documento.');
             return;
         }
-        let mensaje = 'Estas son tus citas agendadas:\n';
+        let mensaje = `Estimado/a *${nombre}* Tienes las siguientes citas agendadas:\n`;
         citas.forEach((cita, idx) => {
             mensaje += `${idx + 1}. Fecha: ${cita.fecha}, Hora: ${cita.hora}, Lugar: ${cita.lugar}\n`;
         });
@@ -45,7 +47,7 @@ const datosinicialesComunes4 = addKeyword(EVENTS.ACTION)
     });
 
 const datosinicialesComunes3 = addKeyword(EVENTS.ACTION)
-    .addAnswer('Ahora, por favor digita tu número de documento:',
+    .addAnswer('Ahora, por favor digita tu número de documento 🔢:',
         {capture: true },
         async (ctx, { state, gotoFlow }) => {
             const numeroDoc = ctx.body;

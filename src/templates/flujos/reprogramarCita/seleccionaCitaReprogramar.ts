@@ -28,7 +28,7 @@ const confirmarReprogramarCita = addKeyword(EVENTS.ACTION)
         // Ejecutar API para cambiar de estado la cita anterior
         // ejecutar API para agendar la nueva cita
         // Si todo sale bien cambiar state y enviar mensaje de confirmación
-        await flowDynamic('Tu cita ha sido reprogramada exitosamente.');
+        await flowDynamic('Tu cita se ha agendado con éxito. 📅👍');
         await state.update({ citaReprogramada: true });
         return gotoFlow(revisarPagoConsulta)
     });
@@ -36,7 +36,7 @@ const confirmarReprogramarCita = addKeyword(EVENTS.ACTION)
 
 const preguntarConfirmarBotones = addKeyword(EVENTS.ACTION)
     .addAnswer(
-        '¿Confirmas la cita?',
+        '¿Confirmas la cita? ✅',
         {
             capture: true,
             buttons: [
