@@ -3,7 +3,8 @@ import { seleccionaCitaReprogramar, preguntarConfirmarBotones } from './seleccio
 import {
     consultarProfesionalesPorEspecialidad,
     consultarHorariosPorProfesionalId,
-    consultarAgendaPorProfesionalId
+    consultarAgendaPorProfesionalId,
+    consultarProfesionalesPorId,
 } from '../../../services/profesionalesService';
 
 
@@ -56,7 +57,7 @@ const stepSeleccionaFechaReprogramar = addKeyword(EVENTS.ACTION)
                 }
                 await flowDynamic(mensaje);
                 await state.update({ pasoSeleccionFecha: { inicio: nuevoInicio, fin: nuevoFin } });
-                return;
+                return gotoFlow(stepSeleccionaFechaReprogramar);
             }
             // Si selecciona una fecha válida
             const fechaSeleccionadaAgendar = mostrarFechas[seleccion - 1];
@@ -167,6 +168,16 @@ async function obtenerCitasDisponiblesPrimeraVez(Especialidad) {
     return citasDisponiblesReprogramar;
 }
 
+async function obtenerCitasDisponiblesControl(profesionalPrevio) {
+    const ahora = new Date();
+    const Especialidad = profesionalPrevio.Especialidad;
+    const duracionCita = await obtenerDuracionCitaEspecialidad([profesionalPrevio]);
+    let citasDisponiblesReprogramar = [];
+    const citas = await obtenerCitasDisponiblesPorProfesional(profesionalPrevio, Especialidad, ahora, duracionCita);
+    citasDisponiblesReprogramar = citasDisponiblesReprogramar.concat(citas);
+    return citasDisponiblesReprogramar;
+}
+
 function agruparCitasPorFecha(citasDisponiblesReprogramar) {
     const citasPorFecha = {};
     citasDisponiblesReprogramar.forEach(cita => {
@@ -197,12 +208,21 @@ const stepConfirmaReprogramar = addKeyword(EVENTS.ACTION)
                 await flowDynamic('No se encontró la cita seleccionada.');
                 return;
             }
-            const { Especialidad, MotivoConsulta } = citaSeleccionadaProgramada;
+            const { Especialidad, MotivoConsulta, ProfesionalID, profesional } = citaSeleccionadaProgramada;
             let citasDisponiblesReprogramar = [];
             if (MotivoConsulta === 'Primera Vez') {
                 citasDisponiblesReprogramar = await obtenerCitasDisponiblesPrimeraVez(Especialidad);
             } else if (MotivoConsulta === 'Control') {
-                // Lógica para control (similar, pero puede variar según reglas de negocio)
+                let profesionalPrevio = ProfesionalID;
+                if (!profesionalPrevio || typeof profesionalPrevio !== 'object') {
+                    const profesional = await consultarProfesionalesPorId(ProfesionalID);
+                    profesionalPrevio = profesional && profesional.length > 0 ? profesional[0] : null;
+                }
+                if (!profesionalPrevio) {
+                    await flowDynamic('No se encontró el profesional de la cita anterior.');
+                    return;
+                }
+                citasDisponiblesReprogramar = await obtenerCitasDisponiblesControl(profesionalPrevio);
             }
             if (!citasDisponiblesReprogramar.length) {
                 await flowDynamic('No hay citas disponibles para reprogramar en este momento. Por favor, inténtalo más tarde.');

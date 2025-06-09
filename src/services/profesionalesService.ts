@@ -21,6 +21,24 @@ export async function consultarProfesionalesPorEspecialidad(especialidad: string
     }
 }
 
+export async function consultarProfesionalesPorId(profesionalId: string) {
+    try {
+        const response = await axios.get(
+            `${URL_SHEETBEST}/tabs/Equipo/ColaboradoresId/${profesionalId}`,
+            {
+                headers: {
+                    'X-Api-Key': API_KEY_SHEETBEST,
+                },
+            }
+        );
+        // Filtrar solo profesionales activos
+        return (response.data || []).filter((prof: any) => prof.Estado === 'Activo');
+    } catch (error) {
+        console.error('Error consultando profesionales:', error);
+        return [];
+    }
+}
+
 export async function consultarHorariosPorProfesionalId(profesionalId: string) {
     try {
         const response = await axios.get(
