@@ -107,45 +107,48 @@ async function obtenerCitasDisponiblesPorProfesional(profesional, especialidad, 
     const horariosArr = await consultarHorariosPorProfesionalId(profesional.ColaboradoresId);
     const agendaArr = await consultarAgendaPorProfesionalId(profesional.ColaboradoresId);
     const citas = [];
+    const semanasAMostrar = 4;
     for (const horarios of horariosArr) {
         for (const dia of ['Lunes','Martes','Miercoles','Jueves','Viernes','Sabado','Domingo']) {
             if (horarios[dia]) {
                 const horas = horarios[dia].split(',').map(h => h.trim()).filter(Boolean).sort();
-                for (let i = 0; i < horas.length; i++) {
-                    const hora = horas[i];
-                    // Calcular HoraFinal sumando la duración
-                    const [h, m] = hora.split(':').map(Number);
-                    const totalMin = h * 60 + m + duracionCita;
-                    const hFinal = Math.floor(totalMin / 60).toString().padStart(2, '0');
-                    const mFinal = (totalMin % 60).toString().padStart(2, '0');
-                    const horaFinal = `${hFinal}:${mFinal}`;
-                    const fechaProxima = getNextDateForDay(dia, ahora);
-                    const citaAgendaExistente = agendaArr.find((cita) =>
-                        cita.FechaCita === formatDate(fechaProxima) && cita.HoraCita === hora
-                    );
-                    const ocupada = citaAgendaExistente && ['Programada','Aprobada','Asistio','Confirmo'].includes(citaAgendaExistente.EstadoAgenda);
-                    const [horaStr, minutoStr] = hora.split(':');
-                    const fechaHora = new Date(fechaProxima);
-                    fechaHora.setHours(Number(horaStr), Number(minutoStr), 0, 0);
-                    if (!ocupada && fechaHora > ahora) {
-                        if (citaAgendaExistente) {
-                            // Si existe en agenda y no está ocupada, usar todos sus datos originales
-                            citas.push({ ...citaAgendaExistente,
-                                lugar: profesional.Sede || 'Bucarama Gonzalez Valencia',
-                                profesional: profesional.NombreCompleto ?? (`${profesional.PrimerNombre} ${profesional.PrimerApellido}`),
-                             });
-                        } else {
-                            // Si no existe, crear el objeto nuevo
-                            citas.push({
-                                id: profesional.ColaboradoresId + '-' + formatDate(fechaProxima) + '-' + hora,
-                                FechaCita: formatDate(fechaProxima),
-                                HoraCita: hora,
-                                HoraFinal: horaFinal,
-                                lugar: profesional.Sede || 'Bucarama Gonzalez Valencia',
-                                profesional: profesional.NombreCompleto ?? (`${profesional.PrimerNombre} ${profesional.PrimerApellido}`),
-                                ProfesionalID: profesional.ColaboradoresId,
-                                Especialidad: especialidad
-                            });
+                for (let semana = 0; semana < semanasAMostrar; semana++) {
+                    const fechaBase = new Date(ahora);
+                    fechaBase.setDate(fechaBase.getDate() + semana * 7);
+                    const fechaProxima = getNextDateForDay(dia, fechaBase);
+                    if (fechaProxima.getMonth() !== ahora.getMonth() && semanasAMostrar > 4) continue;
+                    for (let i = 0; i < horas.length; i++) {
+                        const hora = horas[i];
+                        const [h, m] = hora.split(':').map(Number);
+                        const totalMin = h * 60 + m + duracionCita;
+                        const hFinal = Math.floor(totalMin / 60).toString().padStart(2, '0');
+                        const mFinal = (totalMin % 60).toString().padStart(2, '0');
+                        const horaFinal = `${hFinal}:${mFinal}`;
+                        const citaAgendaExistente = agendaArr.find((cita) =>
+                            cita.FechaCita === formatDate(fechaProxima) && cita.HoraCita === hora
+                        );
+                        const ocupada = citaAgendaExistente && ['Programada','Aprobada','Asistio','Confirmo'].includes(citaAgendaExistente.EstadoAgenda);
+                        const [horaStr, minutoStr] = hora.split(':');
+                        const fechaHora = new Date(fechaProxima);
+                        fechaHora.setHours(Number(horaStr), Number(minutoStr), 0, 0);
+                        if (!ocupada && fechaHora > ahora) {
+                            if (citaAgendaExistente) {
+                                citas.push({ ...citaAgendaExistente,
+                                    lugar: profesional.Sede || 'Bucarama Gonzalez Valencia',
+                                    profesional: profesional.NombreCompleto ?? (`${profesional.PrimerNombre} ${profesional.PrimerApellido}`),
+                                });
+                            } else {
+                                citas.push({
+                                    id: profesional.ColaboradoresId + '-' + formatDate(fechaProxima) + '-' + hora,
+                                    FechaCita: formatDate(fechaProxima),
+                                    HoraCita: hora,
+                                    HoraFinal: horaFinal,
+                                    lugar: profesional.Sede || 'Bucarama Gonzalez Valencia',
+                                    profesional: profesional.NombreCompleto ?? (`${profesional.PrimerNombre} ${profesional.PrimerApellido}`),
+                                    ProfesionalID: profesional.ColaboradoresId,
+                                    Especialidad: especialidad
+                                });
+                            }
                         }
                     }
                 }
