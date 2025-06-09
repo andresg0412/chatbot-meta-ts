@@ -1,18 +1,43 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { step5CancelarCita } from '../cancelarCita/step3CancelarCita';
 import { step5Reprogramar } from '../reprogramarCita/step3Reprogramar';
+import { consultarPacientePorDocumento, consultarCitasPorPacienteId } from '../../../services/apiService';
 
 async function consultarCitasPorDocumento(tipoDoc: string, numeroDoc: string) {
-    // Simulación de respuesta
-    return [
-        { id: '1', fecha: '2025-06-10', hora: '10:00 AM', lugar: 'Sede Norte' },
-        { id: '2', fecha: '2025-06-15', hora: '2:00 PM', lugar: 'Sede Centro' },
-    ];
+    // Consultar información del paciente usando la API real
+    const paciente = await consultarPacientePorDocumento(numeroDoc);
+    if (!paciente || paciente.length === 0) {
+        return [];
+    }
+    // Obtener el PacientesID del primer resultado (ajustar si la API retorna diferente)
+    const pacienteId = paciente[0]?.PacientesID;
+    if (!pacienteId) {
+        return [];
+    }
+    // Consultar las citas asociadas a ese pacienteId
+    const citas = await consultarCitasPorPacienteId(pacienteId);
+    if (!citas || citas.length === 0) {
+        return [];
+    }
+    // Filtrar solo las citas con EstadoAgenda = 'Programada'
+    const citasProgramadas = citas.filter((cita: any) => cita.EstadoAgenda === 'Programada');
+    return citasProgramadas;
 }
+
+async function obtenerCitasValidas(citas: any, ahora: Date) {
+        return citas.filter((cita: any) => {
+            // FechaCita: "15/05/2025", HoraFinal: "14:50"
+            if (!cita.FechaCita || !cita.HoraFinal) return false;
+            const [dia, mes, anio] = (cita.FechaCita || '').split('/');
+            const [hora, minuto] = (cita.HoraFinal || '').split(':');
+            if (!dia || !mes || !anio || !hora || !minuto) return false;
+            const fechaHoraFinal = new Date(`${anio}-${mes}-${dia}T${hora.padStart(2, '0')}:${minuto.padStart(2, '0')}:00`);
+            return fechaHoraFinal > ahora;
+        });
+    }
 
 const datosinicialesComunes5 = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { state, flowDynamic, gotoFlow }) => {
-        // obtener estado flujoSeleccionadoMenu
         const flujoSeleccionadoMenu = state.getMyState().flujoSeleccionadoMenu;
         if (flujoSeleccionadoMenu === 'cancelarCita') {
             return gotoFlow(step5CancelarCita);
@@ -26,20 +51,28 @@ const datosinicialesComunes5 = addKeyword(EVENTS.ACTION)
 
 const datosinicialesComunes4 = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { state, flowDynamic, gotoFlow }) => {
-        // Obtener nombre del contexto
-        const nombre = ctx.pushName ? ctx.pushName : 'Usuario';
-        // Obtener tipo y número de documento del estado
         const { tipoDoc, numeroDoc } = state.getMyState();
-        // Simular consulta a la API
-        const citas = await consultarCitasPorDocumento(tipoDoc, numeroDoc);
-        await state.update({ citas });
-        if (!citas || citas.length === 0) {
-            await flowDynamic('No se encontraron citas agendadas con ese documento.');
+        const paciente = await consultarPacientePorDocumento(numeroDoc);
+        if (!paciente || paciente.length === 0) {
+            await flowDynamic('No se encontró información del paciente con ese documento.');
             return;
         }
-        let mensaje = `Estimado/a *${nombre}* Tienes las siguientes citas agendadas:\n`;
-        citas.forEach((cita, idx) => {
-            mensaje += `${idx + 1}. Fecha: ${cita.fecha}, Hora: ${cita.hora}, Lugar: ${cita.lugar}\n`;
+        const primerNombre = paciente[0]?.PrimerNombre || '';
+        const segundoNombre = paciente[0]?.SegundoNombre || '';
+        const nombreCompleto = `${primerNombre} ${segundoNombre}`.trim();
+
+        const citas = await consultarCitasPorDocumento(tipoDoc, numeroDoc);
+        const ahora = new Date();
+        const citasValidas = await obtenerCitasValidas(citas, ahora);
+
+        await state.update({ citasProgramadas: citasValidas });
+        if (!citasValidas || citasValidas.length === 0) {
+            await flowDynamic('No se encontraron citas agendadas y vigentes con ese documento.');
+            return;
+        }
+        let mensaje = `Estimado/a *${nombreCompleto}* Tienes las siguientes citas agendadas y vigentes:\n`;
+        citasValidas.forEach((cita: any, idx: number) => {
+            mensaje += `${idx + 1}. Fecha: ${cita.FechaCita}, Hora: ${cita.HoraCita}, Especialidad: ${cita.Especialidad}\n`;
         });
         await flowDynamic(mensaje);
         await state.update({ esperaSeleccionCita: true });
@@ -51,9 +84,7 @@ const datosinicialesComunes3 = addKeyword(EVENTS.ACTION)
         {capture: true },
         async (ctx, { state, gotoFlow }) => {
             const numeroDoc = ctx.body;
-            console.log('Número de documento recibido:', numeroDoc);
-            await state.update({ numeroDoc, esperaNumeroDoc: false });
-            await state.update({ esperaSeleccionCita: true });
+            await state.update({ numeroDoc, esperaNumeroDoc: false, esperaSeleccionCita: true });
             return gotoFlow(datosinicialesComunes4);
         }
     )

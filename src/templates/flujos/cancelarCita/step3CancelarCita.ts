@@ -74,41 +74,4 @@ const step5CancelarCita = addKeyword(EVENTS.ACTION)
         }
     )
 
-
-// Este step captura el número de documento, lo guarda en el estado y pasa al siguiente paso (step3)
-/*const step4CancelarCita = addKeyword(EVENTS.ACTION)
-    .addAction(async (ctx, { state, flowDynamic, gotoFlow }) => {
-        // Obtener tipo y número de documento del estado
-        const { tipoDoc, numeroDoc } = state.getMyState();
-        // Simular consulta a la API
-        const citas = await consultarCitasPorDocumento(tipoDoc, numeroDoc);
-        await state.update({ citas });
-        if (!citas || citas.length === 0) {
-            await flowDynamic('No se encontraron citas agendadas con ese documento.');
-            return;
-        }
-        let mensaje = 'Estas son tus citas agendadas:\n';
-        citas.forEach((cita, idx) => {
-            mensaje += `${idx + 1}. Fecha: ${cita.fecha}, Hora: ${cita.hora}, Lugar: ${cita.lugar}\n`;
-        });
-        await flowDynamic(mensaje);
-        await state.update({ esperaSeleccionCita: true });
-        return gotoFlow(step5CancelarCita);
-    });*/
-
-
-
-// Este step captura el número de documento, lo guarda en el estado y pasa al siguiente paso (step3)
-/*const step3CancelarCita = addKeyword(EVENTS.ACTION)
-    .addAnswer('Ahora, por favor digita tu número de documento:',
-        {capture: true },
-        async (ctx, { state, gotoFlow }) => {
-            const numeroDoc = ctx.body;
-            console.log('Número de documento recibido:', numeroDoc);
-            await state.update({ numeroDoc, esperaNumeroDoc: false });
-            await state.update({ esperaSeleccionCita: true });
-            return gotoFlow(step4CancelarCita);
-        }
-    )*/
-
 export { step5CancelarCita, step6CancelarCita, step7CancelarCita, stepConfirmaCancelarCita };
