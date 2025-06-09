@@ -8,15 +8,14 @@ const noConfirmaReprogramar = addKeyword(EVENTS.ACTION)
         // Obtener tipo y número de documento del estado
         const { tipoDoc, numeroDoc } = state.getMyState();
         // Simular consulta a la API
-        const { citas } = state.getMyState();
-        await state.update({ citas });
-        if (!citas || citas.length === 0) {
+        const { citasProgramadas } = state.getMyState();
+        if (!citasProgramadas || citasProgramadas.length === 0) {
             await flowDynamic('No se encontraron citas agendadas con ese documento.');
             return;
         }
         let mensaje = 'Recuerda que tienes las siguientes citas agendadas:\n';
-        citas.forEach((cita: any, idx: any) => {
-            mensaje += `${idx + 1}. Fecha: ${cita.fecha}, Hora: ${cita.hora}, Lugar: ${cita.lugar}\n`;
+        citasProgramadas.forEach((cita: any, idx: any) => {
+            mensaje += `*${idx + 1}*. *Fecha*: ${cita.FechaCita}, *Hora*: ${cita.HoraCita}, *Especialidad*: ${cita.Especialidad}\n`;
         });
         await flowDynamic(mensaje);
         return gotoFlow(volverMenuPrincipal);

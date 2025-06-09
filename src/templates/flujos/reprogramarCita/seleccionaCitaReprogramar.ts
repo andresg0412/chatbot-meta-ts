@@ -3,6 +3,7 @@ import { addKeyword, EVENTS } from '@builderbot/bot';
 import { volverMenuPrincipal } from '../common/volverMenuPrincipal';
 //import { API_KEY_SHEETBEST, URL_SHEETBEST } from '../../../services/apiService';
 import { actualizarEstadoCita, crearCita } from '../../../services/apiService';
+import { stepConfirmaReprogramar } from './stepConfirmaReprogramar';
 
 function generarAgendaIdAleatorio() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -29,9 +30,9 @@ const revisarPagoConsulta = addKeyword(EVENTS.ACTION)
 
 
 const noConfirmaReprogramarCita = addKeyword(EVENTS.ACTION)
-    .addAction(async (ctx, { state, flowDynamic }) => {
-        await flowDynamic('A continuación, te muestro nuevamente las fechas disponibles para que reagendes.');
-        
+    .addAction(async (ctx, { state, flowDynamic, gotoFlow }) => {
+        await flowDynamic('Entiendo, veamos nuevamente las fechas para que reagendes.');
+        return gotoFlow(stepConfirmaReprogramar);
     });
 
 const confirmarReprogramarCita = addKeyword(EVENTS.ACTION)

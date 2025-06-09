@@ -72,7 +72,7 @@ const datosinicialesComunes4 = addKeyword(EVENTS.ACTION)
         }
         let mensaje = `Estimado/a *${nombreCompleto}* Tienes las siguientes citas agendadas y vigentes:\n`;
         citasValidas.forEach((cita: any, idx: number) => {
-            mensaje += `${idx + 1}. Fecha: ${cita.FechaCita}, Hora: ${cita.HoraCita}, Especialidad: ${cita.Especialidad}\n`;
+            mensaje += `*${idx + 1}*. *Fecha*: ${cita.FechaCita}, *Hora*: ${cita.HoraCita}, *Especialidad*: ${cita.Especialidad}\n`;
         });
         await flowDynamic(mensaje);
         await state.update({ esperaSeleccionCita: true });
