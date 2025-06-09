@@ -13,16 +13,17 @@ const stepOpcionReprogramar = addKeyword(EVENTS.ACTION)
                 { body: 'Salir' },
             ],
         },
-        async (ctx, ctxFn) => {
+        async (ctx, { provider, state, gotoFlow, flowDynamic, endFlow }) => {
             if (ctx.body === 'Reprogramar cita'){
-                return ctxFn.gotoFlow(datosinicialesComunes4);
+                await state.update({ flujoSeleccionadoMenu: 'reprogramarCita' });
+                return gotoFlow(datosinicialesComunes4);
             }
             if (ctx.body === 'Volver al menú'){
-                return ctxFn.gotoFlow(menuFlow)
+                return gotoFlow(menuFlow)
             }
             if (ctx.body === 'Salir'){
-                await ctxFn.flowDynamic('Agradecemos tu preferencia. Nuestra misión es orientarte en cada momento de tu vida. \n Recuerda que cuando lo desees puedes escribir *"hola"* para conversar nuevamente.');
-                return ctxFn.endFlow();
+                await flowDynamic('Agradecemos tu preferencia. Nuestra misión es orientarte en cada momento de tu vida. \n Recuerda que cuando lo desees puedes escribir *"hola"* para conversar nuevamente.');
+                return endFlow();
             }
         }
     );

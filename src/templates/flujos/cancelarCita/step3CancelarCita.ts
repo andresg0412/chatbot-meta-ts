@@ -1,7 +1,7 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { volverMenuPrincipal } from '../common/volverMenuPrincipal';
 import { stepOpcionReprogramar } from './stepOpcionReprogramar';
-
+import { actualizarEstadoCitaCancelar } from '../../../services/apiService';
 
 // Simulación de consulta a API externa para obtener citas agendadas
 async function consultarCitasPorDocumento(tipoDoc: string, numeroDoc: string) {
@@ -13,19 +13,28 @@ async function consultarCitasPorDocumento(tipoDoc: string, numeroDoc: string) {
 }
 
 const stepConfirmaCancelarCita = addKeyword(EVENTS.ACTION)
-    .addAnswer(
-        'Tu cita ha sido cancelada exitosamente. Quedo atenta a tu nueva disponibilidad.',
-        {
-            capture: false
-        },
-        async (ctx, ctxFn) => {
-            return ctxFn.gotoFlow(volverMenuPrincipal);
+    .addAction(async (ctx, { state, flowDynamic, gotoFlow }) => {
+        const citaSeleccionadaCancelar = state.getMyState().citaSeleccionadaCancelar;
+        if (!citaSeleccionadaCancelar) {
+            await flowDynamic('No se encontró la cita a cancelar.');
+            return gotoFlow(volverMenuPrincipal);
         }
-    );
+        try {
+            // Actualizar EstadoAgenda a 'Reprogramo' usando la función del apiService
+            await actualizarEstadoCitaCancelar(
+                citaSeleccionadaCancelar,
+                'Reprogramo'
+            );
+            await flowDynamic('Tu cita ha sido cancelada exitosamente. Quedo atenta a tu nueva disponibilidad.');
+        } catch (e) {
+            await flowDynamic('Ocurrió un error al cancelar la cita. Por favor, intenta nuevamente.');
+        }
+        return gotoFlow(volverMenuPrincipal);
+    });
 
 const step7CancelarCita = addKeyword(EVENTS.ACTION)
     .addAnswer(
-        '¿Estás seguto que deseas cancelar tu cita? 🤔',
+        '¿Estás seguro que deseas cancelar tu cita? 🤔',
         {
             capture: true,
             buttons: [
@@ -39,7 +48,6 @@ const step7CancelarCita = addKeyword(EVENTS.ACTION)
                 return gotoFlow(stepConfirmaCancelarCita)
             }
             if (ctx.body === 'No'){
-                await state.update({ flujoSeleccionadoMenu: 'reprogramarCita' });
                 return gotoFlow(stepOpcionReprogramar)
             }
         }
@@ -50,13 +58,13 @@ const step6CancelarCita = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { state, flowDynamic, gotoFlow }) => {
             // Obtener el número de cita seleccionado por el usuario
             const numeroCita = ctx.body ? parseInt(ctx.body, 10) : 0;
-            const { citas } = state.getMyState();
-            if (!citas || !citas[numeroCita - 1]) {
+            const { citasProgramadas } = state.getMyState();
+            if (!citasProgramadas || !citasProgramadas[numeroCita - 1]) {
                 await flowDynamic('Número de cita inválido. Por favor, intenta nuevamente.');
                 return;
             }
-            const citaSeleccionada = citas[numeroCita - 1];
-            await state.update({ citaSeleccionada });
+            const citaSeleccionadaCancelar = citasProgramadas[numeroCita - 1];
+            await state.update({ citaSeleccionadaCancelar });
             return gotoFlow(step7CancelarCita);
         });
 

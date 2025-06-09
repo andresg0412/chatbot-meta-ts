@@ -13,7 +13,7 @@ async function consultarCitasPorDocumento(tipoDoc: string, numeroDoc: string) {
 
 const step7Reprogramar = addKeyword(EVENTS.ACTION)
     .addAnswer(
-        '¿Estás seguto que deseas reprogramar tu cita? 🤔',
+        '¿Estás seguro que deseas reprogramar tu cita? 🤔',
         {
             capture: true,
             buttons: [

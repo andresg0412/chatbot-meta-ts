@@ -51,6 +51,20 @@ export async function actualizarEstadoCita(cita: any, estado: string, pacienteId
     }
 }
 
+export async function actualizarEstadoCitaCancelar(cita: any, estado: string) {
+    try {
+        await axios.put(
+            `${URL_SHEETBEST}/tabs/Agenda/AgendaId/${cita.AgendaId}`,
+            { ...cita, EstadoAgenda: estado },
+            { headers: { 'X-Api-Key': API_KEY_SHEETBEST } }
+        );
+        return cita;
+    } catch (error) {
+        console.error('Error cancelando cita:', error);
+        return null;
+    }
+}
+
 export async function crearCita(cita: any) {
     try {
         await axios.post(
