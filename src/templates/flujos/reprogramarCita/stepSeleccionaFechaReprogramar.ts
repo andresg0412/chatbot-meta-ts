@@ -10,7 +10,7 @@ const stepSeleccionaFechaReprogramar = addKeyword(EVENTS.ACTION)
             const mostrarFechas = fechasOrdenadas.slice(pasoSeleccionFecha.inicio, pasoSeleccionFecha.fin);
             if (seleccion < 1 || seleccion > mostrarFechas.length + 1) {
                 await flowDynamic('Opción inválida. Por favor, selecciona una opción válida.');
-                return;
+                return gotoFlow(stepSeleccionaFechaReprogramar);
             }
             if (seleccion === mostrarFechas.length + 1 && fechasOrdenadas.length > pasoSeleccionFecha.fin) {
                 const nuevoInicio = pasoSeleccionFecha.fin;
@@ -29,12 +29,16 @@ const stepSeleccionaFechaReprogramar = addKeyword(EVENTS.ACTION)
             }
             const fechaSeleccionadaAgendar = mostrarFechas[seleccion - 1];
             const horasDisponiblesAgendar = citasPorFecha[fechaSeleccionadaAgendar];
+            const mostrarHoras = horasDisponiblesAgendar.slice(0, 5);
             let mensaje = `Horas disponibles para el *${fechaSeleccionadaAgendar}*:\n`;
-            horasDisponiblesAgendar.forEach((cita, idx) => {
-                mensaje += `${idx + 1}. ${cita.HoraCita} - ${cita.HoraFinal} - ${cita.profesional} (${cita.lugar})\n`;
+            mostrarHoras.forEach((cita, idx) => {
+                mensaje += `*${idx + 1}*. ${cita.HoraCita} - ${cita.HoraFinal} - ${cita.profesional}\n`;
             });
+            if (horasDisponiblesAgendar.length > 5) {
+                mensaje += `*${mostrarHoras.length + 1}*. Ver más\n`;
+            }
             await flowDynamic(mensaje);
-            await state.update({ fechaSeleccionadaAgendar, horasDisponiblesAgendar });
+            await state.update({ fechaSeleccionadaAgendar, horasDisponiblesAgendar, pasoSeleccionHora: { inicio: 0, fin: 5 } });
             return gotoFlow(stepHoraSeleccionada);
         }
     );
