@@ -38,26 +38,20 @@ const noConfirmaReprogramarCita = addKeyword(EVENTS.ACTION)
 const confirmarReprogramarCita = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { state, flowDynamic, gotoFlow }) => {
         const citaAnterior = state.getMyState().citaSeleccionadaProgramada;
-        console.log('Cita Anterior:', citaAnterior);
         const nuevaCita = state.getMyState().citaSeleccionadaHora;
-        console.log('Nueva Cita:', nuevaCita);
         if (!citaAnterior || !nuevaCita) {
             await flowDynamic('No se encontró la información necesaria para reprogramar la cita.');
             return;
         }
-        // 1. Actualizar la cita anterior (PUT)
         const actualizarCita = await actualizarEstadoCita(citaAnterior, 'Reprogramo', citaAnterior.PacienteID, citaAnterior.MotivoConsulta);
         if (!actualizarCita) {
             await flowDynamic('Error al actualizar la cita anterior. Por favor, intenta nuevamente.');
             return;
         }
-        // 2. Crear o actualizar la nueva cita
         let citaExistente = false;
         let agendaIdNueva = nuevaCita.AgendaId;
-        // 1. Obtener ProfesionalID correctamente
         let profesionalID = nuevaCita.profesionalID || nuevaCita.ProfesionalID || nuevaCita.ProfesionalId;
         if (!profesionalID && nuevaCita.id) {
-            // Si el id tiene el formato generado, extraer el ProfesionalID
             const partes = nuevaCita.id.split('-');
             if (partes.length > 0) profesionalID = partes[0];
         }
@@ -65,14 +59,12 @@ const confirmarReprogramarCita = addKeyword(EVENTS.ACTION)
             citaExistente = true;
         }
         if (citaExistente) {
-            // PUT para actualizar la cita existente
             const actualizarCita = await actualizarEstadoCita(nuevaCita, 'Programada', citaAnterior.PacienteID, citaAnterior.MotivoConsulta);
             if (!actualizarCita) {
                 await flowDynamic('Error al actualizar la cita existente. Por favor, intenta nuevamente.');
                 return;
             }
         } else {
-            // POST para crear nueva cita
             agendaIdNueva = generarAgendaIdAleatorio();
             const bodyNueva = {
                 ...citaAnterior,

@@ -25,7 +25,6 @@ const datosinicialesComunes = addKeyword(EVENTS.ACTION)
             }
         };
         await provider.sendList(ctx.from, list);
-        return gotoFlow(datosinicialesComunes2);
     });
 
 export { datosinicialesComunes };

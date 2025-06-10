@@ -1,6 +1,6 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
-import { step5CancelarCita } from '../cancelarCita/step3CancelarCita';
-import { step5Reprogramar } from '../reprogramarCita/step3Reprogramar';
+import { step5CancelarCita } from '../cancelarCita/step5CancelarCita';
+import { step5Reprogramar } from '../reprogramarCita/step5Reprogramar';
 
 const datosinicialesComunes5 = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { state, flowDynamic, gotoFlow }) => {

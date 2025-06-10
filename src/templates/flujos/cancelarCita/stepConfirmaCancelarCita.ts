@@ -12,7 +12,7 @@ const stepConfirmaCancelarCita = addKeyword(EVENTS.ACTION)
         try {
             await actualizarEstadoCitaCancelar(
                 citaSeleccionadaCancelar,
-                'Reprogramo'
+                'Cancelo'
             );
             await flowDynamic('Tu cita ha sido cancelada exitosamente. Quedo atenta a tu nueva disponibilidad.');
         } catch (e) {
