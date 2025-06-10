@@ -116,6 +116,10 @@ export function agruparCitasPorFecha(citasDisponiblesReprogramar) {
         }
         citasPorFecha[cita.FechaCita].push(cita);
     });
+    // Ordenar las citas de cada fecha por HoraCita
+    Object.keys(citasPorFecha).forEach(fecha => {
+        citasPorFecha[fecha].sort((a, b) => a.HoraCita.localeCompare(b.HoraCita));
+    });
     const fechasOrdenadas = Object.keys(citasPorFecha).sort((a, b) => {
         const [da, ma, ya] = a.split('/');
         const [db, mb, yb] = b.split('/');
