@@ -1,9 +1,11 @@
 import { createBot, createProvider, createFlow, addKeyword, utils, EVENTS } from '@builderbot/bot';
 import { politicaDatosFlow } from './flujos/principal/politicasDatos';
 import { checkAndRegisterUserAttempt } from '../utils/userRateLimiter';
+import { metricConversationStarted } from '../utils/metrics';
 
 const welcomeFlow = addKeyword(EVENTS.WELCOME)
     .addAction(async (ctx, ctxFn) => {
+        metricConversationStarted(ctx.from);
         const rate = checkAndRegisterUserAttempt(ctx.from);
         if (!rate.allowed) {
             await ctxFn.flowDynamic(`Has superado el límite de intentos. Intenta nuevamente después de ${(Math.ceil((rate.blockedUntil - Date.now())/60000))} minutos.`);

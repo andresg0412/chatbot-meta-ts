@@ -1,0 +1,15 @@
+{
+  "conversaciones_iniciadas": 2,
+  "usuarios_unicos": [
+    "573185215524"
+  ],
+  "usuarios_recurrentes": [
+    "573185215524"
+  ],
+  "flujo_reagendar_finalizados": 0,
+  "flujo_cancelar_finalizados": 1,
+  "flujo_agente_finalizados": 0,
+  "citas_reagendadas": 0,
+  "citas_canceladas": 1,
+  "errores": []
+}
