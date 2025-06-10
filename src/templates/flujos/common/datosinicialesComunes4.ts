@@ -2,11 +2,15 @@ import { addKeyword, EVENTS } from '@builderbot/bot';
 import { consultarPacientePorDocumento } from '../../../services/apiService';
 import { consultarCitasPorDocumento } from '../../../utils/consultarCitasPorDocumento';
 import { obtenerCitasValidas } from '../../../utils/obtenerCitasValidas';
+import { sanitizeString } from '../../../utils/sanitize';
 import { datosinicialesComunes5 } from './datosinicialesComunes5';
 
 const datosinicialesComunes4 = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { state, flowDynamic, gotoFlow }) => {
-        const { tipoDoc, numeroDoc } = state.getMyState();
+        let { tipoDoc, numeroDoc } = state.getMyState();
+        tipoDoc = sanitizeString(tipoDoc, 30);
+        numeroDoc = sanitizeString(numeroDoc, 20);
+
         const paciente = await consultarPacientePorDocumento(numeroDoc);
         if (!paciente || paciente.length === 0) {
             await flowDynamic('No se encontró información del paciente con ese documento.');
