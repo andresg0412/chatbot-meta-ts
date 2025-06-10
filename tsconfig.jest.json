@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "esModuleInterop": true,
+    "target": "es2020",
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "types": ["jest", "node"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.test.ts", "src/**/*.spec.ts"]
+}
