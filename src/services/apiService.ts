@@ -82,3 +82,34 @@ export async function crearCita(cita: any) {
         return null;
     }
 }
+
+export async function consultarCitasPacienteEspecialidad(pacienteId: string, especialidad: string) {
+    try {
+        const response = await axios.get(
+            `${URL_SHEETBEST}/tabs/Agenda/query?PacienteID=__eq(${pacienteId})&Especialidad=__eq(${especialidad})`,
+            {
+                headers: {
+                    'X-Api-Key': API_KEY_SHEETBEST,
+                },
+            }
+        );
+        return response.data;
+    } catch (error) {
+        console.error('Error consultando citas por pacienteId y especialidad:', error);
+        return null;
+    }
+}
+
+export async function crearPacienteDataBase(datosPaciente: any) {
+    try {
+        const response = await axios.post(
+            `${URL_SHEETBEST}/tabs/Pacientes`,
+            datosPaciente,
+            { headers: { 'X-Api-Key': API_KEY_SHEETBEST } }
+        );
+        return response.data;
+    } catch (error) {
+        console.error('Error creando paciente:', error);
+        return null;
+    }
+}
