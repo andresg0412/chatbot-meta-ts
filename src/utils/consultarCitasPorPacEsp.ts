@@ -2,18 +2,18 @@ import { consultarPacientePorDocumento, consultarCitasPacienteEspecialidad } fro
 import { consultarProfesionalesPorId } from '../services/profesionalesService';
 
 
-export async function consultarCitasPorPacEsp(numeroDoc: string, especialidad: string): Promise<{ pacienteId: string, pacienteNombre: string, profesionalId: string, profesionalNombre: string } | null> {
+export async function consultarCitasPorPacEsp(numeroDoc: string, especialidad: string): Promise<{ pacienteId: string, pacienteNombre: string, profesionalId: string, profesionalNombre: string } | string> {
     const paciente = await consultarPacientePorDocumento(numeroDoc);
     if (!paciente || paciente.length === 0) {
-        return null;
+        return 'no paciente';
     }
     const pacienteId = paciente[0]?.PacientesID;
     if (!pacienteId) {
-        return null;
+        return 'no paciente';
     }
     const citas = await consultarCitasPacienteEspecialidad(pacienteId, especialidad);
     if (!citas || citas.length === 0) {
-        return null;
+        return 'no citas';
     }
     // Filtrar citas anteriores a la fecha actual y con EstadoAgenda 'Asistio'
     const ahora = new Date();
@@ -24,7 +24,7 @@ export async function consultarCitasPorPacEsp(numeroDoc: string, especialidad: s
         return fechaCita < ahora && cita.EstadoAgenda.toLowerCase() === 'asistio';
     });
     if (citasAnteriores.length === 0) {
-        return null;
+        return 'no citas';
     }
     // Ordenar por fecha descendente y tomar la más reciente
     citasAnteriores.sort((a: any, b: any) => {
@@ -41,6 +41,6 @@ export async function consultarCitasPorPacEsp(numeroDoc: string, especialidad: s
         pacienteId: pacienteId,
         pacienteNombre: `${paciente[0].PrimerNombre} ${paciente[0].SegundoNombre || ''}`.trim(),
         profesionalId: ultimaCita.ProfesionalID,
-        profesionalNombre: profesional ? `${profesional.PrimerNombre} ${profesional.SegundoNombre || ''}`.trim() : '',
+        profesionalNombre: profesional ? `${profesional[0].PrimerNombre} ${profesional[0].SegundoNombre || ''}`.trim() : '',
     }
 }

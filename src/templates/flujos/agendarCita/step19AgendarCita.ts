@@ -22,6 +22,14 @@ const step19AgendarCita = addKeyword(EVENTS.ACTION)
             const tipoCitaAgendarCita = state.getMyState().tipoCitaAgendarCita;
             const horaCitaBot = new Date().toString();
             const atencionPsicologica = state.getMyState().atencionPsicologica;
+            let tipoAtencion = 'Individual';
+            if (atencionPsicologica === 'psicologia_infantil' || atencionPsicologica === 'psicologia_adolescente' || atencionPsicologica === 'psicologia_adulto' || atencionPsicologica === 'psicologia_adulto_mayor') {
+                tipoAtencion = 'Idividual';
+            } else if (atencionPsicologica === 'psicologia_pareja') {
+                tipoAtencion = 'Pareja';
+            } else if (atencionPsicologica === 'psicologia_familia') {
+                tipoAtencion = 'Familia';
+            }
             let citaExistente = false;
             let agendaIdNueva = nuevaCita.AgendaId;
             let profesionalID = nuevaCita.profesionalID || nuevaCita.ProfesionalID || nuevaCita.ProfesionalId;
@@ -53,7 +61,7 @@ const step19AgendarCita = addKeyword(EVENTS.ACTION)
                     PacienteID: pacienteId,
                     TipoConsulta: tipoCitaAgendarCita,
                     HoraCitaBot: horaCitaBot,
-                    TipoAtención: atencionPsicologica,
+                    TipoAtención: tipoAtencion,
                 };
                 const crearCitaProgramada = crearCita(bodyNueva);
                 if (!crearCitaProgramada) {

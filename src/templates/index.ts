@@ -20,8 +20,6 @@ import {
     preguntarConfirmarBotones,
 } from './flujos/reprogramarCita';
 
-import { volverMenuPrincipal } from './flujos/common/volverMenuPrincipal';
-
 import {
     step1CencelarCita,
     step5CancelarCita,
@@ -37,6 +35,8 @@ import {
     datosinicialesComunes3,
     datosinicialesComunes4,
     datosinicialesComunes5,
+    volverMenuPrincipal,
+    mesajeSalida,
 } from './flujos/common';
 import { pasoAgenteFlow } from './flujos/pasoAgente';
 import { ejecutarPlantillaDiariaFlow, confirmarCitaFlow } from './flujos/campahna';
@@ -74,6 +74,9 @@ import {
     step17AgendarCita2,
     step17AgendarCita3,
     step17AgendarCita4,
+    step17AgendarCita5,
+    step17AgendarCita6,
+    step17AgendarCita7,
     step18AgendarCita,
     step19AgendarCita,
     step20AgendarCita,
@@ -128,6 +131,9 @@ export default createFlow([
     step17AgendarCita2,
     step17AgendarCita3,
     step17AgendarCita4,
+    step17AgendarCita5,
+    step17AgendarCita6,
+    step17AgendarCita7,
     step18AgendarCita,
     step19AgendarCita,
     step20AgendarCita,
@@ -151,6 +157,7 @@ export default createFlow([
     noConfirmaReprogramarCita,
     preguntarConfirmarBotones,
     volverMenuPrincipal,
+    mesajeSalida,
     stepConfirmaCancelarCita,
     pasoAgenteFlow,
     ejecutarPlantillaDiariaFlow,

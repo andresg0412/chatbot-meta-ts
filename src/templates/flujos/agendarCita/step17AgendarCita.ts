@@ -12,19 +12,28 @@ function generarAgendaIdAleatorio() {
     return id;
 }
 
-const step17AgendarCita4 = addKeyword(EVENTS.ACTION)
+const step17AgendarCita7 = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { state, flowDynamic, gotoFlow, endFlow }) => {
         // CREAR EL NUEVO PACIENTE
         //PacientesID, TipoDocumento, NumeroDocumento, NombreCompleto, NúmeroContacto, Email, Convenio, FechaNacimiento, FechaRegistro
         const pacienteId = generarAgendaIdAleatorio();
         const tipoDoc = state.getMyState().tipoDoc;
         const numeroDocumento = state.getMyState().numeroDocumentoPaciente;
-        const nombreCompleto = state.getMyState().nombrePaciente;
-        const numeroContacto = ctx.from;
+        const nombrePaciente1 = state.getMyState().nombrePaciente1;
+        const nombrePaciente2 = state.getMyState().nombrePaciente2;
+        const apellidoPaciente1 = state.getMyState().apellidoPaciente1;
+        const apellidoPaciente2 = state.getMyState().apellidoPaciente2;
+        const nombreCompleto = `${nombrePaciente1} ${nombrePaciente2} ${apellidoPaciente1} ${apellidoPaciente2}`.trim();
+        const numeroContacto = await state.getMyState().celular;
+        // el numero de contacto viene como 573185214214 requiero separar el 57
+        const codigoPais = numeroContacto.slice(0, 2);
+        const numeroContactoSinCodigo = numeroContacto.slice(2);
         const email = state.getMyState().correoElectronico;
         //consultar convenio a la base de datos
         const fechaNacimiento = state.getMyState().fechaNacimiento;
-        const fechaRegistro = new Date().toString();
+        // fechaRegistro la necesito con este formato: '27/5/2025 18:34:21'
+        const now = new Date();
+        const fechaRegistro = `${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()} ${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
         let tipoDocumento = '';
         switch (tipoDoc) {
             case 'agendarcita_tipo_cd':
@@ -54,10 +63,15 @@ const step17AgendarCita4 = addKeyword(EVENTS.ACTION)
             PacientesID: pacienteId,
             TipoDocumento: tipoDocumento,
             NumeroDocumento: numeroDocumento,
+            PrimerNombre: nombrePaciente1,
+            SegundoNombre: nombrePaciente2,
+            PrimerApellido: apellidoPaciente1,
+            SegundoApellido: apellidoPaciente2,
             NombreCompleto: nombreCompleto,
-            NumeroContacto: numeroContacto,
+            CodigoPais: codigoPais,
+            NúmeroContacto: numeroContactoSinCodigo,
             Email: email,
-            Convenio: 'Convenio Desconocido', // Aquí deberías consultar el convenio a la base de datos
+            Convenio: 'Pendiente',
             FechaNacimiento: fechaNacimiento,
             FechaRegistro: fechaRegistro
         };
@@ -71,7 +85,7 @@ const step17AgendarCita4 = addKeyword(EVENTS.ACTION)
         return gotoFlow(step18AgendarCita);
     })
 
-const step17AgendarCita3 = addKeyword(EVENTS.ACTION)
+const step17AgendarCita6 = addKeyword(EVENTS.ACTION)
     .addAnswer('Ahora, por favor digita tu correo electrónico 📧:',
         {
             capture: true,
@@ -84,12 +98,12 @@ const step17AgendarCita3 = addKeyword(EVENTS.ACTION)
                 return gotoFlow(step17AgendarCita3);
             }
             await state.update({ correoElectronico, esperaCorreoElectronico: false, esperaSeleccionCita: true });
-            return gotoFlow(step17AgendarCita4);
+            return gotoFlow(step17AgendarCita7);
         }
     );
 
 
-const step17AgendarCita2 = addKeyword(EVENTS.ACTION)
+const step17AgendarCita5 = addKeyword(EVENTS.ACTION)
     .addAnswer('Ahora, por favor digita tu fecha de nacimiento (Utiliza el formato DD/MM/AAA por ejemplo 24/12/1990:',
         {capture: true },
         async (ctx, { state, gotoFlow, flowDynamic }) => {
@@ -100,20 +114,66 @@ const step17AgendarCita2 = addKeyword(EVENTS.ACTION)
                 return gotoFlow(step17AgendarCita2);
             }
             await state.update({ fechaNacimiento, esperaFechaNacimiento: false, esperaSeleccionCita: true });
+            return gotoFlow(step17AgendarCita6);
+        }
+    );
+
+const step17AgendarCita4 = addKeyword(EVENTS.ACTION)
+    .addAnswer('Digita tu *SEGUNDO* apellido:',
+        {capture: true },
+        async (ctx, { state, gotoFlow, flowDynamic }) => {
+            const apellidoPaciente2 = sanitizeString(ctx.body, 30);
+            if (apellidoPaciente2.length < 3) {
+                await flowDynamic('El apellido ingresado no es válido. Intenta nuevamente.');
+                return gotoFlow(step17AgendarCita);
+            }
+            const apellidoPacienteMayuscula2 = apellidoPaciente2.toUpperCase();
+            await state.update({ apellidoPaciente2: apellidoPacienteMayuscula2, esperaNombrePaciente: false, esperaSeleccionCita: true });
+            return gotoFlow(step17AgendarCita5);
+        }
+    );
+
+const step17AgendarCita3 = addKeyword(EVENTS.ACTION)
+    .addAnswer('Digita tu *PRIMER* apellido:',
+        {capture: true },
+        async (ctx, { state, gotoFlow, flowDynamic }) => {
+            const apellidoPaciente1 = sanitizeString(ctx.body, 30);
+            if (apellidoPaciente1.length < 3) {
+                await flowDynamic('El apellido ingresado no es válido. Intenta nuevamente.');
+                return gotoFlow(step17AgendarCita);
+            }
+            const apellidoPacienteMayuscula1 = apellidoPaciente1.toUpperCase();
+            await state.update({ apellidoPaciente1: apellidoPacienteMayuscula1, esperaNombrePaciente: false, esperaSeleccionCita: true });
+            return gotoFlow(step17AgendarCita4);
+        }
+    );
+
+const step17AgendarCita2 = addKeyword(EVENTS.ACTION)
+    .addAnswer('Ahora, digita tu *SEGUNDO* nombre:',
+        {capture: true },
+        async (ctx, { state, gotoFlow, flowDynamic }) => {
+            const nombrePaciente2 = sanitizeString(ctx.body, 30);
+            if (nombrePaciente2.length < 3) {
+                await flowDynamic('El nombre ingresado no es válido. Intenta nuevamente.');
+                return gotoFlow(step17AgendarCita);
+            }
+            const nombrePacienteMayuscula2 = nombrePaciente2.toUpperCase();
+            await state.update({ nombrePaciente2: nombrePacienteMayuscula2, esperaNombrePaciente: false, esperaSeleccionCita: true });
             return gotoFlow(step17AgendarCita3);
         }
     );
 
 const step17AgendarCita = addKeyword(EVENTS.ACTION)
-    .addAnswer('Por favor, digita tu nombre completo:',
+    .addAnswer('Por favor, digita tu *PRIMER* nombre:',
         {capture: true },
         async (ctx, { state, gotoFlow, flowDynamic }) => {
-            const nombrePaciente = sanitizeString(ctx.body, 30);
-            if (nombrePaciente.length < 3) {
+            const nombrePaciente1 = sanitizeString(ctx.body, 30);
+            if (nombrePaciente1.length < 3) {
                 await flowDynamic('El nombre ingresado no es válido. Intenta nuevamente.');
                 return gotoFlow(step17AgendarCita);
             }
-            await state.update({ nombrePaciente, esperaNombrePaciente: false, esperaSeleccionCita: true });
+            const nombrePacienteMayusculas1 = nombrePaciente1.toUpperCase();
+            await state.update({ nombrePaciente1: nombrePacienteMayusculas1, esperaNombrePaciente: false, esperaSeleccionCita: true });
             return gotoFlow(step17AgendarCita2);
         }
     );
@@ -124,4 +184,7 @@ export {
     step17AgendarCita2,
     step17AgendarCita3,
     step17AgendarCita4,
+    step17AgendarCita5,
+    step17AgendarCita6,
+    step17AgendarCita7,
 };

@@ -1,5 +1,6 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { step19AgendarCita } from './step19AgendarCita';
+import { volverMenuPrincipal } from '../common';
 
 const step18AgendarCita = addKeyword(EVENTS.ACTION)
     .addAnswer(
@@ -17,8 +18,7 @@ const step18AgendarCita = addKeyword(EVENTS.ACTION)
             }
             if (ctx.body === 'No') {
                 await ctxFn.flowDynamic('Recuerda que puedes agendar tu cita cuando lo requieras.');
-                //opciones de menu
-                return ctxFn.endFlow();
+                return ctxFn.gotoFlow(volverMenuPrincipal);
             }
         }
     );

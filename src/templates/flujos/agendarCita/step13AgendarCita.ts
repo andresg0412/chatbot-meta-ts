@@ -6,7 +6,7 @@ import { step18AgendarCita } from './step18AgendarCita';
 const step13AgendarCitaParticular = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { provider, state, gotoFlow }) => {
         const tipoDocumento = state.getMyState().tipoDoc;
-        const numeroDocumento = state.getMyState().numeroDocumentoAgendarCitaControl;
+        const numeroDocumento = state.getMyState().numeroDocumentoPaciente;
         if (!tipoDocumento || !numeroDocumento) {
             return gotoFlow(step14AgendarCita);
         } else {

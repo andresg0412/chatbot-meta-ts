@@ -87,12 +87,14 @@ export async function obtenerCitasDisponiblesPorProfesional(profesional, especia
 }
 
 export async function obtenerCitasDisponiblesPrimeraVez(Especialidad) {
+    console.log('obtenerCitasDisponiblesPrimeraVez', Especialidad);
     const profesionales = await consultarProfesionalesPorEspecialidad(Especialidad);
     const ahora = new Date();
     const duracionCita = await obtenerDuracionCitaEspecialidad(profesionales);
     let citasDisponiblesReprogramar = [];
     for (const profesional of profesionales) {
         const citas = await obtenerCitasDisponiblesPorProfesional(profesional, Especialidad, ahora, duracionCita);
+        console.log('Citas disponibles para profesional:', profesional.NombreCompleto, citas);
         citasDisponiblesReprogramar = citasDisponiblesReprogramar.concat(citas);
     }
     return citasDisponiblesReprogramar;

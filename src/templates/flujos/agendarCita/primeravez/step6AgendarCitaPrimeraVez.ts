@@ -15,6 +15,7 @@
 
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { step8AgendarCita } from '../step8AgendarCita';
+import { volverMenuPrincipal } from '../../common/volverMenuPrincipal';
 
 const step6AgendarCitaPrimeraVezPsicologiaAtencion = addKeyword(['psicologia_infantil', 'psicologia_adolescente', 'psicologia_adulto', 'psicologia_adulto_mayor', 'psicologia_pareja_familia'])
     .addAction(async (ctx, { state, gotoFlow }) => {
@@ -70,10 +71,15 @@ const step6AgendarCitaPrimeraVezPsicologia = addKeyword(EVENTS.ACTION)
                                     "description": ""
                                 },
                                 {
-                                    "id": "psicologia_pareja_familia",
-                                    "title": "Pareja o familia",
+                                    "id": "psicologia_pareja",
+                                    "title": "Pareja",
                                     "description": ""
                                 },
+                                {
+                                    "id": "psicologia_familia",
+                                    "title": "Familia",
+                                    "description": ""
+                                }
                             ]
                         }
                     ]
@@ -101,7 +107,7 @@ const step6AgendarCitaPrimeraVezNeuropsicologia = addKeyword(EVENTS.ACTION)
                 return gotoFlow(step8AgendarCita);
             } else if (ctx.body === 'No') {
                 await flowDynamic('Lo siento, para agendar una cita en esta especialidad es necesario que el paciente tenga 16 años o más.');
-                return endFlow();
+                return gotoFlow(volverMenuPrincipal);
             }
         }
     );
@@ -112,9 +118,9 @@ const step6AgendarCitaPrimeraVezPsiquiatria = addKeyword(EVENTS.ACTION)
         {
             capture: false,
         },
-        null,
-        [step8AgendarCita]
-        
+        async (ctx, { gotoFlow }) => {
+            return gotoFlow(step8AgendarCita);
+        }
     );
 
 export {
