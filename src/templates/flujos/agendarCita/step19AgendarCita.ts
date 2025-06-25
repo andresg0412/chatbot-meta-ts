@@ -24,7 +24,7 @@ const step19AgendarCita = addKeyword(EVENTS.ACTION)
             const atencionPsicologica = state.getMyState().atencionPsicologica;
             let tipoAtencion = 'Individual';
             if (atencionPsicologica === 'psicologia_infantil' || atencionPsicologica === 'psicologia_adolescente' || atencionPsicologica === 'psicologia_adulto' || atencionPsicologica === 'psicologia_adulto_mayor') {
-                tipoAtencion = 'Idividual';
+                tipoAtencion = 'Individual';
             } else if (atencionPsicologica === 'psicologia_pareja') {
                 tipoAtencion = 'Pareja';
             } else if (atencionPsicologica === 'psicologia_familia') {

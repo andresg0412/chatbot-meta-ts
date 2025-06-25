@@ -2,7 +2,7 @@ import { addKeyword, EVENTS } from '@builderbot/bot';
 import { step19AgendarCita } from './step19AgendarCita';
 import { volverMenuPrincipal } from '../common';
 
-const step18AgendarCita = addKeyword(EVENTS.ACTION)
+const step18AgendarCita2 = addKeyword(EVENTS.ACTION)
     .addAnswer(
         '¿Confirmas la cita? ✅',
         {
@@ -23,4 +23,14 @@ const step18AgendarCita = addKeyword(EVENTS.ACTION)
         }
     );
 
-export { step18AgendarCita };
+const step18AgendarCita = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { state, flowDynamic, gotoFlow }) => {
+        const citaSeleccionadaHora = state.getMyState().citaSeleccionadaHora;
+        await flowDynamic(`Has seleccionado la siguiente cita:\n*Fecha*: ${citaSeleccionadaHora.FechaCita} \n*Hora*: ${citaSeleccionadaHora.HoraCita} - ${citaSeleccionadaHora.HoraFinal} \n*Profesional*: ${citaSeleccionadaHora.profesional} \n*Especialidad*: ${citaSeleccionadaHora.Especialidad} \n*Lugar*: ${citaSeleccionadaHora.lugar}.`);
+        return gotoFlow(step18AgendarCita2);
+    })
+
+export {
+    step18AgendarCita,
+    step18AgendarCita2,
+};

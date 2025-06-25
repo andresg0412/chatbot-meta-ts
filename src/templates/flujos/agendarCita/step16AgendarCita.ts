@@ -11,6 +11,10 @@ const step16AgendarCita = addKeyword(EVENTS.ACTION)
             await flowDynamic('No se encontró información del paciente con ese documento.');
             return gotoFlow(step17AgendarCita);
         }
+        await state.update({
+            pacienteId: paciente.pacienteId,
+            nombreCompleto: paciente.nombreCompleto,
+        });
         return gotoFlow(step18AgendarCita);
     })
 
