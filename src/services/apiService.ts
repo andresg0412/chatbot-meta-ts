@@ -113,3 +113,20 @@ export async function crearPacienteDataBase(datosPaciente: any) {
         return null;
     }
 }
+
+export async function obtenerFestivos() {
+    try {
+        const response = await axios.get(
+            `${URL_SHEETBEST}/tabs/Festivos`,
+            {
+                headers:{
+                    'X-Api-Key': API_KEY_SHEETBEST
+                },
+            }
+        );
+        return response.data.map(f => f.Fecha);
+    } catch (error) {
+        console.error('Error obteniendo festivos:', error);
+        return [];
+    }
+}

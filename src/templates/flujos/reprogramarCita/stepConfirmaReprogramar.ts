@@ -1,5 +1,5 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
-import { seleccionaCitaReprogramar } from './seleccionaCitaReprogramar';
+//import { seleccionaCitaReprogramar } from './seleccionaCitaReprogramar';
 import {
     obtenerDuracionCitaEspecialidad,
     obtenerCitasDisponiblesPorProfesional,
@@ -44,7 +44,7 @@ const stepConfirmaReprogramar = addKeyword(EVENTS.ACTION)
                 }
                 if (!citasDisponiblesReprogramar.length) {
                     await flowDynamic('No hay citas disponibles para reprogramar en este momento. Por favor, inténtalo más tarde.');
-                    return gotoFlow(seleccionaCitaReprogramar);
+                    return endFlow();
                 }
                 const { citasPorFecha, fechasOrdenadas } = agruparCitasPorFecha(citasDisponiblesReprogramar);
                 await state.update({ citasPorFecha, fechasOrdenadas, citasDisponiblesReprogramar });
