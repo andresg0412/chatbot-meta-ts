@@ -3,7 +3,16 @@ import { welcomeFlow } from './welcomeFlow';
 import { menuFlow } from './menuFlow';
 import { politicaDatosFlow } from './flujos/principal/politicasDatos';
 import { noAceptaPoliticas } from './flujos/principal/noAceptaPoliticas';
-import { menuConocerIpsFlow } from './flujos/conocerIps/menuConocerIpsflow';
+import {
+    menuConocerIpsFlow,
+    serviciosStepConocer,
+    conveniosStepConocer,
+    tarifasStepConocer,
+    formaspagoStepConocer,
+    ubicacionStepConocer,
+    horariosStepConocer,
+    canalesStepConocer,
+} from './flujos/conocerIps';
 import {
     step1Reprogramar,
     step5Reprogramar,
@@ -92,6 +101,13 @@ export default createFlow([
     noAceptaPoliticas,
     menuFlow,
     menuConocerIpsFlow,
+    serviciosStepConocer,
+    conveniosStepConocer,
+    tarifasStepConocer,
+    formaspagoStepConocer,
+    ubicacionStepConocer,
+    horariosStepConocer,
+    canalesStepConocer,
     step1Reprogramar,
     step1CencelarCita,
     datosinicialesComunes,
