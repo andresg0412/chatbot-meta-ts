@@ -14,12 +14,10 @@ const step1AgendarCita = addKeyword(['280525002', 'Agendar cita'])
         },
         async (ctx, {state, gotoFlow}) => {
             if (ctx.body === 'Presencial'){
-                console.log('Seleccionó Presencial');
                 await state.update({ tipoCitaAgendarCita: 'Presencial' });
                 return gotoFlow(step2AgendarCita)
             }
             if (ctx.body === 'Virtual'){
-                console.log('Seleccionó Virtual');
                 await state.update({ tipoCitaAgendarCita: 'Virtual' });
                 return gotoFlow(step2AgendarCita)
             }

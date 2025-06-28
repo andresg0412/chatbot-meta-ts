@@ -26,17 +26,14 @@ const step5AgendarCitaPrimeraVezPresencial = addKeyword(EVENTS.ACTION)
         },
         async (ctx, {state, gotoFlow}) => {
             if (ctx.body === 'Psicologia') {
-                console.log('Seleccionó Psicologia');
                 await state.update({ especialidadAgendarCita: 'Psicologia' });
                 return gotoFlow(step6AgendarCitaPrimeraVezPsicologia)
             }
             if (ctx.body === 'NeuroPsicologia'){
-                console.log('Seleccionó NeuroPsicologia');
                 await state.update({ especialidadAgendarCita: 'NeuroPsicologia' });
                 return gotoFlow(step6AgendarCitaPrimeraVezNeuropsicologia)
             }
             if (ctx.body === 'Psiquiatria') {
-                console.log('Seleccionó Psiquiatria');
                 await state.update({ especialidadAgendarCita: 'Psiquiatria' });
                 return gotoFlow(step6AgendarCitaPrimeraVezPsiquiatria)
             }

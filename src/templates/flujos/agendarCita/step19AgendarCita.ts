@@ -22,6 +22,10 @@ const step19AgendarCita = addKeyword(EVENTS.ACTION)
             const tipoCitaAgendarCita = state.getMyState().tipoCitaAgendarCita;
             const horaCitaBot = new Date().toString();
             const atencionPsicologica = state.getMyState().atencionPsicologica;
+            const idConvenio = state.getMyState().idConvenio;
+            const valorPrimeraVez = state.getMyState().valorPrimeraVez;
+            const valorControl = state.getMyState().valorControl;
+            const valorPaquete = state.getMyState().valorPaquete;
             let tipoAtencion = 'Individual';
             if (atencionPsicologica === 'psicologia_infantil' || atencionPsicologica === 'psicologia_adolescente' || atencionPsicologica === 'psicologia_adulto' || atencionPsicologica === 'psicologia_adulto_mayor') {
                 tipoAtencion = 'Individual';
@@ -60,6 +64,10 @@ const step19AgendarCita = addKeyword(EVENTS.ACTION)
                     Especialidad: especialidadCita,
                     PacienteID: pacienteId,
                     TipoConsulta: tipoCitaAgendarCita,
+                    Convenios: idConvenio,
+                    ValorPrimeraVez: valorPrimeraVez,
+                    ValorControl: valorControl,
+                    ValorPaquete: valorPaquete,
                     HoraCitaBot: horaCitaBot,
                     TipoAtención: tipoAtencion,
                 };

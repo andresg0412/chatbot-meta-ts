@@ -130,3 +130,26 @@ export async function obtenerFestivos() {
         return [];
     }
 }
+
+export async function obtenerConvenios(especialidad: string, convenio: string) {
+    try {
+        const response = await axios.get(
+            `${URL_SHEETBEST}/tabs/Convenios/query?Servicio=__eq(${especialidad})&NombreConvenio=__eq(${convenio})`,
+            {
+                headers:{
+                    'X-Api-Key': API_KEY_SHEETBEST
+                },
+            }
+        );
+        
+        if (response.data && response.data.length > 0) {
+            return response.data[0];
+        } else {
+            console.log('No se encontraron convenios para esta especialidad y convenio');
+            return null;
+        }
+    } catch (error) {
+        console.error('Error obteniendo convenios:', error);
+        return null;
+    }
+}

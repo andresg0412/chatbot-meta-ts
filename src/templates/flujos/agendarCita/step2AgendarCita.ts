@@ -18,12 +18,10 @@ const step2AgendarCita = addKeyword(EVENTS.ACTION)
         },
         async (ctx, { state, gotoFlow }) => {
             if (ctx.body === 'Primera vez') {
-                console.log('Seleccionó Primera vez');
                 await state.update({ tipoConsultaPaciente: 'Primera vez' });
                 return gotoFlow(step4AgendarCitaPrimeraVez);
             }
             if (ctx.body === 'Control') {
-                console.log('Seleccionó Control');
                 await state.update({ tipoConsultaPaciente: 'Control' });
                 return gotoFlow(step4AgendarCitaControl);
             }

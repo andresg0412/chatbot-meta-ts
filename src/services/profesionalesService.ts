@@ -31,7 +31,6 @@ export async function consultarProfesionalesPorEspecialidad(especialidad: string
         //const especialidadFinal = ESPECIALIDAD_EQUIVALENCIAS[especialidad] || especialidad;
         // convertir especialidad a minúsculas y primera mayuscula para la consulta
         const especialidadFinal = especialidad.charAt(0).toUpperCase() + especialidad.slice(1).toLowerCase();
-        console.log('consultarProfesionalesPorEspecialidad', especialidadFinal);
         const response = await axios.get(
             `${URL_SHEETBEST}/tabs/Equipo/query?TipoProfesional=__eq(${especialidadFinal})&Estado=__eq(Activo)&TipoUsuario=__eq(Profesionales)`,
             {
@@ -68,7 +67,6 @@ export async function consultarProfesionalesPorId(profesionalId: string) {
 
 export async function consultarHorariosPorProfesionalId(profesionalId: string) {
     try {
-        console.log('consultarHorariosPorProfesionalId', profesionalId);
         const response = await axios.get(
             `${URL_SHEETBEST}/tabs/HorariosEquipo/ProfesionalID/${profesionalId}`,
             {

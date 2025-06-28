@@ -6,7 +6,6 @@ import { step15AgendarCita } from './step15AgendarCita';
 const step14AgendarCita2 = addKeyword(['agendarcita_tipo_cd', 'agendarcita_tipo_cex', 'agendarcita_tipo_tid', 'agendarcita_tipo_rcv', 'agendarcita_tipo_ps', 'agendarcita_tipo_ot'])
     .addAction(async (ctx, { state, gotoFlow }) => {
         const tipoDocRaw = ctx.listResponse ? ctx.listResponse.title : ctx.body;
-        console.log('Tipo de documento seleccionado:', tipoDocRaw);
         const tipoDoc = sanitizeString(tipoDocRaw, 30);
         await state.update({ tipoDoc, esperaTipoDoc: false });
         return gotoFlow(step15AgendarCita);

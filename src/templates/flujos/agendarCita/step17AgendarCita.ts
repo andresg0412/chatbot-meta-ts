@@ -35,6 +35,7 @@ const step17AgendarCita7 = addKeyword(EVENTS.ACTION)
         const now = new Date();
         const fechaRegistro = `${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()} ${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
         let tipoDocumento = '';
+        const convenio = await state.getMyState().nombreServicioConvenio || 'Particular';
         switch (tipoDoc) {
             case 'agendarcita_tipo_cd':
                 tipoDocumento = 'Cc';
@@ -71,7 +72,7 @@ const step17AgendarCita7 = addKeyword(EVENTS.ACTION)
             CodigoPais: codigoPais,
             NúmeroContacto: numeroContactoSinCodigo,
             Email: email,
-            Convenio: 'Pendiente',
+            Convenio: convenio,
             FechaNacimiento: fechaNacimiento,
             FechaRegistro: fechaRegistro
         };

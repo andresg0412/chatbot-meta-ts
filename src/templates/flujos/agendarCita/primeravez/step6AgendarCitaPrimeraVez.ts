@@ -21,7 +21,6 @@ const step6AgendarCitaPrimeraVezPsicologiaAtencion = addKeyword(['psicologia_inf
     .addAction(async (ctx, { state, gotoFlow }) => {
         // Guardamos la atención psicológica seleccionada
         const atencionPsicologica = ctx.listResponse ? ctx.listResponse.title : ctx.body;
-        console.log('Atención psicológica seleccionada:', atencionPsicologica);
         await state.update({ atencionPsicologica: atencionPsicologica });
         return gotoFlow(step8AgendarCita);
     });

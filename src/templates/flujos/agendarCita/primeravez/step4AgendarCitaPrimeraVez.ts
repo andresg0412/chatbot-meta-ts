@@ -12,7 +12,6 @@ const step4AgendarCitaPrimeraVez = addKeyword(EVENTS.ACTION)
     .addAction(
         async (ctx, { state, gotoFlow }) => {
             const tipoCitaAgendarCita = await state.getMyState().tipoCitaAgendarCita;
-            console.log('Tipo de cita seleccionada anteriormente:', tipoCitaAgendarCita);
             if (tipoCitaAgendarCita === 'Presencial') {
                 return gotoFlow(step5AgendarCitaPrimeraVezPresencial)
             }

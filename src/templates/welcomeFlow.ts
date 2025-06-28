@@ -6,7 +6,6 @@ import { metricConversationStarted } from '../utils/metrics';
 const welcomeFlow = addKeyword(EVENTS.WELCOME)
     .addAction(async (ctx, ctxFn) => {
         metricConversationStarted(ctx.from);
-        console.log('Bienvenida al bot, usuario:', ctx.from);
         await ctxFn.state.update({ celular: ctx.from });
         const rate = checkAndRegisterUserAttempt(ctx.from);
         if (!rate.allowed) {
