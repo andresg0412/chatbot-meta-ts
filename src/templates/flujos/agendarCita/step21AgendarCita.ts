@@ -1,5 +1,6 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { step22AgendarCita } from './step22AgendarCita';
+import { step22AgendarCitaMedioVirtual } from './step22AgendarCita';
 
 const step21AgendarCita = addKeyword(EVENTS.ACTION)
     .addAnswer(
@@ -16,7 +17,7 @@ const step21AgendarCita = addKeyword(EVENTS.ACTION)
                 return ctxFn.gotoFlow(step22AgendarCita)
             }
             if (ctx.body === 'Medios Virtuales'){
-                return ctxFn.gotoFlow(step22AgendarCita)
+                return ctxFn.gotoFlow(step22AgendarCitaMedioVirtual)
             }
         }
     );
