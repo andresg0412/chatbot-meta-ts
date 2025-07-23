@@ -1,5 +1,6 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { menuFlow } from '../../menuFlow';
+import { mesajeSalida } from './mensajeSalida';
 
 const volverMenuPrincipal = addKeyword(EVENTS.ACTION)
     .addAnswer(
@@ -16,8 +17,7 @@ const volverMenuPrincipal = addKeyword(EVENTS.ACTION)
                 return ctxFn.gotoFlow(menuFlow)
             }
             if (ctx.body === 'Salir'){
-                await ctxFn.flowDynamic('🌟 Agradecemos tu preferencia. Nuestra misión es orientarte en cada momento de tu vida. \nRecuerda que cuando lo desees puedes escribir *"hola"* para conversar nuevamente.');
-                return ctxFn.endFlow();
+                return ctxFn.gotoFlow(mesajeSalida);
             }
         }
     );

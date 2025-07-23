@@ -7,11 +7,32 @@ const ESPECIALIDAD_EQUIVALENCIAS: Record<string, string> = {
     'Psicologia': 'Psicología Clínica',
 };
 
-export async function consultarProfesionalesPorEspecialidad(especialidad: string) {
+/*export async function consultarProfesionalesPorEspecialidad(especialidad: string) {
     try {
         const especialidadFinal = ESPECIALIDAD_EQUIVALENCIAS[especialidad] || especialidad;
         const response = await axios.get(
             `${URL_SHEETBEST}/tabs/Equipo/Especialidad/${especialidadFinal}`,
+            {
+                headers: {
+                    'X-Api-Key': API_KEY_SHEETBEST,
+                },
+            }
+        );
+        // Filtrar solo profesionales activos
+        return (response.data || []).filter((prof: any) => prof.Estado === 'Activo' && prof.TipoUsuario === 'Profesionales');
+    } catch (error) {
+        console.error('Error consultando profesionales:', error);
+        return [];
+    }
+}*/
+
+export async function consultarProfesionalesPorEspecialidad(especialidad: string) {
+    try {
+        //const especialidadFinal = ESPECIALIDAD_EQUIVALENCIAS[especialidad] || especialidad;
+        // convertir especialidad a minúsculas y primera mayuscula para la consulta
+        const especialidadFinal = especialidad.charAt(0).toUpperCase() + especialidad.slice(1).toLowerCase();
+        const response = await axios.get(
+            `${URL_SHEETBEST}/tabs/Equipo/query?TipoProfesional=__eq(${especialidadFinal})&Estado=__eq(Activo)&TipoUsuario=__eq(Profesionales)`,
             {
                 headers: {
                     'X-Api-Key': API_KEY_SHEETBEST,

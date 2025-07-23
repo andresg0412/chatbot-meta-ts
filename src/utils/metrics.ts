@@ -43,7 +43,7 @@ export function metricConversationStarted(userId: string) {
   saveMetrics(metrics);
 }
 
-export function metricFlujoFinalizado(tipo: 'reagendar'|'cancelar'|'agente') {
+export function metricFlujoFinalizado(tipo: 'reagendar'|'cancelar'|'agente'|'agendar') {
   if (tipo === 'reagendar') metrics.flujo_reagendar_finalizados++;
   if (tipo === 'cancelar') metrics.flujo_cancelar_finalizados++;
   if (tipo === 'agente') metrics.flujo_agente_finalizados++;

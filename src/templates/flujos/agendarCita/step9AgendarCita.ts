@@ -1,7 +1,8 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
-import { stepHoraSeleccionada } from './stepHoraSeleccionada';
+import { step10AgendarCita } from './step10AgendarCita'; // Asegúrate de que este archivo exista y esté correctamente implementado
+// Aquí deberías importar el siguiente paso real (ejemplo: step10AgendarCita)
 
-const stepSeleccionaFechaReprogramar = addKeyword(EVENTS.ACTION)
+const step9AgendarCita = addKeyword(EVENTS.ACTION)
     .addAnswer('Por favor, escribe el *número* de la fecha que deseas ver las horas disponibles:',
         { capture: true },
         async (ctx, { state, flowDynamic, gotoFlow }) => {
@@ -10,12 +11,12 @@ const stepSeleccionaFechaReprogramar = addKeyword(EVENTS.ACTION)
                 const seleccion = ctx.body ? parseInt(ctx.body, 10) : 0;
                 if (isNaN(seleccion)) {
                     await flowDynamic('Por favor, ingresa un número válido.');
-                    return gotoFlow(stepSeleccionaFechaReprogramar);
+                    return gotoFlow(step9AgendarCita);
                 }
                 const mostrarFechas = fechasOrdenadas.slice(pasoSeleccionFecha.inicio, pasoSeleccionFecha.fin);
                 if (seleccion < 1 || seleccion > mostrarFechas.length + 1) {
                     await flowDynamic('Opción inválida. Por favor, selecciona una opción válida.');
-                    return gotoFlow(stepSeleccionaFechaReprogramar);
+                    return gotoFlow(step9AgendarCita);
                 }
                 if (seleccion === mostrarFechas.length + 1 && fechasOrdenadas.length > pasoSeleccionFecha.fin) {
                     const nuevoInicio = pasoSeleccionFecha.fin;
@@ -30,7 +31,7 @@ const stepSeleccionaFechaReprogramar = addKeyword(EVENTS.ACTION)
                     }
                     await flowDynamic(mensaje);
                     await state.update({ pasoSeleccionFecha: { inicio: nuevoInicio, fin: nuevoFin } });
-                    return gotoFlow(stepSeleccionaFechaReprogramar);
+                    return gotoFlow(step9AgendarCita);
                 }
                 const fechaSeleccionadaAgendar = mostrarFechas[seleccion - 1];
                 const horasDisponiblesAgendar = citasPorFecha[fechaSeleccionadaAgendar];
@@ -44,13 +45,13 @@ const stepSeleccionaFechaReprogramar = addKeyword(EVENTS.ACTION)
                 }
                 await flowDynamic(mensaje);
                 await state.update({ fechaSeleccionadaAgendar, horasDisponiblesAgendar, pasoSeleccionHora: { inicio: 0, fin: 5 } });
-                return gotoFlow(stepHoraSeleccionada);
+                return gotoFlow(step10AgendarCita);
             } catch (error) {
-                console.error('Error en stepSeleccionaFechaReprogramar:', error);
-                await flowDynamic('Ocurrió un error inesperado. Por favor, intenta nuevamente más tarde.');
-                return gotoFlow(stepSeleccionaFechaReprogramar);
+                console.error('Error en step9AgendarCita:', error);
+                await flowDynamic('Ocurrió un error al procesar tu solicitud. Por favor, inténtalo de nuevo más tarde.');
+                return gotoFlow(step9AgendarCita);
             }
         }
     );
 
-export { stepSeleccionaFechaReprogramar };
+export { step9AgendarCita };

@@ -1,0 +1,19 @@
+
+
+
+
+tipoCitaAgendarCita  (Presecial o Virtual)
+
+tipoConsultaPaciente  (Primera vez o Control)
+
+especialidadAgendarCita   (Psicologia NeuroPsicologia Psiquiatria)
+
+atencionPsicologica  (Infantil Adolescente Adulto Adulto Mayor Pareja o familia)
+
+convenioSeleccionado
+
+tipoDoc
+
+numeroDocumentoPaciente
+
+edadPacienteNeuropsicologia
