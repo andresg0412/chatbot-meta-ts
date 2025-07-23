@@ -26,6 +26,19 @@ const step19AgendarCita = addKeyword(EVENTS.ACTION)
             const valorPrimeraVez = state.getMyState().valorPrimeraVez;
             const valorControl = state.getMyState().valorControl;
             const valorPaquete = state.getMyState().valorPaquete;
+            console.log('Datos de la cita a agendar:', {
+                nuevaCita,
+                pacienteId,
+                especialidadCita,
+                motivoConsulta,
+                tipoCitaAgendarCita,
+                horaCitaBot,
+                atencionPsicologica,
+                idConvenio,
+                valorPrimeraVez,
+                valorControl,
+                valorPaquete,
+            });
             let tipoAtencion = 'Individual';
             if (atencionPsicologica === 'psicologia_infantil' || atencionPsicologica === 'psicologia_adolescente' || atencionPsicologica === 'psicologia_adulto' || atencionPsicologica === 'psicologia_adulto_mayor') {
                 tipoAtencion = 'Individual';
@@ -45,7 +58,7 @@ const step19AgendarCita = addKeyword(EVENTS.ACTION)
                 citaExistente = true;
             }
             if (citaExistente) {
-                const actualizarCita = await actualizarEstadoCita(nuevaCita, 'Programada', pacienteId, motivoConsulta);
+                const actualizarCita = await actualizarEstadoCita(nuevaCita, 'Pendiente', pacienteId, motivoConsulta);
                 if (!actualizarCita) {
                     await flowDynamic('Error al actualizar la cita existente. Por favor, intenta nuevamente.');
                     return;
@@ -56,7 +69,7 @@ const step19AgendarCita = addKeyword(EVENTS.ACTION)
                     ...nuevaCita,
                     AgendaId: agendaIdNueva,
                     MotivoConsulta: motivoConsulta,
-                    EstadoAgenda: 'Programada',
+                    EstadoAgenda: 'Pendiente',
                     FechaCita: nuevaCita.FechaCita,
                     HoraCita: nuevaCita.HoraCita,
                     HoraFinal: nuevaCita.HoraFinal,

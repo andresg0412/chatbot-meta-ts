@@ -6,26 +6,26 @@ const step10AgendarCita = addKeyword(EVENTS.ACTION)
         { capture: true },
         async (ctx, { state, flowDynamic, gotoFlow }) => {
             try {
-                const { fechaSeleccionadaAgendar, horasDisponiblesAgendar, pasoSeleccionHora } = state.getMyState();
+                const { fechaSeleccionadaAgendar, citasFechaSeleccionada, pasoSeleccionHora } = state.getMyState();
                 const seleccionHoraAgendar = ctx.body ? parseInt(ctx.body, 10) : 0;
                 if (isNaN(seleccionHoraAgendar)) {
                     await flowDynamic('Por favor, ingresa un número válido.');
                     return gotoFlow(step10AgendarCita);
                 }
-                const mostrarHoras = horasDisponiblesAgendar.slice(pasoSeleccionHora.inicio, pasoSeleccionHora.fin);
+                const mostrarHoras = citasFechaSeleccionada.slice(pasoSeleccionHora.inicio, pasoSeleccionHora.fin);
                 if (seleccionHoraAgendar < 1 || seleccionHoraAgendar > mostrarHoras.length + 1) {
                     await flowDynamic('Opción inválida. Por favor, selecciona una opción válida.');
                     return gotoFlow(step10AgendarCita);
                 }
-                if (seleccionHoraAgendar === mostrarHoras.length + 1 && horasDisponiblesAgendar.length > pasoSeleccionHora.fin) {
+                if (seleccionHoraAgendar === mostrarHoras.length + 1 && citasFechaSeleccionada.length > pasoSeleccionHora.fin) {
                     const nuevoInicio = pasoSeleccionHora.fin;
-                    const nuevoFin = Math.min(horasDisponiblesAgendar.length, pasoSeleccionHora.fin + 5);
-                    const nuevasHoras = horasDisponiblesAgendar.slice(nuevoInicio, nuevoFin);
+                    const nuevoFin = Math.min(citasFechaSeleccionada.length, pasoSeleccionHora.fin + 5);
+                    const nuevasHoras = citasFechaSeleccionada.slice(nuevoInicio, nuevoFin);
                     let mensaje = '*Más citas disponibles*:\n';
                     nuevasHoras.forEach((cita, idx) => {
-                        mensaje += `*${idx + 1}*. ${cita.HoraCita} - ${cita.HoraFinal} - ${cita.profesional}\n`;
+                        mensaje += `*${idx + 1}*. ${cita.horacita} - ${cita.profesional}\n`;
                     });
-                    if (horasDisponiblesAgendar.length > nuevoFin) {
+                    if (citasFechaSeleccionada.length > nuevoFin) {
                         mensaje += `*${nuevasHoras.length + 1}*. Ver más\n`;
                     }
                     await flowDynamic(mensaje);

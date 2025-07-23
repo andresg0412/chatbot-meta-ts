@@ -1,5 +1,5 @@
 {
-  "conversaciones_iniciadas": 91,
+  "conversaciones_iniciadas": 158,
   "usuarios_unicos": [
     "573185215524"
   ],
@@ -11,5 +11,11 @@
   "flujo_agente_finalizados": 1,
   "citas_reagendadas": 16,
   "citas_canceladas": 1,
-  "errores": []
+  "errores": [
+    {
+      "error": "fechasOrdenadas.slice is not a function",
+      "userId": "573185215524",
+      "fecha": "2025-07-20T13:41:10.520Z"
+    }
+  ]
 }

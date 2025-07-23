@@ -72,7 +72,7 @@ const confirmarReprogramarCita = addKeyword(EVENTS.ACTION)
                     ...citaAnterior,
                     ...nuevaCita,
                     AgendaId: agendaIdNueva,
-                    EstadoAgenda: 'Programada',
+                    EstadoAgenda: 'Pendiente',
                     FechaCita: nuevaCita.FechaCita,
                     HoraCita: nuevaCita.HoraCita,
                     HoraFinal: nuevaCita.HoraFinal,
