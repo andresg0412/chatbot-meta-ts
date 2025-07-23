@@ -5,9 +5,7 @@ import { volverMenuPrincipal } from '../common/volverMenuPrincipal';
 
 const noConfirmaReprogramar = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { state, flowDynamic, gotoFlow }) => {
-        // Obtener tipo y número de documento del estado
         const { tipoDoc, numeroDoc } = state.getMyState();
-        // Simular consulta a la API
         const { citasProgramadas } = state.getMyState();
         if (!citasProgramadas || citasProgramadas.length === 0) {
             await flowDynamic('No se encontraron citas agendadas con ese documento.');
