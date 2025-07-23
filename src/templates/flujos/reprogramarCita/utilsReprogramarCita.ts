@@ -4,6 +4,7 @@ import {
     consultarAgendaPorProfesionalId,
     consultarProfesionalesPorId,
 } from '../../../services/profesionalesService';
+import { obtenerFestivos } from '../../../services/apiService';
 
 export async function obtenerDuracionCitaEspecialidad(profesionales) {
     for (const profesional of profesionales) {
@@ -31,7 +32,7 @@ export async function obtenerDuracionCitaEspecialidad(profesionales) {
     return 45;
 }
 
-export async function obtenerCitasDisponiblesPorProfesional(profesional, especialidad, ahora, duracionCita) {
+export async function obtenerCitasDisponiblesPorProfesional(profesional, especialidad, ahora, duracionCita, festivos = []) {
     const horariosArr = await consultarHorariosPorProfesionalId(profesional.ColaboradoresId);
     const agendaArr = await consultarAgendaPorProfesionalId(profesional.ColaboradoresId);
     const citas = [];
@@ -44,6 +45,9 @@ export async function obtenerCitasDisponiblesPorProfesional(profesional, especia
                     const fechaBase = new Date(ahora);
                     fechaBase.setDate(fechaBase.getDate() + semana * 7);
                     const fechaProxima = getNextDateForDay(dia, fechaBase);
+                    const fechaProximaStr = formatDate(fechaProxima);
+                    // Excluir si es festivo
+                    if (festivos.includes(fechaProximaStr)) continue;
                     if (fechaProxima.getMonth() !== ahora.getMonth() && semanasAMostrar > 4) continue;
                     for (let i = 0; i < horas.length; i++) {
                         const hora = horas[i];
@@ -53,7 +57,7 @@ export async function obtenerCitasDisponiblesPorProfesional(profesional, especia
                         const mFinal = (totalMin % 60).toString().padStart(2, '0');
                         const horaFinal = `${hFinal}:${mFinal}`;
                         const citaAgendaExistente = agendaArr.find((cita) =>
-                            cita.FechaCita === formatDate(fechaProxima) && cita.HoraCita === hora
+                            cita.FechaCita === fechaProximaStr && cita.HoraCita === hora
                         );
                         const ocupada = citaAgendaExistente && ['Programada','Aprobada','Asistio','Confirmo'].includes(citaAgendaExistente.EstadoAgenda);
                         const [horaStr, minutoStr] = hora.split(':');
@@ -62,16 +66,16 @@ export async function obtenerCitasDisponiblesPorProfesional(profesional, especia
                         if (!ocupada && fechaHora > ahora) {
                             if (citaAgendaExistente) {
                                 citas.push({ ...citaAgendaExistente,
-                                    lugar: profesional.Sede || 'Bucarama Gonzalez Valencia',
+                                    lugar: profesional.Sede || 'Av. Gonzalez Valencia Bucaramanga',
                                     profesional: profesional.NombreCompleto ?? (`${profesional.PrimerNombre} ${profesional.PrimerApellido}`),
                                 });
                             } else {
                                 citas.push({
-                                    id: profesional.ColaboradoresId + '-' + formatDate(fechaProxima) + '-' + hora,
-                                    FechaCita: formatDate(fechaProxima),
+                                    id: profesional.ColaboradoresId + '-' + fechaProximaStr + '-' + hora,
+                                    FechaCita: fechaProximaStr,
                                     HoraCita: hora,
                                     HoraFinal: horaFinal,
-                                    lugar: profesional.Sede || 'Bucarama Gonzalez Valencia',
+                                    lugar: profesional.Sede || 'Av. Gonzalez Valencia Bucaramanga',
                                     profesional: profesional.NombreCompleto ?? (`${profesional.PrimerNombre} ${profesional.PrimerApellido}`),
                                     ProfesionalID: profesional.ColaboradoresId,
                                     Especialidad: especialidad
@@ -90,9 +94,10 @@ export async function obtenerCitasDisponiblesPrimeraVez(Especialidad) {
     const profesionales = await consultarProfesionalesPorEspecialidad(Especialidad);
     const ahora = new Date();
     const duracionCita = await obtenerDuracionCitaEspecialidad(profesionales);
+    const festivos = await obtenerFestivos();
     let citasDisponiblesReprogramar = [];
     for (const profesional of profesionales) {
-        const citas = await obtenerCitasDisponiblesPorProfesional(profesional, Especialidad, ahora, duracionCita);
+        const citas = await obtenerCitasDisponiblesPorProfesional(profesional, Especialidad, ahora, duracionCita, festivos);
         citasDisponiblesReprogramar = citasDisponiblesReprogramar.concat(citas);
     }
     return citasDisponiblesReprogramar;
@@ -102,8 +107,9 @@ export async function obtenerCitasDisponiblesControl(profesionalPrevio) {
     const ahora = new Date();
     const Especialidad = profesionalPrevio.Especialidad;
     const duracionCita = await obtenerDuracionCitaEspecialidad([profesionalPrevio]);
+    const festivos = await obtenerFestivos();
     let citasDisponiblesReprogramar = [];
-    const citas = await obtenerCitasDisponiblesPorProfesional(profesionalPrevio, Especialidad, ahora, duracionCita);
+    const citas = await obtenerCitasDisponiblesPorProfesional(profesionalPrevio, Especialidad, ahora, duracionCita, festivos);
     citasDisponiblesReprogramar = citasDisponiblesReprogramar.concat(citas);
     return citasDisponiblesReprogramar;
 }

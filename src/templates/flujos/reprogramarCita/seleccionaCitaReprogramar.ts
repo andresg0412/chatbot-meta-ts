@@ -72,7 +72,7 @@ const confirmarReprogramarCita = addKeyword(EVENTS.ACTION)
                     ...citaAnterior,
                     ...nuevaCita,
                     AgendaId: agendaIdNueva,
-                    EstadoAgenda: 'Programada',
+                    EstadoAgenda: 'Pendiente',
                     FechaCita: nuevaCita.FechaCita,
                     HoraCita: nuevaCita.HoraCita,
                     HoraFinal: nuevaCita.HoraFinal,
@@ -120,25 +120,35 @@ const preguntarConfirmarBotones = addKeyword(EVENTS.ACTION)
 
 
 
-const seleccionaCitaReprogramar = addKeyword(EVENTS.ACTION)
+/*const seleccionaCitaReprogramar = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { state, flowDynamic, gotoFlow }) => {
-        // obtener las citas que se enviaron en el paso anterior
-        const citas = state.getMyState().citas;
-        // obtener la respuesta del usuario
-        const numeroCita = ctx.body ? parseInt(ctx.body, 10) : 0;
-        if (!citas || !citas[numeroCita - 1]) {
-            await flowDynamic('Número de cita inválido. Por favor, intenta nuevamente.');
-            return;
+        try {
+            // obtener las citas que se enviaron en el paso anterior
+            const citas = state.getMyState().citas;
+            // obtener la respuesta del usuario
+            const numeroCita = ctx.body ? parseInt(ctx.body, 10) : 0;
+            if (isNaN(numeroCita)) {
+                await flowDynamic('Por favor, ingresa un número válido.');
+                return gotoFlow(step9AgendarCita);
+            }
+            if (!citas || !citas[numeroCita - 1]) {
+                await flowDynamic('Número de cita inválido. Por favor, intenta nuevamente.');
+                return;
+            }
+            const citaSeleccionada = citas[numeroCita - 1];
+            await state.update({ citaSeleccionada });
+            await flowDynamic(`Has seleccionado la cita del ${citaSeleccionada.fecha} a las ${citaSeleccionada.hora} en ${citaSeleccionada.lugar}.`);
+            return gotoFlow(preguntarConfirmarBotones);
+        } catch (error) {
+            console.error('Error en seleccionaCitaReprogramar:', error);
+            await flowDynamic('Ocurrió un error inesperado. Por favor, intenta nuevamente más tarde.');
+            return gotoFlow(volverMenuPrincipal);
         }
-        const citaSeleccionada = citas[numeroCita - 1];
-        await state.update({ citaSeleccionada });
-        await flowDynamic(`Has seleccionado la cita del ${citaSeleccionada.fecha} a las ${citaSeleccionada.hora} en ${citaSeleccionada.lugar}.`);
-        return gotoFlow(preguntarConfirmarBotones);
-    });
+    });*/
 
 
 export {
-    seleccionaCitaReprogramar,
+    //seleccionaCitaReprogramar,
     confirmarReprogramarCita,
     revisarPagoConsulta,
     noConfirmaReprogramarCita,
