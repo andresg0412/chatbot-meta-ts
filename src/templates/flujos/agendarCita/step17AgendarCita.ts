@@ -16,17 +16,17 @@ const step17AgendarCita7 = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { state, flowDynamic, gotoFlow, endFlow }) => {
         // CREAR EL NUEVO PACIENTE
         //PacientesID, TipoDocumento, NumeroDocumento, NombreCompleto, NúmeroContacto, Email, Convenio, FechaNacimiento, FechaRegistro
-        const pacienteId = generarAgendaIdAleatorio();
+        //const pacienteId = generarAgendaIdAleatorio();
         const tipoDoc = state.getMyState().tipoDoc;
         const numeroDocumento = state.getMyState().numeroDocumentoPaciente;
         const nombrePaciente1 = state.getMyState().nombrePaciente1;
         const nombrePaciente2 = state.getMyState().nombrePaciente2;
         const apellidoPaciente1 = state.getMyState().apellidoPaciente1;
         const apellidoPaciente2 = state.getMyState().apellidoPaciente2;
-        const nombreCompleto = `${nombrePaciente1} ${nombrePaciente2} ${apellidoPaciente1} ${apellidoPaciente2}`.trim();
+        //const nombreCompleto = `${nombrePaciente1} ${nombrePaciente2} ${apellidoPaciente1} ${apellidoPaciente2}`.trim();
         const numeroContacto = await state.getMyState().celular;
         // el numero de contacto viene como 573185214214 requiero separar el 57
-        const codigoPais = numeroContacto.slice(0, 2);
+        //const codigoPais = numeroContacto.slice(0, 2);
         const numeroContactoSinCodigo = numeroContacto.slice(2);
         const email = state.getMyState().correoElectronico;
         //consultar convenio a la base de datos
@@ -61,24 +61,22 @@ const step17AgendarCita7 = addKeyword(EVENTS.ACTION)
             
         }
         const datosPaciente = {
-            PacientesID: pacienteId,
-            TipoDocumento: tipoDocumento,
-            NumeroDocumento: numeroDocumento,
-            PrimerNombre: nombrePaciente1,
-            SegundoNombre: nombrePaciente2,
-            PrimerApellido: apellidoPaciente1,
-            SegundoApellido: apellidoPaciente2,
-            NombreCompleto: nombreCompleto,
-            CodigoPais: codigoPais,
-            NúmeroContacto: numeroContactoSinCodigo,
-            Email: email,
-            Convenio: convenio,
-            FechaNacimiento: fechaNacimiento,
-            FechaRegistro: fechaRegistro
+            //PacientesID: pacienteId,
+            tipo_documento: tipoDocumento,
+            numero_documento: numeroDocumento,
+            primer_nombre: nombrePaciente1,
+            segundo_nombre: nombrePaciente2,
+            primer_apellido: apellidoPaciente1,
+            segundo_apellido: apellidoPaciente2,
+            numero_contacto: numeroContactoSinCodigo,
+            email: email,
+            //convenio: convenio,
+            fecha_nacimiento: fechaNacimiento,
+            regimen: 'Particular'
         };
         try {
-            await crearPaciente(datosPaciente);
-            await state.update({ pacienteId });
+            const paciente_id = await crearPaciente(datosPaciente);
+            await state.update({ pacienteId: paciente_id });
         } catch (error) {
             await flowDynamic('Lo siento, ocurrió un error al crear tu perfil. Por favor, inténtalo más tarde.');
             return endFlow();
@@ -114,7 +112,10 @@ const step17AgendarCita5 = addKeyword(EVENTS.ACTION)
                 await flowDynamic('La fecha de nacimiento ingresada no es válida. Intenta nuevamente.');
                 return gotoFlow(step17AgendarCita2);
             }
-            await state.update({ fechaNacimiento, esperaFechaNacimiento: false, esperaSeleccionCita: true });
+            const partesFecha = fechaNacimiento.split('/');
+            //fecha en formato YYYY-MM-DD
+            const fechaFormateada = `${partesFecha[2]}-${partesFecha[1]}-${partesFecha[0]}`;
+            await state.update({ fechaNacimiento: fechaFormateada, esperaFechaNacimiento: false, esperaSeleccionCita: true });
             return gotoFlow(step17AgendarCita6);
         }
     );

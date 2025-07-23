@@ -1,13 +1,13 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
-import { step10AgendarCita } from './step10AgendarCita'; // Asegúrate de que este archivo exista y esté correctamente implementado
-// Aquí deberías importar el siguiente paso real (ejemplo: step10AgendarCita)
+import { step10AgendarCita } from './step10AgendarCita';
+import { consultarCitasFecha } from '../../../services/apiService';
 
 const step9AgendarCita = addKeyword(EVENTS.ACTION)
     .addAnswer('Por favor, escribe el *número* de la fecha que deseas ver las horas disponibles:',
         { capture: true },
         async (ctx, { state, flowDynamic, gotoFlow }) => {
             try {
-                const { fechasOrdenadas, citasPorFecha, pasoSeleccionFecha } = state.getMyState();
+                const { fechasOrdenadas, pasoSeleccionFecha } = state.getMyState();
                 const seleccion = ctx.body ? parseInt(ctx.body, 10) : 0;
                 if (isNaN(seleccion)) {
                     await flowDynamic('Por favor, ingresa un número válido.');
@@ -34,17 +34,32 @@ const step9AgendarCita = addKeyword(EVENTS.ACTION)
                     return gotoFlow(step9AgendarCita);
                 }
                 const fechaSeleccionadaAgendar = mostrarFechas[seleccion - 1];
-                const horasDisponiblesAgendar = citasPorFecha[fechaSeleccionadaAgendar];
-                const mostrarHoras = horasDisponiblesAgendar.slice(0, 5);
+                const myState = await state.getMyState();
+                const tipoConsulta = myState.tipoConsultaPaciente; // 'Primera vez' o 'Control'
+                const especialidad = myState.especialidadAgendarCita;
+                const ProfesionalID = myState.profesionalId; // ID del profesional si es 'Control'
+                let citasFechaSeleccionada = []
+                if (tipoConsulta === 'Control') {
+                    if (!ProfesionalID) {
+                        await flowDynamic('No se ha seleccionado un profesional. Por favor, vuelve a seleccionar la fecha.');
+                        return gotoFlow(step9AgendarCita);
+                    }
+                    citasFechaSeleccionada = await consultarCitasFecha(fechaSeleccionadaAgendar, tipoConsulta, especialidad, ProfesionalID);
+                }
+                else {
+                    citasFechaSeleccionada = await consultarCitasFecha(fechaSeleccionadaAgendar, tipoConsulta, especialidad);
+                }
+                
+                const mostrarHoras = citasFechaSeleccionada.slice(0, 5);
                 let mensaje = `Horas disponibles para el *${fechaSeleccionadaAgendar}*:\n`;
                 mostrarHoras.forEach((cita, idx) => {
-                    mensaje += `*${idx + 1}*. ${cita.HoraCita} - ${cita.HoraFinal} - ${cita.profesional}\n`;
+                    mensaje += `*${idx + 1}*. ${cita.horacita} - ${cita.profesional}\n`;
                 });
-                if (horasDisponiblesAgendar.length > 5) {
+                if (citasFechaSeleccionada.length > 5) {
                     mensaje += `*${mostrarHoras.length + 1}*. Ver más\n`;
                 }
                 await flowDynamic(mensaje);
-                await state.update({ fechaSeleccionadaAgendar, horasDisponiblesAgendar, pasoSeleccionHora: { inicio: 0, fin: 5 } });
+                await state.update({ fechaSeleccionadaAgendar, citasFechaSeleccionada, pasoSeleccionHora: { inicio: 0, fin: 5 } });
                 return gotoFlow(step10AgendarCita);
             } catch (error) {
                 console.error('Error en step9AgendarCita:', error);

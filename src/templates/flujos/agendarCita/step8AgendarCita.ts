@@ -7,6 +7,7 @@ import {
 } from '../reprogramarCita/utilsReprogramarCita';
 import { consultarProfesionalesPorId } from '../../../services/profesionalesService';
 import { metricError } from '../../../utils/metrics';
+import { consultarFechasCitasDisponibles } from '../../../services/apiService';
 
 const step8AgendarCita = addKeyword(EVENTS.ACTION)
     .addAnswer(
@@ -21,36 +22,14 @@ const step8AgendarCita = addKeyword(EVENTS.ACTION)
                 const tipoConsulta = myState.tipoConsultaPaciente; // 'Primera vez' o 'Control'
                 const especialidad = myState.especialidadAgendarCita;
                 const ProfesionalID = myState.profesionalId; // ID del profesional si es 'Control'
-                let citasDisponibles = [];
-
-                if (tipoConsulta === 'Primera vez') {
-                    citasDisponibles = await obtenerCitasDisponiblesPrimeraVez(especialidad);
-                } else if (tipoConsulta === 'Control') {
-                    let profesionalPrevio = ProfesionalID;
-                    if (!profesionalPrevio || typeof profesionalPrevio !== 'object') {
-                        const profesional = await consultarProfesionalesPorId(ProfesionalID);
-                        profesionalPrevio = profesional && profesional.length > 0 ? profesional[0] : null;
-                    }
-                    if (!profesionalPrevio) {
-                        await flowDynamic('No se encontró el profesional de la cita anterior.');
-                        return;
-                    }
-                    citasDisponibles = await obtenerCitasDisponiblesControl(profesionalPrevio);
-                }
-
-                if (!citasDisponibles.length) {
-                    await flowDynamic('No hay citas disponibles para agendar en este momento. Por favor, inténtalo más tarde.');
-                    return;
-                }
-
-                const { citasPorFecha, fechasOrdenadas } = agruparCitasPorFecha(citasDisponibles);
-                await state.update({ citasPorFecha, fechasOrdenadas, citasDisponibles });
+                const fechasOrdenadas = await consultarFechasCitasDisponibles(tipoConsulta, especialidad, ProfesionalID);
+                await state.update({ fechasOrdenadas });
                 const mostrarFechas = fechasOrdenadas.slice(0, 3);
                 let mensaje = '*Fechas con citas disponibles*:\n';
                 mostrarFechas.forEach((fecha, idx) => {
                     mensaje += `*${idx + 1}*. ${fecha}\n`;
                 });
-                if (fechasOrdenadas.length > 3) {
+                if (await fechasOrdenadas.length > 3) {
                     mensaje += `*${mostrarFechas.length + 1}*. Ver más\n`;
                 }
                 await flowDynamic(mensaje);

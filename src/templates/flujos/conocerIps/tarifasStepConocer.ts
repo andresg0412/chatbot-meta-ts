@@ -4,10 +4,10 @@ import { volverMenuPrincipal } from '../common';
 
 const tarifasStepConocer = addKeyword(['280525013', 'Tarifas', 'tarifas', 'TARIFAS'])
     .addAction(async (ctx, ctxFn) => {
-        const pathLocal = resolve(__dirname, '../../../../assets/imgprueba.jpg');
+        const pathLocal = resolve(__dirname, '../../../../assets/precios.png');
         await ctxFn.flowDynamic([
             {
-                body:'Aquí tienes información sobre nuestras tarifas',
+                body:'*Nuestras Tarifas*',
                 media: pathLocal
             },
         ]);

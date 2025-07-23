@@ -4,10 +4,10 @@ import { volverMenuPrincipal } from '../common';
 
 const formaspagoStepConocer = addKeyword(['280525014', 'Formas de pago', 'formaspago', 'FORMAS DE PAGO'])
     .addAction(async (ctx, ctxFn) => {
-        const pathLocal = resolve(__dirname, '../../../../assets/imgprueba.jpg');
+        const pathLocal = resolve(__dirname, '../../../../assets/formas_pago.png');
         await ctxFn.flowDynamic([
             {
-                body:'This is a video',
+                body:'Aquí tienes información sobre nuestras formas de pago',
                 media: pathLocal
             },
         ]);

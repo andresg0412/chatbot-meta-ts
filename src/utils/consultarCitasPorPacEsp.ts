@@ -1,17 +1,14 @@
-import { consultarPacientePorDocumento, consultarCitasPacienteEspecialidad } from '../services/apiService';
+import { IPaciente } from '../interfaces/IPacienteIn';
+import { consultarCitasPaciente, consultarCitasPacienteEspecialidad } from '../services/apiService';
 import { consultarProfesionalesPorId } from '../services/profesionalesService';
 
 
-export async function consultarCitasPorPacEsp(numeroDoc: string, especialidad: string): Promise<{ pacienteId: string, pacienteNombre: string, profesionalId: string, profesionalNombre: string } | string> {
-    const paciente = await consultarPacientePorDocumento(numeroDoc);
-    if (!paciente || paciente.length === 0) {
+export async function consultarCitasPorPacEsp(numeroDoc: string, especialidad: string): Promise<IPaciente[] | null> {
+    const consultaPaciente: IPaciente[] = await consultarCitasPaciente(numeroDoc, especialidad);
+    /**if (!paciente || paciente.pacientes_id === undefined) {
         return 'no paciente';
     }
-    const pacienteId = paciente[0]?.PacientesID;
-    if (!pacienteId) {
-        return 'no paciente';
-    }
-    const citas = await consultarCitasPacienteEspecialidad(pacienteId, especialidad);
+    const citas = await consultarCitasPacienteEspecialidad(paciente.pacientes_id, especialidad);
     if (!citas || citas.length === 0) {
         return 'no citas';
     }
@@ -36,11 +33,7 @@ export async function consultarCitasPorPacEsp(numeroDoc: string, especialidad: s
     });
     const ultimaCita = citasAnteriores[0];
     //consultar el profesional por ID
-    const profesional = await consultarProfesionalesPorId(ultimaCita.ProfesionalID);
-    return {
-        pacienteId: pacienteId,
-        pacienteNombre: `${paciente[0].PrimerNombre} ${paciente[0].SegundoNombre || ''}`.trim(),
-        profesionalId: ultimaCita.ProfesionalID,
-        profesionalNombre: profesional ? `${profesional[0].PrimerNombre} ${profesional[0].SegundoNombre || ''}`.trim() : '',
-    }
+    const profesional = await consultarProfesionalesPorId(ultimaCita.ProfesionalID);**/
+    return consultaPaciente || null;
+    
 }
