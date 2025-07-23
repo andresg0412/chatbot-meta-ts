@@ -1,6 +1,6 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { menuFlow } from '../../menuFlow';
-import { datosinicialesComunes4 } from '../common/datosInicialesComunes';
+import { datosinicialesComunes4 } from '../common';
 
 const stepOpcionReprogramar = addKeyword(EVENTS.ACTION)
     .addAnswer(

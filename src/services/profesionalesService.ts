@@ -3,10 +3,15 @@ import axios from 'axios';
 const URL_SHEETBEST = process.env.URL_SHEETBEST;
 const API_KEY_SHEETBEST = process.env.API_KEY_SHEETBEST;
 
+const ESPECIALIDAD_EQUIVALENCIAS: Record<string, string> = {
+    'Psicologia': 'Psicología Clínica',
+};
+
 export async function consultarProfesionalesPorEspecialidad(especialidad: string) {
     try {
+        const especialidadFinal = ESPECIALIDAD_EQUIVALENCIAS[especialidad] || especialidad;
         const response = await axios.get(
-            `${URL_SHEETBEST}/tabs/Equipo/Especialidad/${especialidad}`,
+            `${URL_SHEETBEST}/tabs/Equipo/Especialidad/${especialidadFinal}`,
             {
                 headers: {
                     'X-Api-Key': API_KEY_SHEETBEST,

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { metricCita } from '../utils/metrics';
 
 export const URL_SHEETBEST = process.env.URL_SHEETBEST;
 export const API_KEY_SHEETBEST = process.env.API_KEY_SHEETBEST;
@@ -44,6 +45,7 @@ export async function actualizarEstadoCita(cita: any, estado: string, pacienteId
             { ...cita, EstadoAgenda: estado, PacienteID: pacienteId, MotivoConsulta: MotivoConsulta },
             { headers: { 'X-Api-Key': API_KEY_SHEETBEST } }
         );
+        metricCita('reagendada');
         return cita;
     } catch (error) {
         console.error('Error actualizando estado cita:', error);
@@ -58,6 +60,7 @@ export async function actualizarEstadoCitaCancelar(cita: any, estado: string) {
             { ...cita, EstadoAgenda: estado },
             { headers: { 'X-Api-Key': API_KEY_SHEETBEST } }
         );
+        metricCita('cancelada');
         return cita;
     } catch (error) {
         console.error('Error cancelando cita:', error);
@@ -72,6 +75,7 @@ export async function crearCita(cita: any) {
             cita,
             { headers: { 'X-Api-Key': API_KEY_SHEETBEST } }
         );
+        metricCita('reagendada');
         return cita;
     } catch (error) {
         console.error('Error actualizando estado cita:', error);

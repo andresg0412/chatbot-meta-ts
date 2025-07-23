@@ -37,7 +37,7 @@ import {
     datosinicialesComunes3,
     datosinicialesComunes4,
     datosinicialesComunes5,
-} from './flujos/common/datosInicialesComunes';
+} from './flujos/common';
 import { pasoAgenteFlow } from './flujos/pasoAgente';
 import { ejecutarPlantillaDiariaFlow, confirmarCitaFlow } from './flujos/campahna';
 
