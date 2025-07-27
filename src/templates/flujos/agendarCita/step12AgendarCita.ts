@@ -13,9 +13,11 @@ const step12AgendarCita = addKeyword(EVENTS.ACTION)
         },
         async (ctx, ctxFn) => {
             if (ctx.body === 'Particular'){
+                await ctxFn.state.update({ tipoUsuarioAtencion: 'Particular' });
                 return ctxFn.gotoFlow(step13AgendarCitaParticular)
             }
             if (ctx.body === 'Convenio'){
+                await ctxFn.state.update({ tipoUsuarioAtencion: 'Convenio' });
                 return ctxFn.gotoFlow(step13AgendarCitaConvenio)
             }
         }

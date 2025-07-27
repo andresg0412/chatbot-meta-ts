@@ -1,7 +1,8 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { volverMenuPrincipal } from '../common/volverMenuPrincipal';
-import { actualizarEstadoCitaCancelar } from '../../../services/apiService';
+//import { actualizarEstadoCitaCancelar } from '../../../services/apiService';
 import { metricFlujoFinalizado, metricCita, metricError } from '../../../utils/metrics';
+import { cancelarCita } from '../../../services/apiService';
 
 const stepConfirmaCancelarCita = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { state, flowDynamic, gotoFlow, endFlow }) => {
@@ -11,10 +12,7 @@ const stepConfirmaCancelarCita = addKeyword(EVENTS.ACTION)
                 await flowDynamic('No se encontró la cita a cancelar.');
                 return gotoFlow(volverMenuPrincipal);
             }
-            await actualizarEstadoCitaCancelar(
-                citaSeleccionadaCancelar,
-                'Cancelo'
-            );
+            const response = await cancelarCita(citaSeleccionadaCancelar.agenda_id_externa);
             metricFlujoFinalizado('cancelar');
             await flowDynamic('Tu cita ha sido cancelada exitosamente. Quedo atenta a tu nueva disponibilidad.');
         } catch (e) {

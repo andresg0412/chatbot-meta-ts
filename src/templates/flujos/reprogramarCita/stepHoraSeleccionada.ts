@@ -1,5 +1,6 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { preguntarConfirmarBotones } from './seleccionaCitaReprogramar';
+import { construirMensajeHorasDisponibles } from '../../../utils/construirMensajeSalida';
 
 const stepHoraSeleccionada = addKeyword(EVENTS.ACTION)
     .addAnswer('Por favor, escribe el *número* de la hora que deseas seleccionar:',
@@ -21,13 +22,7 @@ const stepHoraSeleccionada = addKeyword(EVENTS.ACTION)
                     const nuevoInicio = pasoSeleccionHora.fin;
                     const nuevoFin = Math.min(citasFechaSeleccionada.length, pasoSeleccionHora.fin + 5);
                     const nuevasHoras = citasFechaSeleccionada.slice(nuevoInicio, nuevoFin);
-                    let mensaje = '*Más citas disponibles*:\n';
-                    nuevasHoras.forEach((cita, idx) => {
-                        mensaje += `*${idx + 1}*. ${cita.horacita} - ${cita.profesional}\n`;
-                    });
-                    if (citasFechaSeleccionada.length > nuevoFin) {
-                        mensaje += `*${nuevasHoras.length + 1}*. Ver más\n`;
-                    }
+                    const mensaje = construirMensajeHorasDisponibles(nuevasHoras, citasFechaSeleccionada.length, nuevoFin, '*Más citas disponibles*:');
                     await flowDynamic(mensaje);
                     await state.update({ pasoSeleccionHora: { inicio: nuevoInicio, fin: nuevoFin } });
                     return gotoFlow(stepHoraSeleccionada);

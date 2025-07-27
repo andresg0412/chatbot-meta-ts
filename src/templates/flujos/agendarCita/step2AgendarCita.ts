@@ -1,7 +1,3 @@
-// guardar tipo de cita seleccionada en step1
-// Mensaje Selecciona el tipo de cita:
-// Botones "Primera vez" y "Control"
-
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { step4AgendarCitaPrimeraVez } from './primeravez/step4AgendarCitaPrimeraVez';
 import { step4AgendarCitaControl } from './control/step4AgendarCitaControl';

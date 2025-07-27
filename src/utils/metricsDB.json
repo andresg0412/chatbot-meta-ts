@@ -1,21 +1,22 @@
 {
-  "conversaciones_iniciadas": 158,
+  "conversaciones_iniciadas": 182,
   "usuarios_unicos": [
     "573185215524"
   ],
   "usuarios_recurrentes": [
     "573185215524"
   ],
-  "flujo_reagendar_finalizados": 0,
-  "flujo_cancelar_finalizados": 1,
+  "flujo_reagendar_finalizados": 2,
+  "flujo_cancelar_finalizados": 3,
   "flujo_agente_finalizados": 1,
-  "citas_reagendadas": 16,
-  "citas_canceladas": 1,
+  "citas_reagendadas": 17,
+  "citas_canceladas": 2,
   "errores": [
     {
       "error": "fechasOrdenadas.slice is not a function",
       "userId": "573185215524",
       "fecha": "2025-07-20T13:41:10.520Z"
     }
-  ]
+  ],
+  "citas_agendadas": null
 }

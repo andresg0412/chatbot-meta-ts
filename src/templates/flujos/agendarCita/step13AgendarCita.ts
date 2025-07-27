@@ -2,8 +2,8 @@ import { addKeyword, EVENTS } from '@builderbot/bot';
 import { step14AgendarCita } from './step14AgendarCita';
 import { step17AgendarCita } from './step17AgendarCita';
 import { step18AgendarCita } from './step18AgendarCita';
-import { CONVENIOS_SERVICIOS } from '../../../constants/conveniosConstants';
-import { obtenerConvenios } from '../../../services/apiService';
+import { CONVENIOS_SERVICIOS, ID_CONVENIOS_SERVICIOS } from '../../../constants/conveniosConstants';
+//import { obtenerConvenios } from '../../../services/apiService';
 
 const step13AgendarCitaParticular = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { provider, state, gotoFlow }) => {
@@ -29,24 +29,22 @@ const step13AgendarCitaConvenio2 = addKeyword(['conv_poliza_sura', 'conv_poliza_
     .addAction(async (ctx, { provider, state, gotoFlow, flowDynamic }) => {
         const convenioSeleccionado = ctx.listResponse ? ctx.listResponse.title : ctx.body;
         // Obtener el nombre del servicio del convenio seleccionado
-        const nombreConvenio = CONVENIOS_SERVICIOS[convenioSeleccionado] || convenioSeleccionado;
+        const nombreConvenio = CONVENIOS_SERVICIOS[convenioSeleccionado];
+        const idConvenio = ID_CONVENIOS_SERVICIOS[convenioSeleccionado];
         if (!nombreConvenio) {
             await flowDynamic('El convenio no es válido. Por favor, selecciona un convenio válido.');
             return gotoFlow(step13AgendarCitaConvenio);
         }
-        const especialidad = await state.getMyState().especialidadAgendarCita;
-        const inforConvenio = await obtenerConvenios(especialidad, nombreConvenio);
-        if(!inforConvenio) {
+        //const especialidad = await state.getMyState().especialidadAgendarCita;
+        //const inforConvenio = await obtenerConvenios(especialidad, nombreConvenio);
+        /**if(!inforConvenio) {
             await flowDynamic('No se encontraron convenios para esta especialidad. Por favor, selecciona un convenio válido.');
             return gotoFlow(step13AgendarCitaConvenio);
-        }
+        }*/
         await state.update({ 
             convenioSeleccionado,
             nombreServicioConvenio: nombreConvenio,
-            idConvenio: inforConvenio.IdConvenios,
-            valorPrimeraVez: inforConvenio.ValorPrimeraVez,
-            valorControl: inforConvenio.ValorControl,
-            valorPaquete: inforConvenio.ValorPaquete,
+            idConvenio,
         });
         
         const tipoDocumento = state.getMyState().tipoDoc;

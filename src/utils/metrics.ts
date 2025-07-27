@@ -50,9 +50,10 @@ export function metricFlujoFinalizado(tipo: 'reagendar'|'cancelar'|'agente'|'age
   saveMetrics(metrics);
 }
 
-export function metricCita(tipo: 'reagendada'|'cancelada') {
+export function metricCita(tipo: 'reagendada'|'cancelada'|'agendada') {
   if (tipo === 'reagendada') metrics.citas_reagendadas++;
   if (tipo === 'cancelada') metrics.citas_canceladas++;
+  if (tipo === 'agendada') metrics.citas_agendadas++;
   saveMetrics(metrics);
 }
 

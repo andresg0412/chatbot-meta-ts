@@ -1,5 +1,3 @@
-// Mostrar mensaje de seleccione especialidad
-// botones de especialidades: Psicologia, Neuropsicologia
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { step5AgendarCitaControl } from './step5AgendarCitaControl';
 

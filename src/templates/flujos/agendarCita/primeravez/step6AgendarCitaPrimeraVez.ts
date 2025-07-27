@@ -1,25 +1,9 @@
-// Si seleccionan Psicologia en los botones de especialidades en step5AgendarCitaPrimeraVezPresencial o step5AgendarCitaPrimeraVezVirtual).
-// entonces mostrar un mensaje de "Por favor, selecciona para quien requieres la atencion psicologica:"
-// Mostrar listado: Infantil, Adolescente, Adulto, Adulto Mayor, Pareja o Familia
-
-
-// Si seleccionan Neuropsicologia en los botones de especialidades en step5AgendarCitaPrimeraVezPresencial o step5AgendarCitaPrimeraVezVirtual.
-// entonces mostrar un mensaje de "El paciente tiene 16 años o más?"
-// Mostrar botones: "Si" y "No"
-
-
-
-// Si seleccionan Psiquiatria en los botones de especialidades en step5AgendarCitaPrimeraVezPresencial.
-// entonces mostrar un mensaje de "Recuerde que es necesario contar con una remisión médica y presentarla en dia de tu cita"
-
-
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { step8AgendarCita } from '../step8AgendarCita';
 import { volverMenuPrincipal } from '../../common/volverMenuPrincipal';
 
 const step6AgendarCitaPrimeraVezPsicologiaAtencion = addKeyword(['psicologia_infantil', 'psicologia_adolescente', 'psicologia_adulto', 'psicologia_adulto_mayor', 'psicologia_pareja_familia'])
     .addAction(async (ctx, { state, gotoFlow }) => {
-        // Guardamos la atención psicológica seleccionada
         const atencionPsicologica = ctx.listResponse ? ctx.listResponse.title : ctx.body;
         await state.update({ atencionPsicologica: atencionPsicologica });
         return gotoFlow(step8AgendarCita);
@@ -87,7 +71,6 @@ const step6AgendarCitaPrimeraVezPsicologia = addKeyword(EVENTS.ACTION)
             await provider.sendList(ctx.from, list)
         }
     );
-    //necesitamos otro step donde captura la seleccion de la lista, guarda y pasa al otro step
 
 const step6AgendarCitaPrimeraVezNeuropsicologia = addKeyword(EVENTS.ACTION)
     .addAnswer(
@@ -102,7 +85,6 @@ const step6AgendarCitaPrimeraVezNeuropsicologia = addKeyword(EVENTS.ACTION)
         async (ctx, { state, gotoFlow, flowDynamic, endFlow }) => {
             await state.update({ edadPacienteNeuropsicologia: ctx.body });
             if (ctx.body === 'Si') {
-                //pasa al step de citas
                 return gotoFlow(step8AgendarCita);
             } else if (ctx.body === 'No') {
                 await flowDynamic('Lo siento, para agendar una cita en esta especialidad es necesario que el paciente tenga 16 años o más.');

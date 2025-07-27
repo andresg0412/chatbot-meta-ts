@@ -4,14 +4,12 @@ import { step8AgendarCita } from '../step8AgendarCita';
 import { consultarCitasPorPacEsp } from '../../../../utils/consultarCitasPorPacEsp';
 import { step4AgendarCitaControl } from './step4AgendarCitaControl';
 import { IPaciente } from '../../../../interfaces/IPacienteIn';
-// Aquí deberías importar los servicios reales de consulta de paciente y citas
 
 const step7AgendarCitaControl = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { state, gotoFlow, flowDynamic, endFlow }) => {
         try {
             const numeroDocumento = await state.getMyState().numeroDocumentoPaciente;
             const especialidad = await state.getMyState().especialidadAgendarCita;
-            //const { pacienteId, pacienteNombre, profesionalId, profesionalNombre } = await consultarCitasPorPacEsp(numeroDocumento, especialidad);
             const consultaDatos: IPaciente[] = await consultarCitasPorPacEsp(numeroDocumento, especialidad);
             if (!consultaDatos || consultaDatos.length === 0) {
                 await flowDynamic('No se encontraron citas anteriores relacionadas con el documento ingresado y la especialidad seleccionada. Por favor, verifica los datos e intenta nuevamente.');

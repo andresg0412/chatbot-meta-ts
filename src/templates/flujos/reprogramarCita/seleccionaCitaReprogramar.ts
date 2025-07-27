@@ -2,9 +2,10 @@ import axios from 'axios';
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { volverMenuPrincipal } from '../common/volverMenuPrincipal';
 //import { API_KEY_SHEETBEST, URL_SHEETBEST } from '../../../services/apiService';
-import { actualizarEstadoCita, crearCita } from '../../../services/apiService';
+import { reagendarCita } from '../../../services/apiService';
 import { stepConfirmaReprogramar } from './stepConfirmaReprogramar';
 import { metricFlujoFinalizado, metricCita, metricError } from '../../../utils/metrics';
+import { CONVENIOS_SERVICIOS, ID_CONVENIOS_SERVICIOS } from '../../../constants/conveniosConstants';
 
 function generarAgendaIdAleatorio() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -41,50 +42,31 @@ const confirmarReprogramarCita = addKeyword(EVENTS.ACTION)
         try {
             const citaAnterior = state.getMyState().citaSeleccionadaProgramada;
             const nuevaCita = state.getMyState().citaSeleccionadaHora;
-            if (!citaAnterior || !nuevaCita) {
-                await flowDynamic('No se encontró la información necesaria para reprogramar la cita.');
-                return;
-            }
-            const actualizarCita = await actualizarEstadoCita(citaAnterior, 'Reprogramo', citaAnterior.PacienteID, citaAnterior.MotivoConsulta);
-            if (!actualizarCita) {
-                await flowDynamic('Error al actualizar la cita anterior. Por favor, intenta nuevamente.');
-                return;
-            }
-            let citaExistente = false;
-            let agendaIdNueva = nuevaCita.AgendaId;
-            let profesionalID = nuevaCita.profesionalID || nuevaCita.ProfesionalID || nuevaCita.ProfesionalId;
-            if (!profesionalID && nuevaCita.id) {
-                const partes = nuevaCita.id.split('-');
-                if (partes.length > 0) profesionalID = partes[0];
-            }
-            if (nuevaCita.EstadoAgenda && ['Cancelo', 'Reprogramo', 'ErrorHumano', 'Rechazada', 'Incompleto'].includes(nuevaCita.EstadoAgenda)) {
-                citaExistente = true;
-            }
-            if (citaExistente) {
-                const actualizarCita = await actualizarEstadoCita(nuevaCita, 'Programada', citaAnterior.PacienteID, citaAnterior.MotivoConsulta);
-                if (!actualizarCita) {
-                    await flowDynamic('Error al actualizar la cita existente. Por favor, intenta nuevamente.');
-                    return;
+            console.log('citaAnterior:', citaAnterior);
+            console.log('nuevaCita:', nuevaCita);
+            const nombreConvenio = CONVENIOS_SERVICIOS[citaAnterior.convenio] ?? 'particular';
+            const idConvenio = ID_CONVENIOS_SERVICIOS[citaAnterior.convenio] ?? '1787';
+            const tipoConsulta = citaAnterior.catalogo ? (citaAnterior.catalogo.toUpperCase().includes('PRIMERA VEZ') ? 'primera' : 'control') : '';
+            const bodyReagendar = {
+                cita_anterior: { cita_id: citaAnterior.agenda_id_externa },
+                nueva_cita: {
+                    especialidad: nuevaCita.especialidad,
+                    fecha_cita: nuevaCita.fechacita,
+                    hora_cita: nuevaCita.horacita,
+                    hora_final: nuevaCita.horafinal,
+                    profesional_id: nuevaCita.profesionalId,
+                    paciente_id: citaAnterior.pacientes_id,
+                    tipo_usuario_atencion: 'particular',
+                    convenio_id: idConvenio,
+                    convenio_nombre: nombreConvenio,
+                    tipo_consulta_paciente: tipoConsulta,
+                    tipo_cita: citaAnterior.tipo_cita === '1' ? 'presencial' : 'virtual'
                 }
-            } else {
-                agendaIdNueva = generarAgendaIdAleatorio();
-                const bodyNueva = {
-                    ...citaAnterior,
-                    ...nuevaCita,
-                    AgendaId: agendaIdNueva,
-                    EstadoAgenda: 'Pendiente',
-                    FechaCita: nuevaCita.FechaCita,
-                    HoraCita: nuevaCita.HoraCita,
-                    HoraFinal: nuevaCita.HoraFinal,
-                    ProfesionalID: profesionalID,
-                    Especialidad: nuevaCita.especialidad || citaAnterior.Especialidad,
-                    PacienteID: citaAnterior.PacienteID,
-                };
-                const crearCitaProgramada = crearCita(bodyNueva);
-                if (!crearCitaProgramada) {
-                    await flowDynamic('Error al crear la nueva cita. Por favor, intenta nuevamente.');
-                    return;
-                }
+            }
+            const response = await reagendarCita(bodyReagendar);
+            if (!response) {
+                await flowDynamic('Error al reagendar la cita. Por favor, intenta nuevamente.');
+                return endFlow();
             }
             metricFlujoFinalizado('reagendar');
             await flowDynamic('Tu cita se ha agendado con éxito. 📅👍');

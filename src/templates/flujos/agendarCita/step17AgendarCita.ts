@@ -38,16 +38,16 @@ const step17AgendarCita7 = addKeyword(EVENTS.ACTION)
         const convenio = await state.getMyState().nombreServicioConvenio || 'Particular';
         switch (tipoDoc) {
             case 'agendarcita_tipo_cd':
-                tipoDocumento = 'Cc';
+                tipoDocumento = 'CC';
                 break;
             case 'agendarcita_tipo_cex':
-                tipoDocumento = 'Ce';
+                tipoDocumento = 'CE';
                 break;
             case 'agendarcita_tipo_tid':
                 tipoDocumento = 'TI';
                 break;
             case 'agendarcita_tipo_rcv':
-                tipoDocumento = 'Rc';
+                tipoDocumento = 'RC';
                 break;
             case 'agendarcita_tipo_ps':
                 tipoDocumento = 'Pasaporte';

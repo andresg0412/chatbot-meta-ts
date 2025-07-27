@@ -1,12 +1,8 @@
-// guardamos el tipo de documento seleccionado en step5AgendarCitaControl.ts
-// solicitamos que se ingrese el numero de documento
-
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { step7AgendarCitaControl } from './step7AgendarCitaControl';
 import { sanitizeString } from '../../../../utils/sanitize';
 
 
-// agregar ids del step 5 de tipos de documentos
 const step6AgendarCitaControl = addKeyword(EVENTS.ACTION)
     .addAnswer(
         'Por favor, ingresa el número de documento:',

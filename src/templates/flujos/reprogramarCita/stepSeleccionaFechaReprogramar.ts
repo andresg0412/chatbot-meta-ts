@@ -1,14 +1,13 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { stepHoraSeleccionada } from './stepHoraSeleccionada';
 import { consultarCitasFecha } from '../../../services/apiService';
+import { construirMensajeFechasDisponibles, construirMensajeHorasDisponibles } from '../../../utils/construirMensajeSalida';
 
 const stepSeleccionaFechaReprogramar = addKeyword(EVENTS.ACTION)
     .addAnswer('Por favor, escribe el *número* de la fecha que deseas ver las horas disponibles:',
         { capture: true },
         async (ctx, { state, flowDynamic, gotoFlow, endFlow }) => {
             try {
-
-                //AQUI VAMOS
                 const { fechasOrdenadas, pasoSeleccionFecha } = state.getMyState();
                 const seleccion = ctx.body ? parseInt(ctx.body, 10) : 0;
                 if (isNaN(seleccion)) {
@@ -24,13 +23,7 @@ const stepSeleccionaFechaReprogramar = addKeyword(EVENTS.ACTION)
                     const nuevoInicio = pasoSeleccionFecha.fin;
                     const nuevoFin = Math.min(fechasOrdenadas.length, pasoSeleccionFecha.fin + 3);
                     const nuevasFechas = fechasOrdenadas.slice(nuevoInicio, nuevoFin);
-                    let mensaje = '*Más fechas con citas disponibles*:\n';
-                    nuevasFechas.forEach((fecha, idx) => {
-                        mensaje += `*${idx + 1}*. ${fecha}\n`;
-                    });
-                    if (fechasOrdenadas.length > nuevoFin) {
-                        mensaje += `*${nuevasFechas.length + 1}*. Ver más\n`;
-                    }
+                    const mensaje = construirMensajeFechasDisponibles(nuevasFechas, fechasOrdenadas.length, nuevoFin, '*Más fechas con citas disponibles*:');
                     await flowDynamic(mensaje);
                     await state.update({ pasoSeleccionFecha: { inicio: nuevoInicio, fin: nuevoFin } });
                     return gotoFlow(stepSeleccionaFechaReprogramar);
@@ -54,13 +47,7 @@ const stepSeleccionaFechaReprogramar = addKeyword(EVENTS.ACTION)
                 }
 
                 const mostrarHoras = citasFechaSeleccionada.slice(0, 5);
-                let mensaje = `Horas disponibles para el *${fechaSeleccionadaAgendar}*:\n`;
-                mostrarHoras.forEach((cita, idx) => {
-                    mensaje += `*${idx + 1}*. ${cita.horacita} - ${cita.profesional}\n`;
-                });
-                if (citasFechaSeleccionada.length > 5) {
-                    mensaje += `*${mostrarHoras.length + 1}*. Ver más\n`;
-                }
+                const mensaje = construirMensajeHorasDisponibles(mostrarHoras, citasFechaSeleccionada.length, 5, `Horas disponibles para el *${fechaSeleccionadaAgendar}*:`);
                 await flowDynamic(mensaje);
                 await state.update({ fechaSeleccionadaAgendar, citasFechaSeleccionada, pasoSeleccionHora: { inicio: 0, fin: 5 } });
                 return gotoFlow(stepHoraSeleccionada);
