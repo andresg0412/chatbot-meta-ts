@@ -1,6 +1,13 @@
 import { createBot, createProvider, createFlow, addKeyword, utils, EVENTS } from '@builderbot/bot';
+import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 
 const menuConocerIpsFlow = addKeyword('280525001')
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAnswer(
         '¿Que te gustaria conocer de la IPS?',
         {

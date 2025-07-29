@@ -1,4 +1,5 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
+import { closeUserSession } from '../../../utils/proactiveSessionManager';
 
 const mesajeSalida = addKeyword([EVENTS.ACTION, 'salir', 'Salir'])
     .addAnswer(
@@ -7,6 +8,7 @@ const mesajeSalida = addKeyword([EVENTS.ACTION, 'salir', 'Salir'])
             capture: false,
         },
         async (ctx, { endFlow }) => {
+            closeUserSession(ctx.from);
             return endFlow();
         }
     );

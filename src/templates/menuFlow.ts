@@ -1,6 +1,12 @@
 import { createBot, createProvider, createFlow, addKeyword, utils, EVENTS } from '@builderbot/bot';
-
+import { checkSessionTimeout } from '../utils/proactiveSessionTimeout';
 const menuFlow = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAnswer(
         '¿Que deseas hacer hoy? 😊',
         {
