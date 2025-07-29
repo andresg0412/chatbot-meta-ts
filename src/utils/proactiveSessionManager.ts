@@ -6,7 +6,7 @@ import path from 'path';
 const SESSIONS_DB_PATH = path.join(__dirname, 'userSessionsDB.json');
 
 // Configuración del timeout de sesión (1 hora en milisegundos)
-const SESSION_TIMEOUT_MS = 3 * 60 * 1000; // 1 hora
+const SESSION_TIMEOUT_MS = 60 * 60 * 1000; // 1 hora
 
 // Estructura: { [userId]: { lastActivity: number, isActive: boolean, timerId?: NodeJS.Timeout } }
 let userSessions: Record<string, { 
