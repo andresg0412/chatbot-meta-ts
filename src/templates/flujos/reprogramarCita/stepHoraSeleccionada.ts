@@ -1,8 +1,15 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { preguntarConfirmarBotones } from './seleccionaCitaReprogramar';
 import { construirMensajeHorasDisponibles } from '../../../utils/construirMensajeSalida';
+import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 
 const stepHoraSeleccionada = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAnswer('Por favor, escribe el *número* de la hora que deseas seleccionar:',
         { capture: true },
         async (ctx, { state, flowDynamic, gotoFlow }) => {

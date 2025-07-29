@@ -6,6 +6,7 @@ import { reagendarCita } from '../../../services/apiService';
 import { stepConfirmaReprogramar } from './stepConfirmaReprogramar';
 import { metricFlujoFinalizado, metricCita, metricError } from '../../../utils/metrics';
 import { CONVENIOS_SERVICIOS, ID_CONVENIOS_SERVICIOS } from '../../../constants/conveniosConstants';
+import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 
 function generarAgendaIdAleatorio() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -81,6 +82,12 @@ const confirmarReprogramarCita = addKeyword(EVENTS.ACTION)
 
 
 const preguntarConfirmarBotones = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAnswer(
         '¿Confirmas la cita? ✅',
         {

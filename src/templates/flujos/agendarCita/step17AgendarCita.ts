@@ -2,6 +2,7 @@ import { addKeyword, EVENTS } from '@builderbot/bot';
 import { sanitizeString, isValidDocumentNumber } from '../../../utils/sanitize';
 import { step18AgendarCita } from './step18AgendarCita';
 import { crearPaciente } from '../../../utils/consultarCitasPorDocumento';
+import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 
 function generarAgendaIdAleatorio() {
     const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -57,8 +58,6 @@ const step17AgendarCita7 = addKeyword(EVENTS.ACTION)
                 break;
             default:
                 tipoDocumento = 'Desconocido';
-            
-            
         }
         const datosPaciente = {
             //PacientesID: pacienteId,
@@ -85,6 +84,12 @@ const step17AgendarCita7 = addKeyword(EVENTS.ACTION)
     })
 
 const step17AgendarCita6 = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAnswer('Ahora, por favor digita tu correo electrónico 📧:',
         {
             capture: true,
@@ -103,8 +108,14 @@ const step17AgendarCita6 = addKeyword(EVENTS.ACTION)
 
 
 const step17AgendarCita5 = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAnswer('Ahora, por favor digita tu fecha de nacimiento (Utiliza el formato DD/MM/AAA por ejemplo 24/12/1990:',
-        {capture: true },
+        { capture: true },
         async (ctx, { state, gotoFlow, flowDynamic }) => {
             const fechaNacimiento = ctx.body.trim();
             const fechaRegex = /^(0[1-9]|[12][0-9]|3[01])\/(0[1-9]|1[0-2])\/\d{4}$/;
@@ -121,8 +132,14 @@ const step17AgendarCita5 = addKeyword(EVENTS.ACTION)
     );
 
 const step17AgendarCita4 = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAnswer('Digita tu *SEGUNDO* apellido:',
-        {capture: true },
+        { capture: true },
         async (ctx, { state, gotoFlow, flowDynamic }) => {
             const apellidoPaciente2 = sanitizeString(ctx.body, 30);
             if (apellidoPaciente2.length < 3) {
@@ -136,8 +153,14 @@ const step17AgendarCita4 = addKeyword(EVENTS.ACTION)
     );
 
 const step17AgendarCita3 = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAnswer('Digita tu *PRIMER* apellido:',
-        {capture: true },
+        { capture: true },
         async (ctx, { state, gotoFlow, flowDynamic }) => {
             const apellidoPaciente1 = sanitizeString(ctx.body, 30);
             if (apellidoPaciente1.length < 3) {
@@ -151,8 +174,14 @@ const step17AgendarCita3 = addKeyword(EVENTS.ACTION)
     );
 
 const step17AgendarCita2 = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAnswer('Ahora, digita tu *SEGUNDO* nombre:',
-        {capture: true },
+        { capture: true },
         async (ctx, { state, gotoFlow, flowDynamic }) => {
             const nombrePaciente2 = sanitizeString(ctx.body, 30);
             if (nombrePaciente2.length < 3) {
@@ -166,8 +195,14 @@ const step17AgendarCita2 = addKeyword(EVENTS.ACTION)
     );
 
 const step17AgendarCita = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAnswer('Por favor, digita tu *PRIMER* nombre:',
-        {capture: true },
+        { capture: true },
         async (ctx, { state, gotoFlow, flowDynamic }) => {
             const nombrePaciente1 = sanitizeString(ctx.body, 30);
             if (nombrePaciente1.length < 3) {

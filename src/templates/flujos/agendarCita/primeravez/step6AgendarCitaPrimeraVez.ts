@@ -1,6 +1,7 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { step8AgendarCita } from '../step8AgendarCita';
 import { volverMenuPrincipal } from '../../common/volverMenuPrincipal';
+import { checkSessionTimeout } from '../../../../utils/proactiveSessionTimeout';
 
 const step6AgendarCitaPrimeraVezPsicologiaAtencion = addKeyword(['psicologia_infantil', 'psicologia_adolescente', 'psicologia_adulto', 'psicologia_adulto_mayor', 'psicologia_pareja_familia'])
     .addAction(async (ctx, { state, gotoFlow }) => {
@@ -10,6 +11,12 @@ const step6AgendarCitaPrimeraVezPsicologiaAtencion = addKeyword(['psicologia_inf
     });
 
 const step6AgendarCitaPrimeraVezPsicologia = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAnswer(
         'Por favor, selecciona para quien requieres la atención psicológica:',
         {
@@ -73,6 +80,12 @@ const step6AgendarCitaPrimeraVezPsicologia = addKeyword(EVENTS.ACTION)
     );
 
 const step6AgendarCitaPrimeraVezNeuropsicologia = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAnswer(
         'El paciente tiene 16 años o más?',
         {
@@ -94,6 +107,12 @@ const step6AgendarCitaPrimeraVezNeuropsicologia = addKeyword(EVENTS.ACTION)
     );
 
 const step6AgendarCitaPrimeraVezPsiquiatria = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAnswer(
         'Recuerde que es necesario contar con una remisión médica y presentarla en el día de tu cita.',
         {

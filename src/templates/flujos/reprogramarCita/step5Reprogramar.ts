@@ -1,9 +1,16 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { step6Reprogramar } from './step6Reprogramar';
 import { sanitizeString } from '../../../utils/sanitize';
+import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 
 
 const step5Reprogramar = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAnswer('Por favor, digita el número de la cita que deseas reprogramar 🗓️:',
         { capture: true },
         async (ctx, { state, flowDynamic, gotoFlow }) => {

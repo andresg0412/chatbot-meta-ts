@@ -12,8 +12,15 @@ import { stepSeleccionaFechaReprogramar } from './stepSeleccionaFechaReprogramar
 import { metricError } from '../../../utils/metrics';
 import { consultarFechasCitasDisponibles } from '~/services/apiService';
 import { construirMensajeFechasDisponibles } from '../../../utils/construirMensajeSalida';
+import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 
 const stepConfirmaReprogramar = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAnswer(
         'A continuación te mostraré las fechas disponibles:',
         {

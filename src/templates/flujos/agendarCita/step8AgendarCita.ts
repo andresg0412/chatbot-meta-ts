@@ -3,8 +3,15 @@ import { step9AgendarCita } from './step9AgendarCita';
 import { metricError } from '../../../utils/metrics';
 import { consultarFechasCitasDisponibles } from '../../../services/apiService';
 import { construirMensajeFechasDisponibles } from '../../../utils/construirMensajeSalida';
+import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 
 const step8AgendarCita = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAnswer(
         'A continuación te mostraré las fechas disponibles para agendar tu cita:',
         {

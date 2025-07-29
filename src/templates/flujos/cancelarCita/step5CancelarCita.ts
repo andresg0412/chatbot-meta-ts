@@ -1,8 +1,15 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { step6CancelarCita } from './step6CancelarCita';
 import { sanitizeString } from '../../../utils/sanitize';
+import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 
 const step5CancelarCita = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAnswer('Por favor, escribe el número de la cita que deseas cancelar 🗓️:',
         { capture: true },
         async (ctx, { state, flowDynamic, gotoFlow }) => {

@@ -1,7 +1,3 @@
-// Obtenemos si la cita es presencial o virtual
-// Si es presencial, se irá al step5AgendarCitaPrimeraVezPresencial
-// Si es virtual, se irá al step5AgendarCitaPrimeraVezVirtual
-
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import {
     step5AgendarCitaPrimeraVezPresencial,

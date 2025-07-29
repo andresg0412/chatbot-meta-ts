@@ -8,3 +8,8 @@ node_modules
 
 *.log
 *qr.png
+RESUMEN_IMPLEMENTACION.md
+SISTEMA_PROACTIVO.md
+src/utils/metricsDB.json
+src/utils/userSessionsDB.json
+src/utils/userAttemptsDB.json

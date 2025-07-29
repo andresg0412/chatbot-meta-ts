@@ -1,6 +1,13 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
+import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 
 const step23AgendarCitaColombia = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAnswer(
         'Mostrar medio de pago Colombia 💳: (Pendiente definir)',
         { capture: false },

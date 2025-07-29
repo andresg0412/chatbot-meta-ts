@@ -2,8 +2,15 @@ import { addKeyword, EVENTS } from '@builderbot/bot';
 import { stepHoraSeleccionada } from './stepHoraSeleccionada';
 import { consultarCitasFecha } from '../../../services/apiService';
 import { construirMensajeFechasDisponibles, construirMensajeHorasDisponibles } from '../../../utils/construirMensajeSalida';
+import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 
 const stepSeleccionaFechaReprogramar = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAnswer('Por favor, escribe el *número* de la fecha que deseas ver las horas disponibles:',
         { capture: true },
         async (ctx, { state, flowDynamic, gotoFlow, endFlow }) => {

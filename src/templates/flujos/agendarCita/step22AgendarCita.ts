@@ -1,8 +1,15 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { mesajeSalida } from '../common';
 import { step23AgendarCitaExterior, step23AgendarCitaColombia } from './step23AgendarCita';
+import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 
 const step22AgendarCitaMedioVirtual = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAnswer(
         'Selecciona tipo de medio virtual 💳:',
         {

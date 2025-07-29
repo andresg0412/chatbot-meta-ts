@@ -1,6 +1,13 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
+import { checkSessionTimeout } from '../../../../utils/proactiveSessionTimeout';
 
 const step5AgendarCitaControl = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAction(async (ctx, { provider }) => {
         const list = {
             header: { type: 'text', text: 'Tipo de documento' },
@@ -25,6 +32,6 @@ const step5AgendarCitaControl = addKeyword(EVENTS.ACTION)
         };
         await provider.sendList(ctx.from, list);
     });
-    
+
 
 export { step5AgendarCitaControl };

@@ -1,8 +1,15 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { step5CancelarCita } from '../cancelarCita/step5CancelarCita';
 import { step5Reprogramar } from '../reprogramarCita/step5Reprogramar';
+import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 
 const datosinicialesComunes5 = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAction(async (ctx, { state, flowDynamic, gotoFlow }) => {
         const flujoSeleccionadoMenu = state.getMyState().flujoSeleccionadoMenu;
         if (flujoSeleccionadoMenu === 'cancelarCita') {

@@ -1,8 +1,15 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { step4AgendarCitaPrimeraVez } from './primeravez/step4AgendarCitaPrimeraVez';
 import { step4AgendarCitaControl } from './control/step4AgendarCitaControl';
+import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 
 const step2AgendarCita = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAnswer(
         'Selecciona el tipo de cita:',
         {

@@ -2,10 +2,12 @@ import { createBot, createProvider, createFlow, addKeyword, utils, EVENTS } from
 import { politicaDatosFlow } from './flujos/principal/politicasDatos';
 import { checkAndRegisterUserAttempt } from '../utils/userRateLimiter';
 import { metricConversationStarted } from '../utils/metrics';
+import { updateUserActivity } from '../utils/proactiveSessionManager';
 
 const welcomeFlow = addKeyword(EVENTS.WELCOME)
     .addAction(async (ctx, ctxFn) => {
         metricConversationStarted(ctx.from);
+        updateUserActivity(ctx.from);
         await ctxFn.state.update({ celular: ctx.from });
         const rate = checkAndRegisterUserAttempt(ctx.from);
         if (!rate.allowed) {
