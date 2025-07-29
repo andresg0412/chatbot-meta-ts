@@ -4,6 +4,7 @@ import { MemoryDB as Database } from '@builderbot/bot'
 import { MetaProvider as Provider } from '@builderbot/provider-meta'
 import "dotenv/config";
 import templates from './templates';
+import { setBotInstance, restoreActiveTimers } from './utils/proactiveSessionManager';
 
 const PORT = process.env.PORT ?? 3008
 
@@ -21,6 +22,26 @@ const main = async () => {
         provider: adapterProvider,
         database: adapterDB,
     })
+
+    // Configurar el bot para el sistema de timeout proactivo
+    // Usar el método del provider correctamente
+    const botForTimeout = {
+        sendMessage: async (to: string, message: string) => {
+            try {
+                return await adapterProvider.sendMessage(to, message, {});
+            } catch (error) {
+                console.error('Error en sendMessage del provider:', error);
+                throw error;
+            }
+        }
+    };
+    
+    setBotInstance(botForTimeout);
+    
+    // Restaurar timers de sesiones activas después de reinicio
+    restoreActiveTimers();
+    
+    console.log('🚀 Sistema de timeout proactivo inicializado');
 
     adapterProvider.server.post(
         '/v1/messages',

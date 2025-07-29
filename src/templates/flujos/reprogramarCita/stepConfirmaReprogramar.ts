@@ -1,5 +1,4 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
-//import { seleccionaCitaReprogramar } from './seleccionaCitaReprogramar';
 import {
     obtenerDuracionCitaEspecialidad,
     obtenerCitasDisponiblesPorProfesional,
@@ -10,11 +9,19 @@ import {
     formatDate
 } from './utilsReprogramarCita';
 import { stepSeleccionaFechaReprogramar } from './stepSeleccionaFechaReprogramar';
-import { consultarProfesionalesPorId } from '../../../services/profesionalesService';
 import { metricError } from '../../../utils/metrics';
 import { consultarFechasCitasDisponibles } from '~/services/apiService';
+import { construirMensajeFechasDisponibles } from '../../../utils/construirMensajeSalida';
+import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
+import { closeUserSession } from '../../../utils/proactiveSessionManager';
 
 const stepConfirmaReprogramar = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAnswer(
         'A continuación te mostraré las fechas disponibles:',
         {
@@ -28,28 +35,21 @@ const stepConfirmaReprogramar = addKeyword(EVENTS.ACTION)
                     return;
                 }
                 const { especialidad, catalogo, profesional_id, nombre_profesional } = citaSeleccionadaProgramada;
-                
-                // Verificar si el catálogo contiene "PRIMERA VEZ" o "CONTROL"
                 const catalogoUpper = catalogo ? catalogo.toUpperCase() : '';
                 const esPrimeraVez = catalogoUpper.includes('PRIMERA VEZ');
                 const esControl = catalogoUpper.includes('CONTROL');
                 const tipoConsulta = esPrimeraVez ? 'Primera vez' : esControl ? 'Control' : '';
                 const fechasOrdenadas = await consultarFechasCitasDisponibles(tipoConsulta, especialidad, profesional_id);
                 await state.update({ fechasOrdenadas, tipoConsultaPaciente: tipoConsulta, especialidadAgendarCita: especialidad, profesionalId: profesional_id });
-                const mostrarFechas = fechasOrdenadas.slice(0, 3);
-                let mensaje = '*Fechas con citas disponibles*:\n';
-                mostrarFechas.forEach((fecha, idx) => {
-                    mensaje += `*${idx + 1}*. ${fecha}\n`;
-                });
-                if (fechasOrdenadas.length > 3) {
-                    mensaje += `*${mostrarFechas.length + 1}*. Ver más\n`;
-                }
+                const mostrarFechas = await fechasOrdenadas.slice(0, 3);
+                const mensaje = construirMensajeFechasDisponibles(mostrarFechas, fechasOrdenadas.length, 3, '*Fechas con citas disponibles*:');
                 await flowDynamic(mensaje);
                 await state.update({ pasoSeleccionFecha: { inicio: 0, fin: 3 } });
                 return gotoFlow(stepSeleccionaFechaReprogramar);
             } catch (error) {
                 metricError(error, ctx.from);
                 await flowDynamic('Ocurrió un error inesperado. Por favor, intenta más tarde.');
+                closeUserSession(ctx.from);
                 return endFlow();
             }
         }

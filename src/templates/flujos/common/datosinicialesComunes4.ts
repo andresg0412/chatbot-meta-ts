@@ -5,8 +5,15 @@ import { obtenerCitasValidas } from '../../../utils/obtenerCitasValidas';
 import { sanitizeString } from '../../../utils/sanitize';
 import { datosinicialesComunes5 } from './datosinicialesComunes5';
 import { datosinicialesComunes3 } from './datosinicialesComunes3';
+import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 
 const datosinicialesComunes4 = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAction(async (ctx, { state, flowDynamic, gotoFlow }) => {
         let { tipoDoc, numeroDoc } = state.getMyState();
         tipoDoc = sanitizeString(tipoDoc, 30);

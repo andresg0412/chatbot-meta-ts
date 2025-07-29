@@ -1,8 +1,15 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { step19AgendarCita } from './step19AgendarCita';
 import { volverMenuPrincipal } from '../common';
+import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 
 const step18AgendarCita2 = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAnswer(
         '¿Confirmas la cita? ✅',
         {
