@@ -3,6 +3,7 @@ import { addKeyword, EVENTS } from '@builderbot/bot';
 import { metricFlujoFinalizado, metricError } from '../../../utils/metrics';
 import { step20AgendarCita } from './step20AgendarCita';
 import { crearCita } from '../../../services/apiService';
+import { closeUserSession } from '../../../utils/proactiveSessionManager';
 
 function generarAgendaIdAleatorio() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -59,6 +60,7 @@ const step19AgendarCita = addKeyword(EVENTS.ACTION)
             };
             const response = await crearCita(bodyNueva);
             if (!response) {
+                closeUserSession(ctx.from);
                 await flowDynamic('Error al agendar la cita. Por favor, intenta nuevamente.');
                 return endFlow();
             }
@@ -68,6 +70,7 @@ const step19AgendarCita = addKeyword(EVENTS.ACTION)
             return gotoFlow(step20AgendarCita);
         } catch (e) {
             metricError(e, ctx.from);
+            closeUserSession(ctx.from);
             await flowDynamic('Ocurrió un error inesperado al reprogramar la cita.');
             return endFlow();
         }

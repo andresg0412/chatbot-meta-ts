@@ -4,6 +4,7 @@ import { metricError } from '../../../utils/metrics';
 import { consultarFechasCitasDisponibles } from '../../../services/apiService';
 import { construirMensajeFechasDisponibles } from '../../../utils/construirMensajeSalida';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
+import { closeUserSession } from '../../../utils/proactiveSessionManager';
 
 const step8AgendarCita = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
@@ -32,6 +33,7 @@ const step8AgendarCita = addKeyword(EVENTS.ACTION)
                 return gotoFlow(step9AgendarCita);
             } catch (error) {
                 metricError(error, ctx.from);
+                closeUserSession(ctx.from);
                 await flowDynamic('Ocurrió un error inesperado. Por favor, intenta más tarde.');
                 return endFlow();
             }

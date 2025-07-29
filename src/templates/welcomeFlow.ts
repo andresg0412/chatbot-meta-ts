@@ -2,7 +2,7 @@ import { createBot, createProvider, createFlow, addKeyword, utils, EVENTS } from
 import { politicaDatosFlow } from './flujos/principal/politicasDatos';
 import { checkAndRegisterUserAttempt } from '../utils/userRateLimiter';
 import { metricConversationStarted } from '../utils/metrics';
-import { updateUserActivity } from '../utils/proactiveSessionManager';
+import { updateUserActivity, closeUserSession } from '../utils/proactiveSessionManager';
 
 const welcomeFlow = addKeyword(EVENTS.WELCOME)
     .addAction(async (ctx, ctxFn) => {
@@ -17,6 +17,13 @@ const welcomeFlow = addKeyword(EVENTS.WELCOME)
         await ctxFn.flowDynamic(`¡Bienvenido a la IPS Cenro de Orientación! 👋 \nSoy *Dianita* 👩🏻‍💻, tu asistente virtual. \nPara comenzar, es importante que aceptes nuestra política de datos personales 📃 la cual puedes encontrar en:\n👉🏼 https://www.centrodeorientacion.com.co/politica-privacidad/`);
         return ctxFn.gotoFlow(politicaDatosFlow);
     })
+
+const exitFlow = addKeyword(['Salir', 'Exit', 'salir', 'exit'])
+    .addAction(async (ctx, ctxFn) => {
+        closeUserSession(ctx.from);
+        await ctxFn.flowDynamic('Gracias por usar nuestro servicio. ¡Hasta luego! 👋');
+        return ctxFn.endFlow();
+    })
     
 
-export { welcomeFlow };
+export { welcomeFlow, exitFlow };

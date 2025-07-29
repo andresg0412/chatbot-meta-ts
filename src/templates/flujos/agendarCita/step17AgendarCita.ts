@@ -3,6 +3,7 @@ import { sanitizeString, isValidDocumentNumber } from '../../../utils/sanitize';
 import { step18AgendarCita } from './step18AgendarCita';
 import { crearPaciente } from '../../../utils/consultarCitasPorDocumento';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
+import { closeUserSession } from '../../../utils/proactiveSessionManager';
 
 function generarAgendaIdAleatorio() {
     const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -77,6 +78,7 @@ const step17AgendarCita7 = addKeyword(EVENTS.ACTION)
             const paciente_id = await crearPaciente(datosPaciente);
             await state.update({ pacienteId: paciente_id });
         } catch (error) {
+            closeUserSession(ctx.from);
             await flowDynamic('Lo siento, ocurrió un error al crear tu perfil. Por favor, inténtalo más tarde.');
             return endFlow();
         }

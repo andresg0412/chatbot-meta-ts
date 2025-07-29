@@ -4,6 +4,7 @@ import { step8AgendarCita } from '../step8AgendarCita';
 import { consultarCitasPorPacEsp } from '../../../../utils/consultarCitasPorPacEsp';
 import { step4AgendarCitaControl } from './step4AgendarCitaControl';
 import { IPaciente } from '../../../../interfaces/IPacienteIn';
+import { closeUserSession } from '../../../../utils/proactiveSessionManager';
 
 const step7AgendarCitaControl = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { state, gotoFlow, flowDynamic, endFlow }) => {
@@ -32,6 +33,7 @@ const step7AgendarCitaControl = addKeyword(EVENTS.ACTION)
             }
         } catch (error) {
             console.error('Error en step7AgendarCitaControl:', error);
+            closeUserSession(ctx.from);
             await flowDynamic('Ocurrió un error al procesar tu solicitud. Por favor, inténtalo de nuevo más tarde.');
             return endFlow();
         }

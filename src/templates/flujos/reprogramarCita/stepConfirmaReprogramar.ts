@@ -13,6 +13,7 @@ import { metricError } from '../../../utils/metrics';
 import { consultarFechasCitasDisponibles } from '~/services/apiService';
 import { construirMensajeFechasDisponibles } from '../../../utils/construirMensajeSalida';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
+import { closeUserSession } from '../../../utils/proactiveSessionManager';
 
 const stepConfirmaReprogramar = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
@@ -48,6 +49,7 @@ const stepConfirmaReprogramar = addKeyword(EVENTS.ACTION)
             } catch (error) {
                 metricError(error, ctx.from);
                 await flowDynamic('Ocurrió un error inesperado. Por favor, intenta más tarde.');
+                closeUserSession(ctx.from);
                 return endFlow();
             }
         }

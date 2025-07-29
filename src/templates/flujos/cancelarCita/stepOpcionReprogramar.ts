@@ -2,6 +2,7 @@ import { addKeyword, EVENTS } from '@builderbot/bot';
 import { menuFlow } from '../../menuFlow';
 import { datosinicialesComunes4 } from '../common';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
+import { closeUserSession } from '../../../utils/proactiveSessionManager';
 
 const stepOpcionReprogramar = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
@@ -29,6 +30,7 @@ const stepOpcionReprogramar = addKeyword(EVENTS.ACTION)
                 return gotoFlow(menuFlow)
             }
             if (ctx.body === 'Salir') {
+                closeUserSession(ctx.from);
                 await flowDynamic('Agradecemos tu preferencia. Nuestra misión es orientarte en cada momento de tu vida. \n Recuerda que cuando lo desees puedes escribir *"hola"* para conversar nuevamente.');
                 return endFlow();
             }

@@ -3,6 +3,7 @@ import { volverMenuPrincipal } from '../common/volverMenuPrincipal';
 //import { actualizarEstadoCitaCancelar } from '../../../services/apiService';
 import { metricFlujoFinalizado, metricCita, metricError } from '../../../utils/metrics';
 import { cancelarCita } from '../../../services/apiService';
+import { closeUserSession } from '../../../utils/proactiveSessionManager';
 
 const stepConfirmaCancelarCita = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { state, flowDynamic, gotoFlow, endFlow }) => {
@@ -17,6 +18,7 @@ const stepConfirmaCancelarCita = addKeyword(EVENTS.ACTION)
             await flowDynamic('Tu cita ha sido cancelada exitosamente. Quedo atenta a tu nueva disponibilidad.');
         } catch (e) {
             metricError(e, ctx.from);
+            closeUserSession(ctx.from);
             await flowDynamic('Ocurrió un error al cancelar la cita. Por favor, intenta nuevamente.');
             return endFlow();
         }

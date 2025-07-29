@@ -7,6 +7,7 @@ import { stepConfirmaReprogramar } from './stepConfirmaReprogramar';
 import { metricFlujoFinalizado, metricCita, metricError } from '../../../utils/metrics';
 import { CONVENIOS_SERVICIOS, ID_CONVENIOS_SERVICIOS } from '../../../constants/conveniosConstants';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
+import { closeUserSession } from '../../../utils/proactiveSessionManager';
 
 function generarAgendaIdAleatorio() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -43,8 +44,8 @@ const confirmarReprogramarCita = addKeyword(EVENTS.ACTION)
         try {
             const citaAnterior = state.getMyState().citaSeleccionadaProgramada;
             const nuevaCita = state.getMyState().citaSeleccionadaHora;
-            console.log('citaAnterior:', citaAnterior);
-            console.log('nuevaCita:', nuevaCita);
+            //console.log('citaAnterior:', citaAnterior);
+            //console.log('nuevaCita:', nuevaCita);
             const nombreConvenio = CONVENIOS_SERVICIOS[citaAnterior.convenio] ?? 'particular';
             const idConvenio = ID_CONVENIOS_SERVICIOS[citaAnterior.convenio] ?? '1787';
             const tipoConsulta = citaAnterior.catalogo ? (citaAnterior.catalogo.toUpperCase().includes('PRIMERA VEZ') ? 'primera' : 'control') : '';
@@ -67,6 +68,7 @@ const confirmarReprogramarCita = addKeyword(EVENTS.ACTION)
             const response = await reagendarCita(bodyReagendar);
             if (!response) {
                 await flowDynamic('Error al reagendar la cita. Por favor, intenta nuevamente.');
+                closeUserSession(ctx.from);
                 return endFlow();
             }
             metricFlujoFinalizado('reagendar');
@@ -76,6 +78,7 @@ const confirmarReprogramarCita = addKeyword(EVENTS.ACTION)
         } catch (e) {
             metricError(e, ctx.from);
             await flowDynamic('Ocurrió un error inesperado al reprogramar la cita.');
+            closeUserSession(ctx.from);
             return endFlow();
         }
     });

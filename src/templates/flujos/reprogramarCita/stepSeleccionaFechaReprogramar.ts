@@ -3,6 +3,7 @@ import { stepHoraSeleccionada } from './stepHoraSeleccionada';
 import { consultarCitasFecha } from '../../../services/apiService';
 import { construirMensajeFechasDisponibles, construirMensajeHorasDisponibles } from '../../../utils/construirMensajeSalida';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
+import { closeUserSession } from '../../../utils/proactiveSessionManager';
 
 const stepSeleccionaFechaReprogramar = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
@@ -45,6 +46,7 @@ const stepSeleccionaFechaReprogramar = addKeyword(EVENTS.ACTION)
                 if (tipoConsulta === 'Control') {
                     if (!ProfesionalID) {
                         await flowDynamic('No se ha seleccionado un profesional. Por favor, vuelve a intentarlo.');
+                        closeUserSession(ctx.from);
                         return endFlow();
                     }
                     citasFechaSeleccionada = await consultarCitasFecha(fechaSeleccionadaAgendar, tipoConsulta, especialidad, ProfesionalID);

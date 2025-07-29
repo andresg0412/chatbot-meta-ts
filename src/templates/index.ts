@@ -1,5 +1,5 @@
 import { createFlow } from "@builderbot/bot";
-import { welcomeFlow } from './welcomeFlow';
+import { welcomeFlow, exitFlow } from './welcomeFlow';
 import { menuFlow } from './menuFlow';
 import { politicaDatosFlow } from './flujos/principal/politicasDatos';
 import { noAceptaPoliticas } from './flujos/principal/noAceptaPoliticas';
@@ -97,6 +97,7 @@ import {
 
 export default createFlow([
     welcomeFlow,
+    exitFlow,
     politicaDatosFlow,
     noAceptaPoliticas,
     menuFlow,
