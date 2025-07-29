@@ -17,17 +17,11 @@ const step19AgendarCita = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { state, flowDynamic, gotoFlow, endFlow }) => {
         try {
             const nuevaCita = state.getMyState().citaSeleccionadaHora;
-            console.log('Datos de la nueva cita:', nuevaCita);
             const pacienteId = state.getMyState().pacienteId;
-            console.log('ID del paciente:', pacienteId);
             const especialidadCita = state.getMyState().especialidadAgendarCita;
-            console.log('Especialidad de la cita:', especialidadCita);
             const motivoConsulta = state.getMyState().tipoConsultaPaciente;
-            console.log('Motivo de la consulta:', motivoConsulta);
             const tipoCitaAgendarCita = state.getMyState().tipoCitaAgendarCita;
-            console.log('Tipo de cita:', tipoCitaAgendarCita);
             const atencionPsicologica = state.getMyState().atencionPsicologica;
-            console.log('Atención psicológica:', atencionPsicologica);
             const idConvenio = state.getMyState().idConvenio ?? '1787';
             const nombreServicioConvenio = state.getMyState().nombreServicioConvenio || 'PARTICULAR';
             console.log('ID del convenio:', idConvenio);
@@ -48,24 +42,9 @@ const step19AgendarCita = addKeyword(EVENTS.ACTION)
             } else if (atencionPsicologica === 'psicologia_familia') {
                 tipoAtencion = 'Familia';
             }
-            // CONSTRUIR DATA U OBJETO PARA ENVIAR PETICION DE CREAR CITA
-            // BODY QUE RECIBE LA API
-            /*{
-                "especialidad": "Psicologia",
-                "fecha_cita": "2025-10-10",
-                "hora_cita": "09:00",
-                "hora_final": "09:45",
-                "profesional_id": "A4043CF7",
-                "paciente_id": "2AE9E4C9",
-                "tipo_usuario_atencion": "particular",
-                "convenio_id": "1787",
-                "convenio_nombre": "Particular",
-                "tipo_consulta_paciente": "primera",
-                "tipo_cita": "presencial",
-                "tipo_usuario_paciente": "adulto"
-            }*/
+            const especialidadConTilde = especialidadCita === 'Psicologia' ? 'Psicología' : especialidadCita === 'Psiquiatria' ? 'Psiquiatría' : especialidadCita === 'Neuropsicologia' ? 'Neuropsicología' : especialidadCita;
             const bodyNueva = {
-                especialidad: especialidadCita,
+                especialidad: especialidadConTilde,
                 fecha_cita: nuevaCita.fechacita,
                 hora_cita: nuevaCita.horacita,
                 hora_final: nuevaCita.horafinal,

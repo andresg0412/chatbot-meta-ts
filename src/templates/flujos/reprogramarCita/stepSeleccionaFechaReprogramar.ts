@@ -15,7 +15,7 @@ const stepSeleccionaFechaReprogramar = addKeyword(EVENTS.ACTION)
                     return gotoFlow(stepSeleccionaFechaReprogramar);
                 }
                 const mostrarFechas = fechasOrdenadas.slice(pasoSeleccionFecha.inicio, pasoSeleccionFecha.fin);
-                if (seleccion < 1 || seleccion > mostrarFechas.length + 1) {
+                if (seleccion < 1 || seleccion > mostrarFechas.length + 1 || (seleccion === mostrarFechas.length + 1 && fechasOrdenadas.length <= pasoSeleccionFecha.fin)) {
                     await flowDynamic('Opción inválida. Por favor, selecciona una opción válida.');
                     return gotoFlow(stepSeleccionaFechaReprogramar);
                 }

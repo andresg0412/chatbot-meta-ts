@@ -14,7 +14,7 @@ const step10AgendarCita = addKeyword(EVENTS.ACTION)
                     return gotoFlow(step10AgendarCita);
                 }
                 const mostrarHoras = citasFechaSeleccionada.slice(pasoSeleccionHora.inicio, pasoSeleccionHora.fin);
-                if (seleccionHoraAgendar < 1 || seleccionHoraAgendar > mostrarHoras.length + 1) {
+                if (seleccionHoraAgendar < 1 || seleccionHoraAgendar > mostrarHoras.length + 1 || (seleccionHoraAgendar === mostrarHoras.length + 1 && citasFechaSeleccionada.length <= pasoSeleccionHora.fin)) {
                     await flowDynamic('Opción inválida. Por favor, selecciona una opción válida.');
                     return gotoFlow(step10AgendarCita);
                 }
