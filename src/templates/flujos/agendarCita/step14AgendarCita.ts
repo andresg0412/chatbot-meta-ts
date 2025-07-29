@@ -1,7 +1,7 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { sanitizeString } from '../../../utils/sanitize';
 import { step15AgendarCita } from './step15AgendarCita';
-
+import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 
 const step14AgendarCita2 = addKeyword(['agendarcita_tipo_cd', 'agendarcita_tipo_cex', 'agendarcita_tipo_tid', 'agendarcita_tipo_rcv', 'agendarcita_tipo_ps', 'agendarcita_tipo_ot'])
     .addAction(async (ctx, { state, gotoFlow }) => {
@@ -12,6 +12,12 @@ const step14AgendarCita2 = addKeyword(['agendarcita_tipo_cd', 'agendarcita_tipo_
     });
 
 const step14AgendarCita = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAction(async (ctx, { provider }) => {
         const list = {
             header: { type: 'text', text: 'Tipo de documento' },

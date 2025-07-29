@@ -1,19 +1,18 @@
-// Mostramos un mensaje "Seleeciona la especialidad"
-// Botones: Psicologia, Neuropsicologia, Psiquiatria
-
-
-// guardamos la especialidad seleccionada en step4AgendarCitaControl.ts
-// mensaje de seleccionar documento y lista con tipos de documentos
-
-
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import {
     step6AgendarCitaPrimeraVezPsicologia,
     step6AgendarCitaPrimeraVezNeuropsicologia,
     step6AgendarCitaPrimeraVezPsiquiatria,
 } from './step6AgendarCitaPrimeraVez';
+import { checkSessionTimeout } from '../../../../utils/proactiveSessionTimeout';
 
 const step5AgendarCitaPrimeraVezPresencial = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAnswer(
         'Selecciona la especialidad:',
         {
@@ -24,12 +23,12 @@ const step5AgendarCitaPrimeraVezPresencial = addKeyword(EVENTS.ACTION)
                 { body: 'Psiquiatria' },
             ],
         },
-        async (ctx, {state, gotoFlow}) => {
+        async (ctx, { state, gotoFlow }) => {
             if (ctx.body === 'Psicologia') {
                 await state.update({ especialidadAgendarCita: 'Psicologia' });
                 return gotoFlow(step6AgendarCitaPrimeraVezPsicologia)
             }
-            if (ctx.body === 'NeuroPsicologia'){
+            if (ctx.body === 'NeuroPsicologia') {
                 await state.update({ especialidadAgendarCita: 'Neuropsicologia' });
                 return gotoFlow(step6AgendarCitaPrimeraVezNeuropsicologia)
             }
@@ -41,6 +40,12 @@ const step5AgendarCitaPrimeraVezPresencial = addKeyword(EVENTS.ACTION)
     );
 
 const step5AgendarCitaPrimeraVezVirtual = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAnswer(
         'Selecciona la especialidad:',
         {
@@ -50,12 +55,12 @@ const step5AgendarCitaPrimeraVezVirtual = addKeyword(EVENTS.ACTION)
                 { body: 'NeuroPsicologia' },
             ],
         },
-        async (ctx, {state, gotoFlow}) => {
+        async (ctx, { state, gotoFlow }) => {
             if (ctx.body === 'Psicologia') {
                 await state.update({ especialidadAgendarCita: 'Psicologia' });
                 return gotoFlow(step6AgendarCitaPrimeraVezPsicologia)
             }
-            if (ctx.body === 'NeuroPsicologia'){
+            if (ctx.body === 'NeuroPsicologia') {
                 await state.update({ especialidadAgendarCita: 'NeuroPsicologia' });
                 return gotoFlow(step6AgendarCitaPrimeraVezNeuropsicologia)
             }

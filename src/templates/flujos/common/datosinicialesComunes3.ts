@@ -1,10 +1,17 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { datosinicialesComunes4 } from './datosinicialesComunes4';
 import { sanitizeString, isValidDocumentNumber } from '../../../utils/sanitize';
+import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 
 const datosinicialesComunes3 = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAnswer('Ahora, por favor digita tu número de documento 🔢:',
-        {capture: true },
+        { capture: true },
         async (ctx, { state, gotoFlow, flowDynamic }) => {
             const numeroDoc = sanitizeString(ctx.body, 20);
             if (!isValidDocumentNumber(numeroDoc)) {

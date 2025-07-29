@@ -1,9 +1,8 @@
 import axios from 'axios';
 import { metricCita } from '../utils/metrics';
 import { IPaciente } from '../interfaces/IPacienteIn';
+import { IReagendarCita, IAgendaResponse, ICrearCita } from '../interfaces/IReagendarCita';
 
-export const URL_SHEETBEST = process.env.URL_SHEETBEST;
-export const API_KEY_SHEETBEST = process.env.API_KEY_SHEETBEST;
 export const API_BACKEND_URL = process.env.API_BACKEND_URL;
 
 export async function consultarCitasPaciente(documento: string, especialidad: string): Promise<IPaciente[] | null> {
@@ -31,50 +30,32 @@ export async function consultarCitasProximasPaciente(numeroDoc: string) {
     }
 }
 
-export async function actualizarEstadoCita(cita: any, estado: string, pacienteId: string, MotivoConsulta: string) {
+/**export async function actualizarEstadoCitaNO(cita: any, estado: string, pacienteId: string, MotivoConsulta: string) {
     try {
-        await axios.put(
-            `${URL_SHEETBEST}/tabs/Agenda/AgendaId/${cita.AgendaId}`,
-            { ...cita, EstadoAgenda: estado, PacienteID: pacienteId, MotivoConsulta: MotivoConsulta },
-            { headers: { 'X-Api-Key': API_KEY_SHEETBEST } }
-        );
-        metricCita('reagendada');
-        return cita;
+        
     } catch (error) {
         console.error('Error actualizando estado cita:', error);
         return null;
     }
 }
 
-export async function actualizarEstadoCitaCancelar(cita: any, estado: string) {
+export async function actualizarEstadoCitaCancelarNO(cita: any, estado: string) {
     try {
-        await axios.put(
-            `${URL_SHEETBEST}/tabs/Agenda/AgendaId/${cita.AgendaId}`,
-            { ...cita, EstadoAgenda: estado },
-            { headers: { 'X-Api-Key': API_KEY_SHEETBEST } }
-        );
-        metricCita('cancelada');
-        return cita;
+        
     } catch (error) {
         console.error('Error cancelando cita:', error);
         return null;
     }
 }
 
-export async function crearCita(cita: any) {
+export async function crearCitaNO(cita: any) {
     try {
-        await axios.post(
-            `${URL_SHEETBEST}/tabs/Agenda`,
-            cita,
-            { headers: { 'X-Api-Key': API_KEY_SHEETBEST } }
-        );
-        metricCita('reagendada');
-        return cita;
+        
     } catch (error) {
         console.error('Error actualizando estado cita:', error);
         return null;
     }
-}
+}**/
 
 export async function consultarCitasPacienteEspecialidad(pacienteId: string, especialidad: string) {
     try {
@@ -98,52 +79,37 @@ export async function crearPacienteDataBase(datosPaciente: any) {
     }
 }
 
-export async function obtenerFestivos() {
+/**export async function obtenerFestivosNO() {
     try {
-        const response = await axios.get(
-            `${URL_SHEETBEST}/tabs/Festivos`,
-            {
-                headers:{
-                    'X-Api-Key': API_KEY_SHEETBEST
-                },
-            }
-        );
-        return response.data.map(f => f.Fecha);
+        
     } catch (error) {
         console.error('Error obteniendo festivos:', error);
         return [];
     }
-}
+}**/
 
-export async function obtenerConvenios(especialidad: string, convenio: string) {
+/**export async function obtenerConvenios(especialidad: string, convenio: string) {
     try {
-        const response = await axios.get(
-            `${URL_SHEETBEST}/tabs/Convenios/query?Servicio=__eq(${especialidad})&NombreConvenio=__eq(${convenio})`,
-            {
-                headers:{
-                    'X-Api-Key': API_KEY_SHEETBEST
-                },
-            }
-        );
-        
-        if (response.data && response.data.length > 0) {
-            return response.data[0];
-        } else {
-            console.log('No se encontraron convenios para esta especialidad y convenio');
-            return null;
-        }
+        //mockear respuesta temporalmente
+        return {
+            IdConvenios: '12345',
+            ValorPrimeraVez: 100000,
+            ValorControl: 80000,
+            ValorPaquete: 150000,
+        };
     } catch (error) {
         console.error('Error obteniendo convenios:', error);
         return null;
     }
-}
+}*/
 
 export async function consultarFechasCitasDisponibles(tipoConsulta:string, especialidad:string, profesionalId?: string): Promise<string[]> {
     try {
         const tipoConsultaparse = tipoConsulta === 'Primera vez' ? 'primera' : 'control';
+        const especialidadParse = especialidad === 'Psicología' ? 'Psicologia' : especialidad === 'NeuroPsicología' ? 'Neuropsicologia' : especialidad === 'Psiquiatría' ? 'Psiquiatria' : especialidad;
 
-        let url = `${API_BACKEND_URL}/chatbot/fechas?tipoConsulta=${tipoConsultaparse}&especialidad=${especialidad}`;
-        
+        let url = `${API_BACKEND_URL}/chatbot/fechas?tipoConsulta=${tipoConsultaparse}&especialidad=${especialidadParse}`;
+        console.log('URL:', url);
         if (tipoConsulta === 'Control' && profesionalId) {
             url += `&profesionalId=${profesionalId}`;
         }
@@ -160,7 +126,8 @@ export async function consultarCitasFecha(fecha: string, tipoConsulta: string, e
     try {
         const tipoConsultaparse = tipoConsulta === 'Primera vez' ? 'primera' : 'control';
         const formattedDate = fecha.split('/').reverse().join('/');
-        let url = `${API_BACKEND_URL}/chatbot/horas?fecha=${formattedDate}&tipoConsulta=${tipoConsultaparse}&especialidad=${especialidad}`;
+        const especialidadParse = especialidad === 'Psicología' ? 'Psicologia' : especialidad === 'NeuroPsicología' ? 'Neuropsicologia' : especialidad === 'Psiquiatría' ? 'Psiquiatria' : especialidad;
+        let url = `${API_BACKEND_URL}/chatbot/horas?fecha=${formattedDate}&tipoConsulta=${tipoConsultaparse}&especialidad=${especialidadParse}`;
         if (tipoConsulta === 'Control' && profesionalId) {
             url += `&profesionalId=${profesionalId}`;
         }
@@ -179,6 +146,42 @@ export async function consultarPacientePorDocumento(documento: string): Promise<
         return response.data.data[0] || null;
     } catch (error) {
         console.error('Error consultando paciente por documento:', error);
+        return null;
+    }
+}
+
+export async function reagendarCita(data: IReagendarCita): Promise<IAgendaResponse | null> {
+    try {
+        const url = `${API_BACKEND_URL}/chatbot/reagendar`;
+        const response = await axios.post(url, data);
+        metricCita('reagendada');
+        return response.data.data || null;
+    } catch (error) {
+        console.error('Error reprogramando cita:', error);
+        return null;
+    }
+}
+
+export async function crearCita(data: ICrearCita): Promise<IAgendaResponse | null> {
+    try {
+        const url = `${API_BACKEND_URL}/chatbot/agendar`;
+        const response = await axios.post(url, data);
+        metricCita('agendada');
+        return response.data.code === 201 ? response.data.data : null;
+    } catch (error) {
+        console.error('Error creando cita:', error);
+        return null;
+    }
+}
+
+export async function cancelarCita(citaId: string): Promise<string | null> {
+    try {
+        const url = `${API_BACKEND_URL}/chatbot/cancelarcita`;
+        const response = await axios.post(url, { cita_id: citaId });
+        metricCita('cancelada');
+        return response.data.code === 200 ? 'ok' : null;
+    } catch (error) {
+        console.error('Error cancelando cita:', error);
         return null;
     }
 }

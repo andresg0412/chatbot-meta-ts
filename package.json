@@ -8,7 +8,9 @@
     "start": "node ./dist/app.js",
     "lint": "eslint . --no-ignore",
     "dev": "npm run lint && nodemon ./src/app.ts",
-    "build": "npx rollup -c"
+    "build": "npx rollup -c",
+    "sessions": "tsx ./src/utils/proactiveSessionMonitor.ts",
+    "sessions:watch": "tsx ./src/utils/proactiveSessionMonitor.ts watch"
   },
   "keywords": [],
   "dependencies": {

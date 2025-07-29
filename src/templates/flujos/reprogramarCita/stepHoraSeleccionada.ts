@@ -1,7 +1,15 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { preguntarConfirmarBotones } from './seleccionaCitaReprogramar';
+import { construirMensajeHorasDisponibles } from '../../../utils/construirMensajeSalida';
+import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 
 const stepHoraSeleccionada = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAnswer('Por favor, escribe el *número* de la hora que deseas seleccionar:',
         { capture: true },
         async (ctx, { state, flowDynamic, gotoFlow }) => {
@@ -13,7 +21,7 @@ const stepHoraSeleccionada = addKeyword(EVENTS.ACTION)
                     return gotoFlow(stepHoraSeleccionada);
                 }
                 const mostrarHoras = citasFechaSeleccionada.slice(pasoSeleccionHora.inicio, pasoSeleccionHora.fin);
-                if (seleccionHoraAgendar < 1 || seleccionHoraAgendar > mostrarHoras.length + 1) {
+                if (seleccionHoraAgendar < 1 || seleccionHoraAgendar > mostrarHoras.length + 1 || (seleccionHoraAgendar === mostrarHoras.length + 1 && citasFechaSeleccionada.length <= pasoSeleccionHora.fin)) {
                     await flowDynamic('Opción inválida. Por favor, selecciona una opción válida.');
                     return gotoFlow(stepHoraSeleccionada);
                 }
@@ -21,13 +29,7 @@ const stepHoraSeleccionada = addKeyword(EVENTS.ACTION)
                     const nuevoInicio = pasoSeleccionHora.fin;
                     const nuevoFin = Math.min(citasFechaSeleccionada.length, pasoSeleccionHora.fin + 5);
                     const nuevasHoras = citasFechaSeleccionada.slice(nuevoInicio, nuevoFin);
-                    let mensaje = '*Más citas disponibles*:\n';
-                    nuevasHoras.forEach((cita, idx) => {
-                        mensaje += `*${idx + 1}*. ${cita.horacita} - ${cita.profesional}\n`;
-                    });
-                    if (citasFechaSeleccionada.length > nuevoFin) {
-                        mensaje += `*${nuevasHoras.length + 1}*. Ver más\n`;
-                    }
+                    const mensaje = construirMensajeHorasDisponibles(nuevasHoras, citasFechaSeleccionada.length, nuevoFin, '*Más citas disponibles*:');
                     await flowDynamic(mensaje);
                     await state.update({ pasoSeleccionHora: { inicio: nuevoInicio, fin: nuevoFin } });
                     return gotoFlow(stepHoraSeleccionada);

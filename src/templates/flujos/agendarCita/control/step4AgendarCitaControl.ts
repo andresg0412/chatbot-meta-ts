@@ -1,9 +1,14 @@
-// Mostrar mensaje de seleccione especialidad
-// botones de especialidades: Psicologia, Neuropsicologia
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { step5AgendarCitaControl } from './step5AgendarCitaControl';
+import { checkSessionTimeout } from '../../../../utils/proactiveSessionTimeout';
 
 const step4AgendarCitaControl = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAnswer(
         'Selecciona la especialidad:',
         {

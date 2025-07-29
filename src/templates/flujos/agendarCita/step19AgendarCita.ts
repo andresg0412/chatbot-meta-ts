@@ -1,7 +1,9 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
-import { crearCita, actualizarEstadoCita } from '../../../services/apiService';
+//import { crearCita, actualizarEstadoCita } from '../../../services/apiService';
 import { metricFlujoFinalizado, metricError } from '../../../utils/metrics';
 import { step20AgendarCita } from './step20AgendarCita';
+import { crearCita } from '../../../services/apiService';
+import { closeUserSession } from '../../../utils/proactiveSessionManager';
 
 function generarAgendaIdAleatorio() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -20,24 +22,18 @@ const step19AgendarCita = addKeyword(EVENTS.ACTION)
             const especialidadCita = state.getMyState().especialidadAgendarCita;
             const motivoConsulta = state.getMyState().tipoConsultaPaciente;
             const tipoCitaAgendarCita = state.getMyState().tipoCitaAgendarCita;
-            const horaCitaBot = new Date().toString();
             const atencionPsicologica = state.getMyState().atencionPsicologica;
-            const idConvenio = state.getMyState().idConvenio || 'Particular';
-            const valorPrimeraVez = state.getMyState().valorPrimeraVez;
-            const valorControl = state.getMyState().valorControl;
-            const valorPaquete = state.getMyState().valorPaquete;
+            const idConvenio = state.getMyState().idConvenio ?? '1787';
+            const nombreServicioConvenio = state.getMyState().nombreServicioConvenio || 'PARTICULAR';
+            console.log('ID del convenio:', idConvenio);
             console.log('Datos de la cita a agendar:', {
                 nuevaCita,
                 pacienteId,
                 especialidadCita,
                 motivoConsulta,
                 tipoCitaAgendarCita,
-                horaCitaBot,
                 atencionPsicologica,
-                idConvenio,
-                valorPrimeraVez,
-                valorControl,
-                valorPaquete,
+                idConvenio
             });
             let tipoAtencion = 'Individual';
             if (atencionPsicologica === 'psicologia_infantil' || atencionPsicologica === 'psicologia_adolescente' || atencionPsicologica === 'psicologia_adulto' || atencionPsicologica === 'psicologia_adulto_mayor') {
@@ -47,48 +43,26 @@ const step19AgendarCita = addKeyword(EVENTS.ACTION)
             } else if (atencionPsicologica === 'psicologia_familia') {
                 tipoAtencion = 'Familia';
             }
-            let citaExistente = false;
-            let agendaIdNueva = nuevaCita.AgendaId;
-            let profesionalID = nuevaCita.profesionalID || nuevaCita.ProfesionalID || nuevaCita.ProfesionalId;
-            if (!profesionalID && nuevaCita.id) {
-                const partes = nuevaCita.id.split('-');
-                if (partes.length > 0) profesionalID = partes[0];
-            }
-            if (nuevaCita.EstadoAgenda && ['Cancelo', 'Reprogramo', 'ErrorHumano', 'Rechazada', 'Incompleto'].includes(nuevaCita.EstadoAgenda)) {
-                citaExistente = true;
-            }
-            if (citaExistente) {
-                const actualizarCita = await actualizarEstadoCita(nuevaCita, 'Pendiente', pacienteId, motivoConsulta);
-                if (!actualizarCita) {
-                    await flowDynamic('Error al actualizar la cita existente. Por favor, intenta nuevamente.');
-                    return;
-                }
-            } else {
-                agendaIdNueva = generarAgendaIdAleatorio();
-                const bodyNueva = {
-                    ...nuevaCita,
-                    AgendaId: agendaIdNueva,
-                    MotivoConsulta: motivoConsulta,
-                    EstadoAgenda: 'Pendiente',
-                    FechaCita: nuevaCita.FechaCita,
-                    HoraCita: nuevaCita.HoraCita,
-                    HoraFinal: nuevaCita.HoraFinal,
-                    ProfesionalID: profesionalID,
-                    Especialidad: especialidadCita,
-                    PacienteID: pacienteId,
-                    TipoConsulta: tipoCitaAgendarCita,
-                    Convenios: idConvenio,
-                    ValorPrimeraVez: valorPrimeraVez,
-                    ValorControl: valorControl,
-                    ValorPaquete: valorPaquete,
-                    HoraCitaBot: horaCitaBot,
-                    TipoAtención: tipoAtencion,
-                };
-                const crearCitaProgramada = crearCita(bodyNueva);
-                if (!crearCitaProgramada) {
-                    await flowDynamic('Error al crear la nueva cita. Por favor, intenta nuevamente.');
-                    return;
-                }
+            const especialidadConTilde = especialidadCita === 'Psicologia' ? 'Psicología' : especialidadCita === 'Psiquiatria' ? 'Psiquiatría' : especialidadCita === 'Neuropsicologia' ? 'Neuropsicología' : especialidadCita;
+            const bodyNueva = {
+                especialidad: especialidadConTilde,
+                fecha_cita: nuevaCita.fechacita,
+                hora_cita: nuevaCita.horacita,
+                hora_final: nuevaCita.horafinal,
+                profesional_id: nuevaCita.profesionalId,
+                paciente_id: pacienteId,
+                tipo_usuario_atencion: 'particular',
+                convenio_id: idConvenio,
+                convenio_nombre: nombreServicioConvenio,
+                tipo_consulta_paciente: motivoConsulta === 'Primera vez' ? 'primera' : 'control',
+                tipo_cita: tipoCitaAgendarCita === 'Presencial' ? 'presencial' : 'virtual',
+                tipo_usuario_paciente: tipoAtencion
+            };
+            const response = await crearCita(bodyNueva);
+            if (!response) {
+                closeUserSession(ctx.from);
+                await flowDynamic('Error al agendar la cita. Por favor, intenta nuevamente.');
+                return endFlow();
             }
             metricFlujoFinalizado('agendar');
             await flowDynamic('Tu cita se ha agendado con éxito. 📅👍');
@@ -96,6 +70,7 @@ const step19AgendarCita = addKeyword(EVENTS.ACTION)
             return gotoFlow(step20AgendarCita);
         } catch (e) {
             metricError(e, ctx.from);
+            closeUserSession(ctx.from);
             await flowDynamic('Ocurrió un error inesperado al reprogramar la cita.');
             return endFlow();
         }
