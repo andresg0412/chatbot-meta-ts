@@ -19,8 +19,8 @@ const step5AgendarCitaPrimeraVezPresencial = addKeyword(EVENTS.ACTION)
             capture: true,
             buttons: [
                 { body: 'Psicologia' },
-                { body: 'NeuroPsicologia' },
                 { body: 'Psiquiatria' },
+                { body: 'NeuroPsicologia' },
             ],
         },
         async (ctx, { state, gotoFlow }) => {
@@ -28,13 +28,13 @@ const step5AgendarCitaPrimeraVezPresencial = addKeyword(EVENTS.ACTION)
                 await state.update({ especialidadAgendarCita: 'Psicologia' });
                 return gotoFlow(step6AgendarCitaPrimeraVezPsicologia)
             }
-            if (ctx.body === 'NeuroPsicologia') {
-                await state.update({ especialidadAgendarCita: 'Neuropsicologia' });
-                return gotoFlow(step6AgendarCitaPrimeraVezNeuropsicologia)
-            }
             if (ctx.body === 'Psiquiatria') {
                 await state.update({ especialidadAgendarCita: 'Psiquiatria' });
                 return gotoFlow(step6AgendarCitaPrimeraVezPsiquiatria)
+            }
+            if (ctx.body === 'NeuroPsicologia') {
+                await state.update({ especialidadAgendarCita: 'Neuropsicologia' });
+                return gotoFlow(step6AgendarCitaPrimeraVezNeuropsicologia)
             }
         }
     );
@@ -52,7 +52,7 @@ const step5AgendarCitaPrimeraVezVirtual = addKeyword(EVENTS.ACTION)
             capture: true,
             buttons: [
                 { body: 'Psicologia' },
-                { body: 'NeuroPsicologia' },
+                { body: 'Psiquiatria' },
             ],
         },
         async (ctx, { state, gotoFlow }) => {
@@ -60,9 +60,9 @@ const step5AgendarCitaPrimeraVezVirtual = addKeyword(EVENTS.ACTION)
                 await state.update({ especialidadAgendarCita: 'Psicologia' });
                 return gotoFlow(step6AgendarCitaPrimeraVezPsicologia)
             }
-            if (ctx.body === 'NeuroPsicologia') {
-                await state.update({ especialidadAgendarCita: 'NeuroPsicologia' });
-                return gotoFlow(step6AgendarCitaPrimeraVezNeuropsicologia)
+            if (ctx.body === 'Psiquiatria') {
+                await state.update({ especialidadAgendarCita: 'Psiquiatria' });
+                return gotoFlow(step6AgendarCitaPrimeraVezPsiquiatria)
             }
         }
     );
