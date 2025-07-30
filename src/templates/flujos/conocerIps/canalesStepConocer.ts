@@ -11,6 +11,7 @@ const canalesStepConocer = addKeyword(['280525017', 'Canales de atención', 'can
                 media: pathLocal
             },
         ]);
+        await new Promise(resolve => setTimeout(resolve, 4000));
         return ctxFn.gotoFlow(volverMenuPrincipal);
     });
 

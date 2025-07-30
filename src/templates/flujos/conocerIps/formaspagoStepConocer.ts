@@ -11,6 +11,7 @@ const formaspagoStepConocer = addKeyword(['280525014', 'Formas de pago', 'formas
                 media: pathLocal
             },
         ]);
+        await new Promise(resolve => setTimeout(resolve, 4000));
         return ctxFn.gotoFlow(volverMenuPrincipal);
     });
 

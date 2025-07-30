@@ -11,6 +11,7 @@ const tarifasStepConocer = addKeyword(['280525013', 'Tarifas', 'tarifas', 'TARIF
                 media: pathLocal
             },
         ]);
+        await new Promise(resolve => setTimeout(resolve, 4000));
         return ctxFn.gotoFlow(volverMenuPrincipal);
     });
 
