@@ -43,6 +43,18 @@ export interface IAgendaResponse {
     fechaActualizacion: string;
 }
 
+export interface AgendaPendienteResponse {
+  cita_id: string;
+  nombre_paciente: string;
+  profesional: string;
+  especialidad: string;
+  fecha_cita: string;
+  hora_cita: string;
+  convenio?: string;
+  telefono_paciente: string;
+  estado: string;
+}
+
 export interface ICrearCita {
     especialidad: string;
     fecha_cita: string;

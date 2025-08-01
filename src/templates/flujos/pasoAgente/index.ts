@@ -12,7 +12,7 @@ const pasoAgenteFlow = addKeyword(['280525005', '5', 'chatear con agente'])
             await ctxFn.state.update({ flujoSeleccionadoMenu: 'agente' });
             if (isWorkingHours()) {
                 metricFlujoFinalizado('agente');
-                await ctxFn.flowDynamic(`Perfecto, a continuación te asignaré un asesor. Haz clic en el siguiente enlace para continuar tu atención:\n👉 *Ir al chat con asesor*: https://wa.me/${NUMERO_ASESOR}?text=Hola,%20necesito%20hablar%20con%20un%20agente.`);
+                await ctxFn.flowDynamic(`Perfecto, a continuación te asignaré un asesor. Haz clic en el siguiente enlace para continuar tu atención:\n👉 *Ir al chat con asesor*: https://wa.me/${NUMERO_ASESOR}?text=Hola,%20deseo%20hablar%20con%20una%20asistente.`);
                 closeUserSession(ctx.from);
                 return ctxFn.endFlow();
             } else {

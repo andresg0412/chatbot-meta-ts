@@ -99,6 +99,8 @@ import {
 export default createFlow([
     welcomeFlow,
     exitFlow,
+    ejecutarPlantillaDiariaFlow,
+    confirmarCitaFlow,
     politicaDatosFlow,
     noAceptaPoliticas,
     menuFlow,
@@ -181,6 +183,4 @@ export default createFlow([
     stepConfirmaCancelarCita,
     pasoAgenteFlow,
     pqrsFlow,
-    ejecutarPlantillaDiariaFlow,
-    confirmarCitaFlow,
 ]);
