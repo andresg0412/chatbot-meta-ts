@@ -5,6 +5,7 @@ import { MetaProvider as Provider } from '@builderbot/provider-meta'
 import "dotenv/config";
 import templates from './templates';
 import { setBotInstance, restoreActiveTimers } from './utils/proactiveSessionManager';
+import { cleanupOldSessionsWithoutNotification } from './utils';
 
 const PORT = process.env.PORT ?? 3008
 
