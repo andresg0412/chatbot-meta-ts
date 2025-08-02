@@ -54,6 +54,11 @@ const menuFlow = addKeyword(EVENTS.ACTION)
                                     "id": "280525005",
                                     "title": "Chatear con agente",
                                     "description": ""
+                                },
+                                {
+                                    "id": "280525006",
+                                    "title": "PQRS",
+                                    "description": ""
                                 }
                             ]
                         }

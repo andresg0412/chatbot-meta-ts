@@ -6,13 +6,13 @@ import { closeUserSession } from '../../../utils/proactiveSessionManager';
 
 const NUMERO_ASESOR = '573158070460';
 
-const pasoAgenteFlow = addKeyword(['280525005', '5', 'chatear con agente'])
+const pqrsFlow = addKeyword(['280525006', 'PQRS', 'pqrs', '6', 'peticiones', 'quejas', 'reclamos', 'solicitudes'])
     .addAction(async (ctx, ctxFn) => {
         try {
-            await ctxFn.state.update({ flujoSeleccionadoMenu: 'agente' });
+            await ctxFn.state.update({ flujoSeleccionadoMenu: 'pqrs' });
             if (isWorkingHours()) {
-                metricFlujoFinalizado('agente');
-                await ctxFn.flowDynamic(`Perfecto, a continuación te asignaré un asesor. Haz clic en el siguiente enlace para continuar tu atención:\n👉 *Ir al chat con asesor*: https://wa.me/${NUMERO_ASESOR}?text=Hola,%20deseo%20hablar%20con%20una%20asistente.`);
+                metricFlujoFinalizado('pqrs');
+                await ctxFn.flowDynamic(`Perfecto, a continuación te asignaré un asesor. Haz clic en el siguiente enlace para continuar tu PQRS:\n👉 *Ir al chat con agente*: https://wa.me/${NUMERO_ASESOR}?text=Hola,%20necesito%20poner%20una%20PQRS`);
                 closeUserSession(ctx.from);
                 return ctxFn.endFlow();
             } else {
@@ -25,4 +25,4 @@ const pasoAgenteFlow = addKeyword(['280525005', '5', 'chatear con agente'])
         }
     });
 
-export { pasoAgenteFlow };
+export { pqrsFlow };

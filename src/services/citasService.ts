@@ -72,3 +72,40 @@ export async function confirmarCitaPorCedula(cedula: string): Promise<boolean> {
   if (updated) guardarCitasDB(citas);
   return updated;
 }
+
+
+/**
+ * Actualiza el estado de una cita específica a 'enviado'
+ * @param cedula - Cédula del paciente
+ * @returns true si se actualizó correctamente, false en caso contrario
+ */
+/*export async function marcarCitaComoEnviada(cedula: string): Promise<boolean> {
+  try {
+    // Aquí harías la llamada real a tu API para actualizar el estado
+    // const response = await axios.put(`${API_BACKEND_URL}/chatbot/actualizar-estado-cita`, {
+    //   cedula,
+    //   estado: 'enviado'
+    // });
+    // return response.status === 200;
+    
+    // Simulación temporal - actualiza en la BD local
+    let citas = leerCitasDB();
+    let updated = false;
+    citas = citas.map(cita => {
+      if (cita.cedula === cedula) {
+        updated = true;
+        return { ...cita, estado: 'enviado' };
+      }
+      return cita;
+    });
+    
+    if (updated) {
+      guardarCitasDB(citas);
+    }
+    
+    return updated;
+  } catch (error) {
+    console.error('Error marcando cita como enviada:', error);
+    return false;
+  }
+}*/
