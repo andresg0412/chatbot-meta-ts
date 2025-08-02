@@ -79,7 +79,7 @@ const step6AgendarCitaPrimeraVezPsicologia = addKeyword(EVENTS.ACTION)
         }
     );
 
-const step6AgendarCitaPrimeraVezNeuropsicologia = addKeyword(EVENTS.ACTION)
+const step6AgendarCitaPrimeraVezPsiquiatria = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
         const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
         if (!sessionValid) {
@@ -96,7 +96,7 @@ const step6AgendarCitaPrimeraVezNeuropsicologia = addKeyword(EVENTS.ACTION)
             ],
         },
         async (ctx, { state, gotoFlow, flowDynamic, endFlow }) => {
-            await state.update({ edadPacienteNeuropsicologia: ctx.body });
+            await state.update({ edadPacientePsiquiatria: ctx.body });
             if (ctx.body === 'Si') {
                 return gotoFlow(step8AgendarCita);
             } else if (ctx.body === 'No') {
@@ -106,7 +106,7 @@ const step6AgendarCitaPrimeraVezNeuropsicologia = addKeyword(EVENTS.ACTION)
         }
     );
 
-const step6AgendarCitaPrimeraVezPsiquiatria = addKeyword(EVENTS.ACTION)
+const step6AgendarCitaPrimeraVezNeuropsicologia = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
         const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
         if (!sessionValid) {

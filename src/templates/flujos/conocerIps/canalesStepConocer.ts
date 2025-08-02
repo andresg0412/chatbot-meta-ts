@@ -7,10 +7,11 @@ const canalesStepConocer = addKeyword(['280525017', 'Canales de atención', 'can
         const pathLocal = resolve(__dirname, '../../../../assets/medios.png');
         await ctxFn.flowDynamic([
             {
-                body:'',
+                body:'Nuestros canales de atención',
                 media: pathLocal
             },
         ]);
+        await new Promise(resolve => setTimeout(resolve, 4000));
         return ctxFn.gotoFlow(volverMenuPrincipal);
     });
 

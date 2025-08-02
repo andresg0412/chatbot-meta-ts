@@ -1,9 +1,16 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { step7AgendarCitaControl } from './step7AgendarCitaControl';
 import { sanitizeString } from '../../../../utils/sanitize';
+import { checkSessionTimeout } from '../../../../utils/proactiveSessionTimeout';
 
 
 const step6AgendarCitaControl = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
     .addAnswer(
         'Por favor, ingresa el número de documento:',
         { capture: true },
