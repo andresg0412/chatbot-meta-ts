@@ -66,7 +66,7 @@ const step19AgendarCita = addKeyword(EVENTS.ACTION)
             }
             metricFlujoFinalizado('agendar');
             await flowDynamic('Tu cita se ha agendado con éxito. 📅👍');
-            await flowDynamic(`Detalles de la cita:\n\n*Especialidad:* ${especialidadConTilde}\n*Fecha:* ${nuevaCita.fechacita}\n*Hora:* ${nuevaCita.horacita} - ${nuevaCita.horafinal}\n*Profesional:* ${nuevaCita.profesionalNombre}\n*Tipo de cita:* ${tipoCitaAgendarCita}`);
+            //await flowDynamic(`Detalles de la cita:\n\n*Especialidad:* ${especialidadConTilde}\n*Fecha:* ${nuevaCita.fechacita}\n*Hora:* ${nuevaCita.horacita} - ${nuevaCita.horafinal}\n*Profesional:* ${nuevaCita.profesionalNombre}\n*Tipo de cita:* ${tipoCitaAgendarCita}`);
             await flowDynamic('Te esperamos en nuestra IPS para brindarte la mejor atención.\n ¡Gracias por confiar en nosotros! 😊');
             await state.update({ citaReprogramada: true });
             //return gotoFlow(step20AgendarCita);

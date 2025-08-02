@@ -53,6 +53,7 @@ export interface AgendaPendienteResponse {
   convenio?: string;
   telefono_paciente: string;
   estado: string;
+  administradora?: string;
 }
 
 export interface ICrearCita {

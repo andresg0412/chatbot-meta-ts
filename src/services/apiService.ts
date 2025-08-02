@@ -208,7 +208,7 @@ export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse)
             year: 'numeric'
         });
 
-        const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
+        const url = `https://graph.facebook.com/${process.env.version}/${process.env.numberId}/messages`;
         const body = {
             "messaging_product": "whatsapp",
             "to": `${cita.telefono_paciente}`,
@@ -223,8 +223,12 @@ export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse)
                     "type": "body",
                     "parameters": [
                     { "type": "text", "text": `${cita.nombre_paciente}` },
+                    { "type": "text", "text": "Dianita" },
+                    { "type": "text", "text": `${cita.especialidad}` },
                     { "type": "text", "text": `${fechaFormateada}` },
-                    { "type": "text", "text": `${cita.especialidad}` }
+                    { "type": "text", "text": `${cita.profesional}` },
+                    { "type": "text", "text": `${cita.hora_cita}` },
+                    { "type": "text", "text": `${cita.administradora ?? 'Particular'}` }
                     ]
                 }
                 ]
