@@ -209,7 +209,9 @@ export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse)
         });
 
         const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
+        const administradora = cita.administradora ? cita.administradora : 'PARTICULAR';
         console.log('Enviando plantilla URL:', url);
+        console.log('Administradora:', administradora);
         const body = {
             "messaging_product": "whatsapp",
             "to": `${cita.telefono_paciente}`,
@@ -229,7 +231,7 @@ export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse)
                     { "type": "text", "text": `${fechaFormateada}` },
                     { "type": "text", "text": `${cita.profesional}` },
                     { "type": "text", "text": `${cita.hora_cita}` },
-                    { "type": "text", "text": `${cita.administradora ?? 'Particular'}` }
+                    { "type": "text", "text": `${administradora}` }
                     ]
                 }
                 ]
