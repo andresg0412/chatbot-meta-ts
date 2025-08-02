@@ -38,10 +38,18 @@ const main = async () => {
     
     setBotInstance(botForTimeout);
     
-    // Restaurar timers de sesiones activas después de reinicio
+    console.log('🚀 Sistema de timeout proactivo inicializado');
+
+    // PASO 1: Limpiar sesiones muy antiguas ANTES de restaurar timers
+    cleanupOldSessionsWithoutNotification();
+
+    // PASO 2: Restaurar timers de sesiones activas después de reinicio
     restoreActiveTimers();
     
-    console.log('🚀 Sistema de timeout proactivo inicializado');
+    // PASO 3: Programar limpieza periódica para evitar acumulación
+    setInterval(cleanupOldSessionsWithoutNotification, 2 * 60 * 60 * 1000); // Cada 2 horas
+
+    console.log('✅ Sistema proactivo inicializado con protección contra alertas de Meta');
 
     adapterProvider.server.post(
         '/v1/messages',
