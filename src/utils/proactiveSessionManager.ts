@@ -8,6 +8,9 @@ const SESSIONS_DB_PATH = path.join(__dirname, 'userSessionsDB.json');
 // Configuración del timeout de sesión (1 hora en milisegundos)
 const SESSION_TIMEOUT_MS = 60 * 60 * 1000; // 1 hora
 
+const META_MESSAGE_LIMIT_MS = 12 * 60 * 60 * 1000; // 12 horas
+
+
 // Estructura: { [userId]: { lastActivity: number, isActive: boolean, timerId?: NodeJS.Timeout } }
 let userSessions: Record<string, { 
   lastActivity: number, 
@@ -62,6 +65,7 @@ export function setBotInstance(bot: any): void {
 
 /**
  * Cierra una sesión proactivamente enviando mensaje al usuario
+ * * SOLO si han pasado menos de 12 horas desde la última actividad
  * @param userId - ID del usuario
  */
 async function closeSessionProactively(userId: string): Promise<void> {
@@ -70,10 +74,19 @@ async function closeSessionProactively(userId: string): Promise<void> {
     return; // La sesión ya fue cerrada
   }
 
+  // Verificar si han pasado más de 12 horas desde la última actividad
+  const now = Date.now();
+  const timeSinceLastActivity = now - session.lastActivity;
+
   // Marcar sesión como inactiva
   session.isActive = false;
   session.timerId = undefined;
   saveUserSessions();
+
+  if (timeSinceLastActivity > META_MESSAGE_LIMIT_MS) {
+    console.log(`⚠️ Sesión cerrada sin notificación para ${userId}: han pasado ${Math.floor(timeSinceLastActivity / (60 * 60 * 1000))} horas desde la última actividad (límite: 12h)`);
+    return; // No enviar mensaje para evitar penalización de Meta
+  }
 
   // Enviar mensaje de timeout al usuario
   if (botInstance) {
@@ -182,6 +195,8 @@ export function getRemainingSessionTime(userId: string): number {
 export function restoreActiveTimers(): void {
   const now = Date.now();
   let restoredCount = 0;
+  let expiredSafeCount = 0;
+  let expiredUnsafeCount = 0;
   
   for (const [userId, session] of Object.entries(userSessions)) {
     if (session.isActive) {
@@ -189,7 +204,17 @@ export function restoreActiveTimers(): void {
       
       if (timeSinceLastActivity >= SESSION_TIMEOUT_MS) {
         // La sesión ya debería haber expirado, cerrarla inmediatamente
-        closeSessionProactively(userId);
+        if (timeSinceLastActivity > META_MESSAGE_LIMIT_MS) {
+          // Más de 12 horas: cerrar sin enviar mensaje
+          session.isActive = false;
+          session.timerId = undefined;
+          expiredUnsafeCount++;
+          console.log(`🧹 Sesión ${userId} cerrada silenciosamente: ${Math.floor(timeSinceLastActivity / (60 * 60 * 1000))} horas de inactividad`);
+        } else {
+          // Menos de 12 horas: cerrar con mensaje
+          closeSessionProactively(userId);
+          expiredSafeCount++;
+        }
       } else {
         // Reprogramar timer para el tiempo restante
         const remainingTime = SESSION_TIMEOUT_MS - timeSinceLastActivity;
@@ -201,6 +226,9 @@ export function restoreActiveTimers(): void {
         restoredCount++;
       }
     }
+  }
+  if (expiredUnsafeCount > 0) {
+    saveUserSessions();
   }
   
   console.log(`🔄 Timers restaurados para ${restoredCount} sesiones activas`);
@@ -223,6 +251,32 @@ export function cleanupExpiredSessions(): void {
   
   if (hasChanges) {
     console.log('🧹 Sesiones expiradas limpiadas');
+  }
+}
+
+export function cleanupOldSessionsWithoutNotification(): void {
+  const now = Date.now();
+  let cleanedCount = 0;
+  
+  for (const userId in userSessions) {
+    const session = userSessions[userId];
+    const timeSinceLastActivity = now - session.lastActivity;
+    
+    // Si han pasado más de 12 horas, marcar como inactiva sin enviar mensaje
+    if (session.isActive && timeSinceLastActivity > META_MESSAGE_LIMIT_MS) {
+      session.isActive = false;
+      if (session.timerId) {
+        clearTimeout(session.timerId);
+        session.timerId = undefined;
+      }
+      cleanedCount++;
+      console.log(`🧹 Sesión limpiada silenciosamente: ${userId} (${Math.floor(timeSinceLastActivity / (60 * 60 * 1000))} horas)`);
+    }
+  }
+  
+  if (cleanedCount > 0) {
+    saveUserSessions();
+    console.log(`🧹 ${cleanedCount} sesiones antiguas limpiadas sin notificación para evitar alertas de Meta`);
   }
 }
 
