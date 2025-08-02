@@ -2,6 +2,7 @@ import axios from 'axios';
 import { metricCita } from '../utils/metrics';
 import { IPaciente } from '../interfaces/IPacienteIn';
 import { IReagendarCita, IAgendaResponse, ICrearCita } from '../interfaces/IReagendarCita';
+import { AgendaPendienteResponse } from '../interfaces/IReagendarCita';
 
 export const API_BACKEND_URL = process.env.API_BACKEND_URL;
 
@@ -183,5 +184,86 @@ export async function cancelarCita(citaId: string): Promise<string | null> {
     } catch (error) {
         console.error('Error cancelando cita:', error);
         return null;
+    }
+}
+
+export async function obtenerCitasPendientesPorFecha(fecha: string): Promise<AgendaPendienteResponse[] | []> {
+    try {
+        const url = `${API_BACKEND_URL}/chatbot/citaspendientes?fecha=${encodeURIComponent(fecha)}`;
+        const response = await axios.get(url);
+        return response.data.data || [];
+    } catch (error) {
+        console.error('Error obteniendo citas pendientes:', error);
+        return [];
+    }
+}
+
+export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse): Promise<{ exito: boolean }> {
+    try {
+        // Formatear la fecha, aparece en formato YYYY-MM-ddTHH:mm:ss.SSSZ convertir en formato '31 de julio de 2025'
+        const fechaCita = new Date(cita.fecha_cita);
+        const fechaFormateada = fechaCita.toLocaleDateString('es-CO', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric'
+        });
+
+        const url = `https://graph.facebook.com/${process.env.version}/${process.env.numberId}/messages`;
+        const body = {
+            "messaging_product": "whatsapp",
+            "to": `${cita.telefono_paciente}`,
+            "type": "template",
+            "template": {
+                "name": `${process.env.NOMBRE_PLANTILLA_META}`,
+                "language": {
+                "code": "es_CO"
+                },
+                "components": [
+                {
+                    "type": "body",
+                    "parameters": [
+                    { "type": "text", "text": `${cita.nombre_paciente}` },
+                    { "type": "text", "text": "Dianita" },
+                    { "type": "text", "text": `${cita.especialidad}` },
+                    { "type": "text", "text": `${fechaFormateada}` },
+                    { "type": "text", "text": `${cita.profesional}` },
+                    { "type": "text", "text": `${cita.hora_cita}` },
+                    { "type": "text", "text": `${cita.administradora ?? 'Particular'}` }
+                    ]
+                }
+                ]
+            }
+        };
+        const response = await axios.post(url, body, {
+            headers: {
+                'Authorization': `Bearer ${process.env.jwtToken}`,
+                'Content-Type': 'application/json'
+            }
+        });
+        console.log('Respuesta de Meta:', response.data);
+        if (response.data.messages && response.data.messages.length > 0) {
+            console.log('Plantilla enviada correctamente:', response.data);
+        } else {
+            console.error('Error al enviar plantilla:', response.data);
+        }
+        if (response.data.messages[0].message_status === 'accepted') {
+            console.log(`Plantilla enviada exitosamente a ${cita.nombre_paciente} (${cita.telefono_paciente})`);
+            return { exito: true };
+        }
+        return { exito: false };
+    } catch (error) {
+        console.error('Error enviando plantilla:', error);
+        return { exito: false };
+    }
+}
+
+export async function confirmarCitaCampahna(celular: string): Promise<boolean> {
+    try {
+        const url = `${API_BACKEND_URL}/chatbot/confirmarcitameta`;
+        const response = await axios.post(url, { celular });
+        return response.data.code === 200;
+    } catch (error) {
+        console.error('Error confirmando cita:', error);
+        return false;
     }
 }

@@ -1,73 +1,119 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 
-
 import {
-  obtenerCitasProgramadas,
-  guardarCitasDB,
-  leerCitasDB,
+  //marcarCitaComoEnviada,
   buscarCitaPorCelular,
   confirmarCitaPorCedula,
   Cita
 } from '../../../services/citasService';
+import { 
+  obtenerCitasPendientesPorFecha, 
+  enviarPlantillaConfirmacion, 
+  confirmarCitaCampahna 
+} from '../../../services/apiService';
 
-const ejecutarPlantillaDiariaFlow = addKeyword(['ejecutarplantilladiaria'])
-  .addAction(async (ctx, ctxFn) => {
-    // 1. Obtener citas programadas (simulado)
-    const citas = await obtenerCitasProgramadas();
-    // 2. Guardar en la base de datos interna (json)
-    await guardarCitasDB(citas);
-    // 3. Enviar plantilla a cada paciente
-    for (const cita of citas) {
-        console.log(`Enviando plantilla a ${cita.nombre} (${cita.celular})`);
-      // Simulación de envío de plantilla a Meta
-      /*await ctxFn.provider.sendTemplate(
-        cita.celular,
-        {
-          name: 'plantilla_confirmacion_cita', // nombre de la plantilla en Meta
-          language: { code: 'es' },
-          components: [
-            {
-              type: 'body',
-              parameters: [
-                { type: 'text', text: cita.nombre },
-                { type: 'text', text: cita.fecha },
-                { type: 'text', text: cita.hora },
-                { type: 'text', text: cita.lugar },
-              ],
-            },
-            {
-              type: 'button',
-              sub_type: 'quick_reply',
-              index: '0',
-              parameters: [{ type: 'payload', payload: 'CONFIRMAR_CITA' }],
-            },
-            {
-              type: 'button',
-              sub_type: 'quick_reply',
-              index: '1',
-              parameters: [{ type: 'payload', payload: 'CANCELAR_CITA' }],
-            },
-          ],
-        }
-      );*/
-    }
-    await ctxFn.flowDynamic('Plantillas enviadas a todos los pacientes con cita programada.');
-  });
+import { esNumeroAutorizado } from '../../../constants/authConstants';
+import { extraerFechaDelComando } from '../../../utils/dateValidator';
 
-const confirmarCitaFlow = addKeyword(['CONFIRMAR_CITA'])
+const ejecutarPlantillaDiariaFlow = addKeyword(['ejecutar'])
   .addAction(async (ctx, ctxFn) => {
-    const celular = ctx.from;
-    const cita = buscarCitaPorCelular(celular);
-    if (!cita) {
-      await ctxFn.flowDynamic('No se encontró una cita asociada a tu número.');
+    const numeroRemitente = ctx.from;
+    const mensajeCompleto = ctx.body;
+
+    if (!esNumeroAutorizado(numeroRemitente)) {
+      await ctxFn.flowDynamic('No entiendo que has dicho.');
       return;
     }
-    // Simula llamada a API para confirmar cita
-    const ok = await confirmarCitaPorCedula(cita.cedula);
-    if (ok) {
-      await ctxFn.flowDynamic('¡Tu cita ha sido confirmada exitosamente!');
-    } else {
-      await ctxFn.flowDynamic('No fue posible confirmar tu cita.');
+
+    // 2. Extraer y validar la fecha del comando
+    const fechaFormateada = extraerFechaDelComando(mensajeCompleto);
+    console.log(`Fecha extraída: ${fechaFormateada}`);
+    
+    if (!fechaFormateada) {
+      await ctxFn.flowDynamic(
+        '❌ Formato incorrecto. Usa: *Ejecutar DD/MM/YYYY*\n' +
+        'Ejemplo: ejecutar 2/8/2025'
+      );
+      return;
+    }
+
+    await ctxFn.flowDynamic(`🔄 Procesando campaña para la fecha: ${fechaFormateada}`);
+
+    try {
+      // 3. Consultar citas pendientes para la fecha especificada
+      const citasPendientes = await obtenerCitasPendientesPorFecha(fechaFormateada);
+
+      if (citasPendientes.length === 0) {
+        await ctxFn.flowDynamic(`ℹ️ No se encontraron citas pendientes para la fecha ${fechaFormateada}`);
+        return;
+      }
+
+      await ctxFn.flowDynamic(`📋 Se encontraron ${citasPendientes.length} citas pendientes. Iniciando envío...`);
+
+      // 4. Procesar cada cita
+      let exitosos = 0;
+      let errores = 0;
+
+      for (const cita of citasPendientes) {
+        try {
+          //enviar plantilla con metodo POST
+          const response = await enviarPlantillaConfirmacion(cita);
+          if (response.exito) {
+            exitosos++;
+          } else {
+            errores++;
+          }
+          await new Promise(resolve => setTimeout(resolve, 1000));
+
+        } catch (error) {
+          console.error(`❌ Error procesando cita de ${cita.nombre_paciente}:`, error);
+          errores++;
+        }
+      }
+
+      // 5. Reporte final
+      const mensaje = `
+📊 *Reporte de Campaña Completado*
+📅 Fecha: ${fechaFormateada}
+✅ Exitosos: ${exitosos}
+❌ Errores: ${errores}
+📱 Total procesados: ${citasPendientes.length}
+      `.trim();
+
+      await ctxFn.flowDynamic(mensaje);
+
+    } catch (error) {
+      console.error('Error ejecutando campaña:', error);
+      await ctxFn.flowDynamic(
+        '❌ Error interno al procesar la campaña. ' +
+        'Revisa los logs para más detalles.'
+      );
+    }
+  });
+
+/**
+ * Flow para confirmar citas (respuesta a plantillas)
+ */
+const confirmarCitaFlow = addKeyword(['Confirmar cita', 'Confirmar', 'confirmar'])
+  .addAction(async (ctx, ctxFn) => {
+    const celular = ctx.from;
+    
+    try {
+      const response = await confirmarCitaCampahna(celular);
+      
+      if (response) {
+        await ctxFn.flowDynamic('✅ ¡Tu cita ha sido confirmada exitosamente!');
+        await ctxFn.flowDynamic('Gracias por confirmar tu cita. Si necesitas más ayuda, no dudes en preguntar. ¡Feliz día!');
+        return ctxFn.endFlow();
+      } else {
+        await ctxFn.flowDynamic('❌ No fue posible confirmar tu cita. Intenta nuevamente o contacta soporte.');
+        return ctxFn.endFlow();
+      }
+
+    } catch (error) {
+      console.error('Error confirmando cita:', error);
+      await ctxFn.flowDynamic('❌ Error interno. Intenta nuevamente.');
+      return ctxFn.endFlow();
     }
   });
 

@@ -11,6 +11,10 @@ const serviciosStepConocer = addKeyword(['280525011', 'Servicios', 'servicios'])
                 media: pathLocal
             },
         ]);
+        
+        // Delay para asegurar que la imagen se envíe antes del menú principal
+        await new Promise(resolve => setTimeout(resolve, 4000));
+        
         return ctxFn.gotoFlow(volverMenuPrincipal);
     });
 

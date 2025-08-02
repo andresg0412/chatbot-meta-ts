@@ -48,6 +48,7 @@ import {
     mesajeSalida,
 } from './flujos/common';
 import { pasoAgenteFlow } from './flujos/pasoAgente';
+import { pqrsFlow } from './flujos/pasoAgente/enviarpqrs';
 import { ejecutarPlantillaDiariaFlow, confirmarCitaFlow } from './flujos/campahna';
 import {
     step1AgendarCita,
@@ -98,6 +99,8 @@ import {
 export default createFlow([
     welcomeFlow,
     exitFlow,
+    ejecutarPlantillaDiariaFlow,
+    confirmarCitaFlow,
     politicaDatosFlow,
     noAceptaPoliticas,
     menuFlow,
@@ -179,6 +182,5 @@ export default createFlow([
     mesajeSalida,
     stepConfirmaCancelarCita,
     pasoAgenteFlow,
-    ejecutarPlantillaDiariaFlow,
-    confirmarCitaFlow,
+    pqrsFlow,
 ]);
