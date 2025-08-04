@@ -3,6 +3,7 @@ import { welcomeFlow, exitFlow } from './welcomeFlow';
 import { menuFlow } from './menuFlow';
 import { politicaDatosFlow } from './flujos/principal/politicasDatos';
 import { noAceptaPoliticas } from './flujos/principal/noAceptaPoliticas';
+import { killSwitchFlow } from './flujos/principal/killSwitchFlow';
 import {
     menuConocerIpsFlow,
     serviciosStepConocer,
@@ -97,6 +98,7 @@ import {
 } from './flujos/agendarCita'
 
 export default createFlow([
+    killSwitchFlow,
     welcomeFlow,
     exitFlow,
     ejecutarPlantillaDiariaFlow,

@@ -4,6 +4,7 @@ import path from 'path';
 
 // Ruta del archivo JSON para almacenamiento (puede cambiarse por memoria si prefieres)
 const DB_PATH = path.join(process.cwd(), 'src', 'services', 'citasDB.json');
+const statusFilePath = path.join(process.cwd(), 'src', 'services', 'confBot.json');
 
 export type Cita = {
   cedula: string;
@@ -109,3 +110,33 @@ export async function confirmarCitaPorCedula(cedula: string): Promise<boolean> {
     return false;
   }
 }*/
+
+export const obtenerEstadoBot = (): { habilitado: boolean; ultimaModificacion: string } => {
+  try {
+    const data = fs.readFileSync(statusFilePath, 'utf-8');
+    return JSON.parse(data);
+  } catch (error) {
+    console.error('Error obteniendo estado del bot:', error);
+    return { habilitado: true, ultimaModificacion: '' };
+  }
+};
+export const actualizarEstadoBot = (habilitado: boolean): boolean => {
+  try {
+    const nuevoEstado: { habilitado: boolean; ultimaModificacion: string } = {
+      habilitado,
+      ultimaModificacion: new Date().toISOString()
+    };
+    
+    fs.writeFileSync(statusFilePath, JSON.stringify(nuevoEstado, null, 2));
+    console.log(`Bot ${habilitado ? 'habilitado' : 'deshabilitado'} - ${nuevoEstado.ultimaModificacion}`);
+    return true;
+  } catch (error) {
+    console.error('Error actualizando estado del bot:', error);
+    return false;
+  }
+};
+
+export const esBotHabilitado = (): boolean => {
+  const estado = obtenerEstadoBot();
+  return estado.habilitado;
+};

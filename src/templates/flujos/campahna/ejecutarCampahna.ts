@@ -14,6 +14,8 @@ import {
 
 import { esNumeroAutorizado } from '../../../constants/authConstants';
 import { extraerFechaDelComando } from '../../../utils/dateValidator';
+import { isNumberValid } from '../../../constants/killSwichConstants';
+import { esBotHabilitado } from '../../../services/citasService';
 
 const ejecutarPlantillaDiariaFlow = addKeyword(['ejecutar'])
   .addAction(async (ctx, ctxFn) => {
@@ -22,7 +24,15 @@ const ejecutarPlantillaDiariaFlow = addKeyword(['ejecutar'])
 
     if (!esNumeroAutorizado(numeroRemitente)) {
       await ctxFn.flowDynamic('No entiendo que has dicho.');
-      return;
+      return ctxFn.endFlow();
+    }
+
+    if (!isNumberValid(numeroRemitente) && !esBotHabilitado()) {
+      await ctxFn.flowDynamic(
+        'El servicio no está disponible temporalmente.' +
+        'Intenta más tarde.'
+      );
+      return ctxFn.endFlow();
     }
 
     // 2. Extraer y validar la fecha del comando
