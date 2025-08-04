@@ -3,9 +3,18 @@ import { politicaDatosFlow } from './flujos/principal/politicasDatos';
 import { checkAndRegisterUserAttempt } from '../utils/userRateLimiter';
 import { metricConversationStarted } from '../utils/metrics';
 import { updateUserActivity, closeUserSession } from '../utils/proactiveSessionManager';
+import { isNumberValid } from '../constants/killSwichConstants';
+import { esBotHabilitado } from '../services/citasService';
 
 const welcomeFlow = addKeyword(EVENTS.WELCOME)
     .addAction(async (ctx, ctxFn) => {
+        if (!esBotHabilitado()) {
+            await ctxFn.flowDynamic(
+                'Lo sentimos, el servicio no está disponible en este momento. ' +
+                'Por favor intenta más tarde.'
+            );
+            return ctxFn.endFlow();
+        }
         metricConversationStarted(ctx.from);
         updateUserActivity(ctx.from);
         await ctxFn.state.update({ celular: ctx.from });
