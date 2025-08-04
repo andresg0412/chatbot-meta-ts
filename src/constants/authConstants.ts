@@ -3,7 +3,8 @@
  */
 export const NUMEROS_AUTORIZADOS = [
   '573185215524', // Número autorizado 1
-  '573178091295'    // Número autorizado 2 (ejemplo)
+  '573178091295',
+  '573156240648'
 ];
 
 /**
