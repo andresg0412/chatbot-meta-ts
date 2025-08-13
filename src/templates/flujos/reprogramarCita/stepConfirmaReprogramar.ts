@@ -14,6 +14,8 @@ import { consultarFechasCitasDisponibles } from '~/services/apiService';
 import { construirMensajeFechasDisponibles } from '../../../utils/construirMensajeSalida';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 import { closeUserSession } from '../../../utils/proactiveSessionManager';
+import { registrarActividadBot } from '../../../services/apiService';
+
 
 const stepConfirmaReprogramar = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
@@ -39,6 +41,13 @@ const stepConfirmaReprogramar = addKeyword(EVENTS.ACTION)
                 const esPrimeraVez = catalogoUpper.includes('PRIMERA VEZ');
                 const esControl = catalogoUpper.includes('CONTROL');
                 const tipoConsulta = esPrimeraVez ? 'Primera vez' : esControl ? 'Control' : '';
+                await registrarActividadBot('chat_flujo_reprogramar', ctx.from, {
+                    step: 'consulta_fechas_disponibles',
+                    especialidad: especialidad,
+                    profesional_id: profesional_id,
+                    nombre_profesional: nombre_profesional,
+                    tipo_consulta: tipoConsulta
+                });
                 const fechasOrdenadas = await consultarFechasCitasDisponibles(tipoConsulta, especialidad, profesional_id);
                 await state.update({ fechasOrdenadas, tipoConsultaPaciente: tipoConsulta, especialidadAgendarCita: especialidad, profesionalId: profesional_id });
                 const mostrarFechas = await fechasOrdenadas.slice(0, 3);

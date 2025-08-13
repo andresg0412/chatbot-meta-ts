@@ -5,6 +5,7 @@ import { metricConversationStarted } from '../utils/metrics';
 import { updateUserActivity, closeUserSession } from '../utils/proactiveSessionManager';
 import { isNumberValid } from '../constants/killSwichConstants';
 import { esBotHabilitado } from '../services/citasService';
+import { registrarActividadBot } from '../services/apiService';
 
 const welcomeFlow = addKeyword(EVENTS.WELCOME)
     .addAction(async (ctx, ctxFn) => {
@@ -15,6 +16,7 @@ const welcomeFlow = addKeyword(EVENTS.WELCOME)
             );
             return ctxFn.endFlow();
         }
+        await registrarActividadBot('chat_inicio', ctx.from);
         metricConversationStarted(ctx.from);
         updateUserActivity(ctx.from);
         await ctxFn.state.update({ celular: ctx.from });

@@ -5,12 +5,18 @@ import { consultarCitasPorPacEsp } from '../../../../utils/consultarCitasPorPacE
 import { step4AgendarCitaControl } from './step4AgendarCitaControl';
 import { IPaciente } from '../../../../interfaces/IPacienteIn';
 import { closeUserSession } from '../../../../utils/proactiveSessionManager';
+import { registrarActividadBot } from '../../../../services/apiService';
+
 
 const step7AgendarCitaControl = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { state, gotoFlow, flowDynamic, endFlow }) => {
         try {
             const numeroDocumento = await state.getMyState().numeroDocumentoPaciente;
             const especialidad = await state.getMyState().especialidadAgendarCita;
+            await registrarActividadBot('chat_flujo_agendar', ctx.from, {
+                especialidad: especialidad,
+                tipo_consulta: 'control'
+            });
             const consultaDatos: IPaciente[] = await consultarCitasPorPacEsp(numeroDocumento, especialidad);
             if (!consultaDatos || consultaDatos.length === 0) {
                 await flowDynamic('No se encontraron citas anteriores relacionadas con el documento ingresado y la especialidad seleccionada. Por favor, verifica los datos e intenta nuevamente.');

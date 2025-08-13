@@ -4,6 +4,8 @@ import { volverMenuPrincipal } from '../common/volverMenuPrincipal';
 import { metricFlujoFinalizado, metricCita, metricError } from '../../../utils/metrics';
 import { cancelarCita } from '../../../services/apiService';
 import { closeUserSession } from '../../../utils/proactiveSessionManager';
+import { registrarActividadBot } from '../../../services/apiService';
+
 
 const stepConfirmaCancelarCita = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { state, flowDynamic, gotoFlow, endFlow }) => {
@@ -15,6 +17,9 @@ const stepConfirmaCancelarCita = addKeyword(EVENTS.ACTION)
             }
             const response = await cancelarCita(citaSeleccionadaCancelar.agenda_id_externa);
             metricFlujoFinalizado('cancelar');
+            await registrarActividadBot('chat_flujo_cancelar_cita', ctx.from, {
+                step: 'cita_cancelada'
+            });
             await flowDynamic('Tu cita ha sido cancelada exitosamente. Quedo atenta a tu nueva disponibilidad.');
         } catch (e) {
             metricError(e, ctx.from);

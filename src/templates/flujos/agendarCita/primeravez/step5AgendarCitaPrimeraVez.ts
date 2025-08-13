@@ -5,6 +5,8 @@ import {
     step6AgendarCitaPrimeraVezPsiquiatria,
 } from './step6AgendarCitaPrimeraVez';
 import { checkSessionTimeout } from '../../../../utils/proactiveSessionTimeout';
+import { registrarActividadBot } from '../../../../services/apiService';
+
 
 const step5AgendarCitaPrimeraVezPresencial = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
@@ -26,14 +28,23 @@ const step5AgendarCitaPrimeraVezPresencial = addKeyword(EVENTS.ACTION)
         async (ctx, { state, gotoFlow }) => {
             if (ctx.body === 'Psicologia') {
                 await state.update({ especialidadAgendarCita: 'Psicologia' });
+                await registrarActividadBot('chat_flujo_agendar', ctx.from, {
+                    especialidad: 'Psicologia',
+                });
                 return gotoFlow(step6AgendarCitaPrimeraVezPsicologia)
             }
             if (ctx.body === 'Psiquiatria') {
                 await state.update({ especialidadAgendarCita: 'Psiquiatria' });
+                await registrarActividadBot('chat_flujo_agendar', ctx.from, {
+                    especialidad: 'Psiquiatria',
+                });
                 return gotoFlow(step6AgendarCitaPrimeraVezPsiquiatria)
             }
             if (ctx.body === 'NeuroPsicologia') {
                 await state.update({ especialidadAgendarCita: 'Neuropsicologia' });
+                await registrarActividadBot('chat_flujo_agendar', ctx.from, {
+                    especialidad: 'Neuropsicologia',
+                });
                 return gotoFlow(step6AgendarCitaPrimeraVezNeuropsicologia)
             }
         }
@@ -58,10 +69,16 @@ const step5AgendarCitaPrimeraVezVirtual = addKeyword(EVENTS.ACTION)
         async (ctx, { state, gotoFlow }) => {
             if (ctx.body === 'Psicologia') {
                 await state.update({ especialidadAgendarCita: 'Psicologia' });
+                await registrarActividadBot('chat_flujo_agendar', ctx.from, {
+                    especialidad: 'Psicologia',
+                });
                 return gotoFlow(step6AgendarCitaPrimeraVezPsicologia)
             }
             if (ctx.body === 'Psiquiatria') {
                 await state.update({ especialidadAgendarCita: 'Psiquiatria' });
+                await registrarActividadBot('chat_flujo_agendar', ctx.from, {
+                    especialidad: 'Psiquiatria',
+                });
                 return gotoFlow(step6AgendarCitaPrimeraVezPsiquiatria)
             }
         }

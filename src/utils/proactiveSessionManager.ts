@@ -9,6 +9,7 @@ const SESSIONS_DB_PATH = path.join(__dirname, 'userSessionsDB.json');
 const SESSION_TIMEOUT_MS = 60 * 60 * 1000; // 1 hora
 
 const META_MESSAGE_LIMIT_MS = 12 * 60 * 60 * 1000; // 12 horas
+import { registrarActividadBot } from '../services/apiService';
 
 
 // Estructura: { [userId]: { lastActivity: number, isActive: boolean, timerId?: NodeJS.Timeout } }
@@ -82,6 +83,7 @@ async function closeSessionProactively(userId: string): Promise<void> {
   session.isActive = false;
   session.timerId = undefined;
   saveUserSessions();
+  await registrarActividadBot('chat_abandonado', userId);
 
   if (timeSinceLastActivity > META_MESSAGE_LIMIT_MS) {
     console.log(`⚠️ Sesión cerrada sin notificación para ${userId}: han pasado ${Math.floor(timeSinceLastActivity / (60 * 60 * 1000))} horas desde la última actividad (límite: 12h)`);
@@ -89,7 +91,7 @@ async function closeSessionProactively(userId: string): Promise<void> {
   }
 
   // Enviar mensaje de timeout al usuario
-  if (botInstance) {
+  /**if (botInstance) {
     try {
       const timeoutMessage = 
         '⏰ Tu sesión ha expirado por inactividad de más de 1 hora.\n\n' +
@@ -101,7 +103,7 @@ async function closeSessionProactively(userId: string): Promise<void> {
     } catch (error) {
       console.error(`❌ Error enviando mensaje de timeout a ${userId}:`, error);
     }
-  }
+  }**/
 }
 
 /**
@@ -213,6 +215,7 @@ export function restoreActiveTimers(): void {
         } else {
           // Menos de 12 horas: cerrar con mensaje
           closeSessionProactively(userId);
+          
           expiredSafeCount++;
         }
       } else {

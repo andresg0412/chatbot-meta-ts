@@ -5,6 +5,7 @@ import {
   closeUserSession,
   getRemainingSessionTime 
 } from './proactiveSessionManager';
+import { registrarActividadBot } from '../services/apiService';
 
 /**
  * Middleware que verifica si una sesión ha expirado y actualiza actividad
@@ -23,15 +24,16 @@ export async function checkSessionTimeout(
   if (isSessionExpired(userId)) {
     // Marcar como cerrada (el mensaje ya fue enviado proactivamente)
     closeUserSession(userId);
+    await registrarActividadBot('chat_abandonado', userId);
     
     // Para compatibilidad con el sistema anterior, enviar mensaje si se proporciona flowDynamic
     // (aunque normalmente el mensaje ya se envió proactivamente)
-    if (flowDynamic) {
-      await flowDynamic(
-        '⏰ Tu sesión ha expirado por inactividad.\n\n' +
-        'Para continuar, escribe *"hola"* para iniciar una nueva conversación.'
-      );
-    }
+    //if (flowDynamic) {
+    //  await flowDynamic(
+    //    '⏰ Tu sesión ha expirado por inactividad.\n\n' +
+    //    'Para continuar, escribe *"hola"* para iniciar una nueva conversación.'
+    //  );
+    //}
     
     return false; // Sesión expirada
   }

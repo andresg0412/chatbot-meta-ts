@@ -4,6 +4,8 @@ import { metricFlujoFinalizado, metricError } from '../../../utils/metrics';
 import { step20AgendarCita } from './step20AgendarCita';
 import { crearCita } from '../../../services/apiService';
 import { closeUserSession } from '../../../utils/proactiveSessionManager';
+import { registrarActividadBot } from '../../../services/apiService';
+
 
 function generarAgendaIdAleatorio() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -65,6 +67,10 @@ const step19AgendarCita = addKeyword(EVENTS.ACTION)
                 return endFlow();
             }
             metricFlujoFinalizado('agendar');
+            await registrarActividadBot('chat_flujo_agendar', ctx.from, {
+                step: 'confirmar_cita',
+                cita: 'creada_globho'
+            });
             await flowDynamic('Tu cita se ha agendado con éxito. 📅👍');
             //await flowDynamic(`Detalles de la cita:\n\n*Especialidad:* ${especialidadConTilde}\n*Fecha:* ${nuevaCita.fechacita}\n*Hora:* ${nuevaCita.horacita} - ${nuevaCita.horafinal}\n*Profesional:* ${nuevaCita.profesionalNombre}\n*Tipo de cita:* ${tipoCitaAgendarCita}`);
             await flowDynamic('Te esperamos en nuestra IPS para brindarte la mejor atención.\n ¡Gracias por confiar en nosotros! 😊');

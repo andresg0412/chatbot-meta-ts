@@ -2,6 +2,8 @@ import { addKeyword, EVENTS } from '@builderbot/bot';
 import { step6Reprogramar } from './step6Reprogramar';
 import { sanitizeString } from '../../../utils/sanitize';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
+import { registrarActividadBot } from '../../../services/apiService';
+
 
 
 const step5Reprogramar = addKeyword(EVENTS.ACTION)
@@ -10,6 +12,9 @@ const step5Reprogramar = addKeyword(EVENTS.ACTION)
         if (!sessionValid) {
             return endFlow();
         }
+        await registrarActividadBot('chat_flujo_reprogramar', ctx.from, {
+            step: 'consulta_citas_agendadas'
+        });
     })
     .addAnswer('Por favor, digita el número de la cita que deseas reprogramar 🗓️:',
         { capture: true },
