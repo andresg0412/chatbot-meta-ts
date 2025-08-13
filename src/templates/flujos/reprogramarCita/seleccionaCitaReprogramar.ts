@@ -8,6 +8,8 @@ import { metricFlujoFinalizado, metricCita, metricError } from '../../../utils/m
 import { CONVENIOS_SERVICIOS, ID_CONVENIOS_SERVICIOS } from '../../../constants/conveniosConstants';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 import { closeUserSession } from '../../../utils/proactiveSessionManager';
+import { registrarActividadBot } from '../../../services/apiService';
+
 
 function generarAgendaIdAleatorio() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -72,6 +74,11 @@ const confirmarReprogramarCita = addKeyword(EVENTS.ACTION)
                 return endFlow();
             }
             metricFlujoFinalizado('reagendar');
+            await registrarActividadBot('chat_flujo_reprogramar', ctx.from, {
+                step: 'confirmar_cita',
+                cita: 'creada_globho'
+            });
+
             await flowDynamic('Tu cita se ha agendado con éxito. 📅👍');
             await state.update({ citaReprogramada: true });
             return gotoFlow(revisarPagoConsulta);

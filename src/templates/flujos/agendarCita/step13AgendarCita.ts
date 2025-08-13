@@ -13,12 +13,8 @@ const step13AgendarCitaParticular = addKeyword(EVENTS.ACTION)
         if (!tipoDocumento || !numeroDocumento) {
             return gotoFlow(step14AgendarCita);
         } else {
-            // si ya tenemos tipo documento y documento
-            // entonces validar que usuario exista ya en el estado
-            //y si es asi entonces pasar al step de confirmar cita
             const pacienteId = state.getMyState().pacienteId;
             if (!pacienteId) {
-                // si no existe pacienteId, entonces enviarlo a step formulario
                 return gotoFlow(step17AgendarCita);
             }
             return gotoFlow(step18AgendarCita);

@@ -5,6 +5,8 @@ import { consultarFechasCitasDisponibles } from '../../../services/apiService';
 import { construirMensajeFechasDisponibles } from '../../../utils/construirMensajeSalida';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 import { closeUserSession } from '../../../utils/proactiveSessionManager';
+import { registrarActividadBot } from '../../../services/apiService';
+
 
 const step8AgendarCita = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
@@ -12,6 +14,9 @@ const step8AgendarCita = addKeyword(EVENTS.ACTION)
         if (!sessionValid) {
             return endFlow();
         }
+        await registrarActividadBot('chat_flujo_agendar', ctx.from, {
+            step: 'consulta_fechas_disponibles'
+        });
     })
     .addAnswer(
         'A continuación te mostraré las fechas disponibles para agendar tu cita:',
