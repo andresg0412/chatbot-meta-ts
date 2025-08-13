@@ -2,6 +2,8 @@ import { addKeyword, EVENTS } from '@builderbot/bot';
 import { step11AgendarCita } from './step11AgendarCita';
 import { construirMensajeHorasDisponibles } from '../../../utils/construirMensajeSalida';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
+import { registrarActividadBot } from '../../../services/apiService';
+
 
 const step10AgendarCita = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
@@ -9,6 +11,9 @@ const step10AgendarCita = addKeyword(EVENTS.ACTION)
         if (!sessionValid) {
             return endFlow();
         }
+        await registrarActividadBot('chat_flujo_agendar', ctx.from, {
+            step: 'consulta_horas_disponibles'
+        });
     })
     .addAnswer('Por favor, escribe el *número* de la hora que deseas seleccionar:',
         { capture: true },

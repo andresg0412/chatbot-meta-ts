@@ -2,6 +2,8 @@ import { addKeyword, EVENTS } from '@builderbot/bot';
 import { step19AgendarCita } from './step19AgendarCita';
 import { volverMenuPrincipal } from '../common';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
+import { registrarActividadBot } from '../../../services/apiService';
+
 
 const step18AgendarCita2 = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
@@ -21,9 +23,17 @@ const step18AgendarCita2 = addKeyword(EVENTS.ACTION)
         },
         async (ctx, ctxFn) => {
             if (ctx.body === 'Si') {
+                await registrarActividadBot('chat_flujo_agendar', ctx.from, {
+                    step: 'confirmar_cita',
+                    cita: 'creada'
+                });
                 return ctxFn.gotoFlow(step19AgendarCita);
             }
             if (ctx.body === 'No') {
+                await registrarActividadBot('chat_flujo_agendar', ctx.from, {
+                    step: 'confirmar_cita',
+                    cita: 'no_confirma_agenda'
+                });
                 await ctxFn.flowDynamic('Recuerda que puedes agendar tu cita cuando lo requieras.');
                 return ctxFn.gotoFlow(volverMenuPrincipal);
             }

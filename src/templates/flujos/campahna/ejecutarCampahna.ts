@@ -6,16 +6,18 @@ import {
   confirmarCitaPorCedula,
   Cita
 } from '../../../services/citasService';
-import { 
-  obtenerCitasPendientesPorFecha, 
-  enviarPlantillaConfirmacion, 
-  confirmarCitaCampahna 
+import {
+  obtenerCitasPendientesPorFecha,
+  enviarPlantillaConfirmacion,
+  confirmarCitaCampahna
 } from '../../../services/apiService';
 
 import { esNumeroAutorizado } from '../../../constants/authConstants';
 import { extraerFechaDelComando } from '../../../utils/dateValidator';
 import { isNumberValid } from '../../../constants/killSwichConstants';
 import { esBotHabilitado } from '../../../services/citasService';
+import { registrarActividadBot } from '../../../services/apiService';
+
 
 const ejecutarPlantillaDiariaFlow = addKeyword(['ejecutar'])
   .addAction(async (ctx, ctxFn) => {
@@ -38,7 +40,7 @@ const ejecutarPlantillaDiariaFlow = addKeyword(['ejecutar'])
     // 2. Extraer y validar la fecha del comando
     const fechaFormateada = extraerFechaDelComando(mensajeCompleto);
     console.log(`Fecha extraída: ${fechaFormateada}`);
-    
+
     if (!fechaFormateada) {
       await ctxFn.flowDynamic(
         '❌ Formato incorrecto. Usa: *Ejecutar DD/MM/YYYY*\n' +
@@ -69,8 +71,20 @@ const ejecutarPlantillaDiariaFlow = addKeyword(['ejecutar'])
           //enviar plantilla con metodo POST
           const response = await enviarPlantillaConfirmacion(cita);
           if (response.exito) {
+            await registrarActividadBot('campahna_envio', cita.telefono_paciente, {
+              estado: 'enviado',
+              resultado: 'exitoso',
+              campahna: 'meta-' + fechaFormateada,
+              fecha_campahna: fechaFormateada,
+            });
             exitosos++;
           } else {
+            await registrarActividadBot('campahna_envio', cita.telefono_paciente, {
+              estado: 'no_enviado',
+              resultado: 'error',
+              campahna: 'meta-' + fechaFormateada,
+              fecha_campahna: fechaFormateada,
+            });
             errores++;
           }
           await new Promise(resolve => setTimeout(resolve, 1000));
@@ -91,6 +105,14 @@ const ejecutarPlantillaDiariaFlow = addKeyword(['ejecutar'])
       `.trim();
 
       await ctxFn.flowDynamic(mensaje);
+      await registrarActividadBot('campahna_envio', 'EJECUCION_CAMPAHNA', {
+        estado: 'finalizado',
+        campahna: 'meta-' + fechaFormateada,
+        fecha_campahna: fechaFormateada,
+        envios_exitosos: exitosos,
+        envios_errores: errores,
+        total_procesados: citasPendientes.length
+      });
 
     } catch (error) {
       console.error('Error ejecutando campaña:', error);
@@ -107,13 +129,19 @@ const ejecutarPlantillaDiariaFlow = addKeyword(['ejecutar'])
 const confirmarCitaFlow = addKeyword(['Confirmar cita', 'Confirmar', 'confirmar'])
   .addAction(async (ctx, ctxFn) => {
     const celular = ctx.from;
-    
+    const fechaFormateada = new Date().toISOString().split('T')[0];
     try {
       const response = await confirmarCitaCampahna(celular);
-      
+
       if (response) {
         await ctxFn.flowDynamic('✅ ¡Tu cita ha sido confirmada exitosamente!');
         await ctxFn.flowDynamic('Gracias por confirmar tu cita. Si necesitas más ayuda, no dudes en preguntar. ¡Feliz día!');
+        await registrarActividadBot('campahna_envio', celular, {
+          estado: 'confirmado',
+          resultado: 'exitoso',
+          campahna: 'meta-' + fechaFormateada,
+          fecha_campahna: fechaFormateada,
+        });
         return ctxFn.endFlow();
       } else {
         await ctxFn.flowDynamic('❌ No fue posible confirmar tu cita. Intenta nuevamente o contacta soporte.');
