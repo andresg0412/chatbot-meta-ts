@@ -4,6 +4,7 @@ import { consultarCitasFecha } from '../../../services/apiService';
 import { construirMensajeFechasDisponibles, construirMensajeHorasDisponibles } from '../../../utils/construirMensajeSalida';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 import { closeUserSession } from '../../../utils/proactiveSessionManager';
+import { registrarActividadBot } from '../../../services/apiService';
 
 const stepSeleccionaFechaReprogramar = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
@@ -11,6 +12,9 @@ const stepSeleccionaFechaReprogramar = addKeyword(EVENTS.ACTION)
         if (!sessionValid) {
             return endFlow();
         }
+        await registrarActividadBot('chat_flujo_reprogramar', ctx.from, {
+            step: 'consulta_horas_disponibles'
+        });
     })
     .addAnswer('Por favor, escribe el *número* de la fecha que deseas ver las horas disponibles:',
         { capture: true },

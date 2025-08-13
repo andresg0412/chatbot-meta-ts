@@ -1,5 +1,6 @@
 import { createBot, createProvider, createFlow, addKeyword, utils, EVENTS } from '@builderbot/bot';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
+import { registrarActividadBot } from '../../../services/apiService';
 
 const menuConocerIpsFlow = addKeyword('280525001')
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
@@ -7,6 +8,7 @@ const menuConocerIpsFlow = addKeyword('280525001')
         if (!sessionValid) {
             return endFlow();
         }
+        await registrarActividadBot('chat_flujo_conocer_ips', ctx.from);
     })
     .addAnswer(
         '¿Que te gustaria conocer de la IPS?',

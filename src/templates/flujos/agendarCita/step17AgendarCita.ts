@@ -4,6 +4,8 @@ import { step18AgendarCita } from './step18AgendarCita';
 import { crearPaciente } from '../../../utils/consultarCitasPorDocumento';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 import { closeUserSession } from '../../../utils/proactiveSessionManager';
+import { registrarActividadBot } from '../../../services/apiService';
+
 
 function generarAgendaIdAleatorio() {
     const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -79,6 +81,9 @@ const step17AgendarCita7 = addKeyword(EVENTS.ACTION)
         try {
             const paciente_id = await crearPaciente(datosPaciente);
             await state.update({ pacienteId: paciente_id });
+            await registrarActividadBot('chat_flujo_agendar', ctx.from, {
+                step: 'paciente_creado'
+            });
         } catch (error) {
             closeUserSession(ctx.from);
             await flowDynamic('Lo siento, ocurrió un error al crear tu perfil. Por favor, inténtalo más tarde.');
@@ -204,6 +209,10 @@ const step17AgendarCita = addKeyword(EVENTS.ACTION)
         if (!sessionValid) {
             return endFlow();
         }
+        await registrarActividadBot('chat_flujo_agendar', ctx.from, {
+            step: 'formulario_paciente',
+            paciente: 'paciente_nuevo'
+        });
     })
     .addAnswer('Por favor, digita tu *PRIMER* nombre:',
         { capture: true },

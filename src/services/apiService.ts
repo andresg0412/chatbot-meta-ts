@@ -270,3 +270,42 @@ export async function confirmarCitaCampahna(celular: string): Promise<boolean> {
         return false;
     }
 }
+
+/**
+ * Registra un evento de actividad en el backend para generar estadísticas
+ * @param tipoEvento - Tipo de evento que se está registrando (ej: 'chat_inicio', 'cita_agendada', etc.)
+ * @param idUsuario - Número de teléfono o identificador del usuario
+ * @param metadata - Objeto con información adicional del evento (fecha, campaña, etc.)
+ * @returns Promise<boolean> - true si se registró exitosamente, false en caso contrario
+ */
+export async function registrarActividadBot(
+    tipoEvento: string, 
+    idUsuario: string, 
+    metadata: Record<string, any> = {}
+): Promise<boolean> {
+    try {
+        const url = `${API_BACKEND_URL}/stats`;
+        
+        const body = {
+            tipo_evento: tipoEvento,
+            id_usuario: idUsuario,
+            metadata: {
+                date: new Date().toISOString().split('T')[0],
+                ...metadata
+            }
+        };
+
+        const response = await axios.post(url, body);
+        
+        if (response.status >= 200 && response.status < 300) {
+            return true;
+        }
+        
+        console.warn(`Respuesta inesperada al registrar actividad: ${response.status}`);
+        return false;
+        
+    } catch (error) {
+        console.error('Error registrando actividad del bot:', error);
+        return false;
+    }
+}
