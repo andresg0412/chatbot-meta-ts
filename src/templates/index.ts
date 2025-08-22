@@ -53,6 +53,7 @@ import { pqrsFlow } from './flujos/pasoAgente/enviarpqrs';
 import {
     ejecutarPlantillaDiariaFlow,
     confirmarCitaFlow,
+    confirmarCitaDocumentoFlow,
     ejecutarPlantillaRecuperacionFlow,
     ejecutarPlantillaUsuariosConAsistenciaFlow
 } from './flujos/campahna';
@@ -110,6 +111,7 @@ export default createFlow([
     ejecutarPlantillaRecuperacionFlow,
     ejecutarPlantillaUsuariosConAsistenciaFlow,
     confirmarCitaFlow,
+    confirmarCitaDocumentoFlow,
     politicaDatosFlow,
     noAceptaPoliticas,
     menuFlow,

@@ -260,10 +260,10 @@ export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse)
     }
 }
 
-export async function confirmarCitaCampahna(celular: string): Promise<boolean> {
+export async function confirmarCitaCampahna(celular: string, numeroDoc: string): Promise<boolean> {
     try {
         const url = `${API_BACKEND_URL}/chatbot/confirmarcitameta`;
-        const response = await axios.post(url, { celular });
+        const response = await axios.post(url, { celular: celular, documento: numeroDoc });
         return response.data.code === 200;
     } catch (error) {
         console.error('Error confirmando cita:', error);
