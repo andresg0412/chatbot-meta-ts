@@ -55,7 +55,9 @@ import {
     confirmarCitaFlow,
     confirmarCitaDocumentoFlow,
     ejecutarPlantillaRecuperacionFlow,
-    ejecutarPlantillaUsuariosConAsistenciaFlow
+    ejecutarPlantillaUsuariosConAsistenciaFlow,
+    respuestaCampahnaEnOtroMomento,
+    respuestaCampahnaFinalizado,
 } from './flujos/campahna';
 import {
     step1AgendarCita,
@@ -110,6 +112,8 @@ export default createFlow([
     ejecutarPlantillaDiariaFlow,
     ejecutarPlantillaRecuperacionFlow,
     ejecutarPlantillaUsuariosConAsistenciaFlow,
+    respuestaCampahnaEnOtroMomento,
+    respuestaCampahnaFinalizado,
     confirmarCitaFlow,
     confirmarCitaDocumentoFlow,
     politicaDatosFlow,

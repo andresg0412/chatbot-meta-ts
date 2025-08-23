@@ -8,7 +8,7 @@ import { registrarActividadBot } from '../../../services/apiService';
 
 const NUMERO_ASESOR = '573158070460';
 
-const pasoAgenteFlow = addKeyword(['280525005', '5', 'chatear con agente'])
+const pasoAgenteFlow = addKeyword(['280525005', '5', 'chatear con agente', 'Hablar con asistente', 'Hablar con una asistente'])
     .addAction(async (ctx, ctxFn) => {
         try {
             await ctxFn.state.update({ flujoSeleccionadoMenu: 'agente' });

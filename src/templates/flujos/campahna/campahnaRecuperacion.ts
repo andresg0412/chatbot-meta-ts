@@ -124,5 +124,17 @@ const ejecutarPlantillaRecuperacionFlow = addKeyword(['sinasistencia'])
     }
   });
 
+const respuestaCampahnaEnOtroMomento = addKeyword(['En otro momento'])
+  .addAction(async (ctx, ctxFn) => {
+    const fechaFormateada = new Date().toISOString().split('T')[0];
+    const telefono = ctx.from;
+    await registrarActividadBot('recuperacion_sin_asistencia_otro_momento', telefono, {
+      campahna: 'meta-usuarios-sin-asistencia-' + fechaFormateada,
+      fecha_campahna: fechaFormateada,
+    });
+    await ctxFn.flowDynamic('Entendido, estaremos atentos a tu nueva disponibilidad.');
+    return ctxFn.endFlow();
+  });
 
-export { ejecutarPlantillaRecuperacionFlow };
+
+export { ejecutarPlantillaRecuperacionFlow, respuestaCampahnaEnOtroMomento };

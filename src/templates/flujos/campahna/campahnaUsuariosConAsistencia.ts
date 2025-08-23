@@ -124,5 +124,16 @@ const ejecutarPlantillaUsuariosConAsistenciaFlow = addKeyword(['conasistencia'])
     }
   });
 
+const respuestaCampahnaFinalizado = addKeyword(['Ya finalicé mi proceso'])
+  .addAction(async (ctx, ctxFn) => {
+    const fechaFormateada = new Date().toISOString().split('T')[0];
+    const telefono = ctx.from;
+    await registrarActividadBot('recuperacion_con_asistencia_finalizo_proceso', telefono, {
+      campahna: 'meta-usuarios-con-asistencia-' + fechaFormateada,
+      fecha_campahna: fechaFormateada,
+    });
+    await ctxFn.flowDynamic('Entendido, estaremos atentos a tu nueva solicitud..');
+    return ctxFn.endFlow();
+  });
 
-export { ejecutarPlantillaUsuariosConAsistenciaFlow };
+export { ejecutarPlantillaUsuariosConAsistenciaFlow, respuestaCampahnaFinalizado };
