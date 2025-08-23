@@ -3,7 +3,7 @@ import { sanitizeString } from '../../../utils/sanitize';
 import { step15AgendarCita } from './step15AgendarCita';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 
-const step14AgendarCita2 = addKeyword(['agendarcita_tipo_cd', 'agendarcita_tipo_cex', 'agendarcita_tipo_tid', 'agendarcita_tipo_rcv', 'agendarcita_tipo_ps', 'agendarcita_tipo_ot'])
+const step14AgendarCita2 = addKeyword(['agindarcita_tipo_cd', 'agindarcita_tipo_cex', 'agindarcita_tipo_tid', 'agindarcita_tipo_rcv', 'agindarcita_tipo_ps', 'agindarcita_tipo_ot'])
     .addAction(async (ctx, { state, gotoFlow }) => {
         const tipoDocRaw = ctx.listResponse ? ctx.listResponse.title : ctx.body;
         const tipoDoc = sanitizeString(tipoDocRaw, 30);
@@ -29,12 +29,12 @@ const step14AgendarCita = addKeyword(EVENTS.ACTION)
                     {
                         title: 'Tipos',
                         rows: [
-                            { id: 'agendarcita_tipo_cd', title: 'Cédula de ciudadanía' },
-                            { id: 'agendarcita_tipo_cex', title: 'Cédula de extranjería' },
-                            { id: 'agendarcita_tipo_tid', title: 'Tarjeta de identidad' },
-                            { id: 'agendarcita_tipo_rcv', title: 'Registro civil' },
-                            { id: 'agendarcita_tipo_ps', title: 'Pasaporte' },
-                            { id: 'agendarcita_tipo_ot', title: 'Otro' },
+                            { id: 'agindarcita_tipo_cd', title: 'Cédula de ciudadanía' },
+                            { id: 'agindarcita_tipo_cex', title: 'Cédula de extranjería' },
+                            { id: 'agindarcita_tipo_tid', title: 'Tarjeta de identidad' },
+                            { id: 'agindarcita_tipo_rcv', title: 'Registro civil' },
+                            { id: 'agindarcita_tipo_ps', title: 'Pasaporte' },
+                            { id: 'agindarcita_tipo_ot', title: 'Otro' },
                         ]
                     }
                 ]
