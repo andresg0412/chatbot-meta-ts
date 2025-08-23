@@ -50,7 +50,15 @@ import {
 } from './flujos/common';
 import { pasoAgenteFlow } from './flujos/pasoAgente';
 import { pqrsFlow } from './flujos/pasoAgente/enviarpqrs';
-import { ejecutarPlantillaDiariaFlow, confirmarCitaFlow } from './flujos/campahna';
+import {
+    ejecutarPlantillaDiariaFlow,
+    confirmarCitaFlow,
+    confirmarCitaDocumentoFlow,
+    ejecutarPlantillaRecuperacionFlow,
+    ejecutarPlantillaUsuariosConAsistenciaFlow,
+    respuestaCampahnaEnOtroMomento,
+    respuestaCampahnaFinalizado,
+} from './flujos/campahna';
 import {
     step1AgendarCita,
     step2AgendarCita,
@@ -102,7 +110,12 @@ export default createFlow([
     welcomeFlow,
     exitFlow,
     ejecutarPlantillaDiariaFlow,
+    ejecutarPlantillaRecuperacionFlow,
+    ejecutarPlantillaUsuariosConAsistenciaFlow,
+    respuestaCampahnaEnOtroMomento,
+    respuestaCampahnaFinalizado,
     confirmarCitaFlow,
+    confirmarCitaDocumentoFlow,
     politicaDatosFlow,
     noAceptaPoliticas,
     menuFlow,
