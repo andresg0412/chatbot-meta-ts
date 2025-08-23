@@ -381,7 +381,7 @@ export async function obtenerCitasUsuariosConAsistencia(): Promise<AgendaPendien
     try {
         const url = `${API_BACKEND_URL}/chatbot/citasusuarioconasistencia`;
         const response = await axios.get(url);
-        return response.data || [];
+        return response.data.data || [];
     } catch (error) {
         console.error('Error obteniendo citas de usuarios con asistencia:', error);
         return [];
