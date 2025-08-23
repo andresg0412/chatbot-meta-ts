@@ -260,10 +260,10 @@ export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse)
     }
 }
 
-export async function confirmarCitaCampahna(celular: string): Promise<boolean> {
+export async function confirmarCitaCampahna(celular: string, numeroDoc: string): Promise<boolean> {
     try {
         const url = `${API_BACKEND_URL}/chatbot/confirmarcitameta`;
-        const response = await axios.post(url, { celular });
+        const response = await axios.post(url, { celular: celular, documento: numeroDoc });
         return response.data.code === 200;
     } catch (error) {
         console.error('Error confirmando cita:', error);
@@ -307,5 +307,139 @@ export async function registrarActividadBot(
     } catch (error) {
         console.error('Error registrando actividad del bot:', error);
         return false;
+    }
+}
+
+export async function obtenerCitasCanceladasAbandonadas(): Promise<AgendaPendienteResponse[] | []> {
+    try {
+        const url = `${API_BACKEND_URL}/chatbot/citasrecuperarpaciente`;
+        const response = await axios.get(url);
+        return response.data.data || [];
+    } catch (error) {
+        console.error('Error obteniendo citas canceladas:', error);
+        return [];
+    }
+}
+
+export async function enviarPlantillaRecuperar(cita: AgendaPendienteResponse): Promise<{ exito: boolean }> {
+    try {
+        // Formatear la fecha, aparece en formato YYYY-MM-ddTHH:mm:ss.SSSZ convertir en formato '31 de julio de 2025'
+
+        //FALTA AJUSTAR LA PLANTILLA
+        const fechaCita = new Date(cita.fecha_cita);
+        const fechaFormateada = fechaCita.toLocaleDateString('es-CO', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric'
+        });
+
+        const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
+        const body = {
+            "messaging_product": "whatsapp",
+            "to": `${cita.telefono_paciente}`,
+            "type": "template",
+            "template": {
+                "name": `${process.env.NOMBRE_PLANTILLA_META_CANCELADOS}`,
+                "language": {
+                "code": "es_CO"
+                },
+                "components": [
+                {
+                    "type": "body",
+                    "parameters": [
+                    { "type": "text", "text": `${cita.nombre_paciente}` },
+                    { "type": "text", "text": `${fechaFormateada}` },
+                    ]
+                }
+                ]
+            }
+        };
+        const response = await axios.post(url, body, {
+            headers: {
+                'Authorization': `Bearer ${process.env.jwtToken}`,
+                'Content-Type': 'application/json'
+            }
+        });
+        console.log('Respuesta de Meta:', response.data);
+        if (response.data.messages && response.data.messages.length > 0) {
+            console.log('Plantilla enviada correctamente:', response.data);
+        } else {
+            console.error('Error al enviar plantilla:', response.data);
+        }
+        if (response.data.messages[0].message_status === 'accepted') {
+            console.log(`Plantilla enviada exitosamente a ${cita.nombre_paciente} (${cita.telefono_paciente})`);
+            return { exito: true };
+        }
+        return { exito: false };
+    } catch (error) {
+        console.error('Error enviando plantilla:', error);
+        return { exito: false };
+    }
+}
+
+export async function obtenerCitasUsuariosConAsistencia(): Promise<AgendaPendienteResponse[] | []> {
+    try {
+        const url = `${API_BACKEND_URL}/chatbot/citasusuarioconasistencia`;
+        const response = await axios.get(url);
+        return response.data || [];
+    } catch (error) {
+        console.error('Error obteniendo citas de usuarios con asistencia:', error);
+        return [];
+    }
+}
+
+export async function enviarPlantillaUsuariosConAsistencia(cita: AgendaPendienteResponse): Promise<{ exito: boolean }> {
+    try {
+        // Formatear la fecha, aparece en formato YYYY-MM-ddTHH:mm:ss.SSSZ convertir en formato '31 de julio de 2025'
+
+        //FALTA AJUSTAR LA PLANTILLA
+        const fechaCita = new Date(cita.fecha_cita);
+        const fechaFormateada = fechaCita.toLocaleDateString('es-CO', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric'
+        });
+
+        const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
+        const body = {
+            "messaging_product": "whatsapp",
+            "to": `${cita.telefono_paciente}`,
+            "type": "template",
+            "template": {
+                "name": `${process.env.NOMBRE_PLANTILLA_META_ASISTIDOS}`,
+                "language": {
+                "code": "es_CO"
+                },
+                "components": [
+                {
+                    "type": "body",
+                    "parameters": [
+                    { "type": "text", "text": `${cita.nombre_paciente}` },
+                    { "type": "text", "text": `${fechaFormateada}` },
+                    ]
+                }
+                ]
+            }
+        };
+        const response = await axios.post(url, body, {
+            headers: {
+                'Authorization': `Bearer ${process.env.jwtToken}`,
+                'Content-Type': 'application/json'
+            }
+        });
+        console.log('Respuesta de Meta:', response.data);
+        if (response.data.messages && response.data.messages.length > 0) {
+            console.log('Plantilla enviada correctamente:', response.data);
+        } else {
+            console.error('Error al enviar plantilla:', response.data);
+        }
+        if (response.data.messages[0].message_status === 'accepted') {
+            console.log(`Plantilla enviada exitosamente a ${cita.nombre_paciente} (${cita.telefono_paciente})`);
+            return { exito: true };
+        }
+        return { exito: false };
+    } catch (error) {
+        console.error('Error enviando plantilla:', error);
+        return { exito: false };
     }
 }

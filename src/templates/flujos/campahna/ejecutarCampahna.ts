@@ -17,6 +17,8 @@ import { extraerFechaDelComando } from '../../../utils/dateValidator';
 import { isNumberValid } from '../../../constants/killSwichConstants';
 import { esBotHabilitado } from '../../../services/citasService';
 import { registrarActividadBot } from '../../../services/apiService';
+import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
+import { sanitizeString, isValidDocumentNumber } from '../../../utils/sanitize';
 
 
 const ejecutarPlantillaDiariaFlow = addKeyword(['ejecutar'])
@@ -126,12 +128,13 @@ const ejecutarPlantillaDiariaFlow = addKeyword(['ejecutar'])
 /**
  * Flow para confirmar citas (respuesta a plantillas)
  */
-const confirmarCitaFlow = addKeyword(['Confirmar cita', 'Confirmar', 'confirmar'])
+const confirmarCitaFlow = addKeyword(EVENTS.ACTION)
   .addAction(async (ctx, ctxFn) => {
     const celular = ctx.from;
     const fechaFormateada = new Date().toISOString().split('T')[0];
+    const numeroDoc = ctxFn.state.getMyState().numeroDoc;
     try {
-      const response = await confirmarCitaCampahna(celular);
+      const response = await confirmarCitaCampahna(celular, numeroDoc);
 
       if (response) {
         await ctxFn.flowDynamic('✅ ¡Tu cita ha sido confirmada exitosamente!');
@@ -155,4 +158,24 @@ const confirmarCitaFlow = addKeyword(['Confirmar cita', 'Confirmar', 'confirmar'
     }
   });
 
-export { ejecutarPlantillaDiariaFlow, confirmarCitaFlow };
+const confirmarCitaDocumentoFlow = addKeyword(['Confirmar cita', 'Confirmar', 'confirmar'])
+  .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        if (!sessionValid) {
+            return endFlow();
+        }
+    })
+    .addAnswer('Para confirmar por favor digita el número de documento del paciente 🔢:',
+        { capture: true },
+        async (ctx, { state, gotoFlow, flowDynamic }) => {
+            const numeroDoc = sanitizeString(ctx.body, 20);
+            if (!isValidDocumentNumber(numeroDoc)) {
+                await flowDynamic('El número de documento ingresado no es válido. Intenta nuevamente.');
+                return gotoFlow(confirmarCitaDocumentoFlow);
+            }
+            await state.update({ numeroDoc });
+            return gotoFlow(confirmarCitaFlow);
+        }
+    );
+
+export { ejecutarPlantillaDiariaFlow, confirmarCitaFlow, confirmarCitaDocumentoFlow };

@@ -4,7 +4,7 @@ import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 import { registrarActividadBot } from '../../../services/apiService';
 
 
-const step1AgendarCita = addKeyword(['280525002', 'Agendar cita'])
+const step1AgendarCita = addKeyword(['280525002', 'Agendar cita', 'Agendar', 'agendar'])
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
         const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
         if (!sessionValid) {
