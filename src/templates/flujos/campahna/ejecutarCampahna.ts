@@ -159,23 +159,17 @@ const confirmarCitaFlow = addKeyword(EVENTS.ACTION)
   });
 
 const confirmarCitaDocumentoFlow = addKeyword(['Confirmar cita', 'Confirmar', 'confirmar'])
-  .addAction(async (ctx, { flowDynamic, endFlow }) => {
-        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
-        if (!sessionValid) {
-            return endFlow();
-        }
-    })
-    .addAnswer('Para confirmar por favor digita el número de documento del paciente 🔢:',
-        { capture: true },
-        async (ctx, { state, gotoFlow, flowDynamic }) => {
-            const numeroDoc = sanitizeString(ctx.body, 20);
-            if (!isValidDocumentNumber(numeroDoc)) {
-                await flowDynamic('El número de documento ingresado no es válido. Intenta nuevamente.');
-                return gotoFlow(confirmarCitaDocumentoFlow);
-            }
-            await state.update({ numeroDoc });
-            return gotoFlow(confirmarCitaFlow);
-        }
-    );
+  .addAnswer('Para confirmar por favor digita el número de documento del paciente 🔢:',
+      { capture: true },
+      async (ctx, { state, gotoFlow, flowDynamic }) => {
+          const numeroDoc = sanitizeString(ctx.body, 20);
+          if (!isValidDocumentNumber(numeroDoc)) {
+              await flowDynamic('El número de documento ingresado no es válido. Intenta nuevamente.');
+              return gotoFlow(confirmarCitaDocumentoFlow);
+          }
+          await state.update({ numeroDoc });
+          return gotoFlow(confirmarCitaFlow);
+      }
+  );
 
 export { ejecutarPlantillaDiariaFlow, confirmarCitaFlow, confirmarCitaDocumentoFlow };
