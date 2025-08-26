@@ -147,8 +147,8 @@ const confirmarCitaFlow = addKeyword(EVENTS.ACTION)
         });
         return ctxFn.endFlow();
       } else {
-        await ctxFn.flowDynamic('❌ No fue posible confirmar tu cita. Intenta nuevamente o contacta soporte.');
-        return ctxFn.endFlow();
+        await ctxFn.flowDynamic('No se han encontrado citas relacionadas a este número de documento. Intentalo nuevamente');
+        return ctxFn.gotoFlow(confirmarCitaDocumentoFlow);
       }
 
     } catch (error) {
