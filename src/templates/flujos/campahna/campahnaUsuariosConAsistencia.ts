@@ -93,6 +93,15 @@ const ejecutarPlantillaUsuariosConAsistenciaFlow = addKeyword(['conasistencia'])
         } catch (error) {
           console.error(`❌ Error procesando cita de ${cita.nombre_paciente}:`, error);
           errores++;
+          try {
+            await registrarActividadBot('campahna_recuperacion_con_asistencia', cita.telefono_paciente, {
+              estado: 'error_excepcion',
+              resultado: 'error',
+              error_detalle: error instanceof Error ? error.message : String(error),
+              campahna: 'meta-usuarios-con-asistencia-' + fechaFormateada,
+              fecha_campahna: fechaFormateada,
+            });
+          } catch (e) { console.error('Error registrando error en DB', e) }
         }
       }
 

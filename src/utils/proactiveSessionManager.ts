@@ -10,13 +10,17 @@ const SESSION_TIMEOUT_MS = 60 * 60 * 1000; // 1 hora
 
 const META_MESSAGE_LIMIT_MS = 12 * 60 * 60 * 1000; // 12 horas
 import { registrarActividadBot } from '../services/apiService';
+// ... (existing imports)
 
+// ...
+
+// Enviar mensaje de timeout al usuario
 
 // Estructura: { [userId]: { lastActivity: number, isActive: boolean, timerId?: NodeJS.Timeout } }
-let userSessions: Record<string, { 
-  lastActivity: number, 
-  isActive: boolean, 
-  timerId?: NodeJS.Timeout 
+let userSessions: Record<string, {
+  lastActivity: number,
+  isActive: boolean,
+  timerId?: NodeJS.Timeout
 }> = {};
 
 // Referencia al bot para enviar mensajes proactivos
@@ -27,7 +31,7 @@ function loadUserSessions() {
     try {
       const data = fs.readFileSync(SESSIONS_DB_PATH, 'utf-8');
       const sessions = JSON.parse(data) || {};
-      
+
       // Al cargar, no recuperamos los timers (se perdieron al reiniciar)
       // Solo cargamos los datos de sesión
       for (const [userId, sessionData] of Object.entries(sessions)) {
@@ -45,14 +49,14 @@ function loadUserSessions() {
 function saveUserSessions() {
   // Guardamos solo los datos persistibles (no los timers)
   const persistibleSessions: Record<string, { lastActivity: number, isActive: boolean }> = {};
-  
+
   for (const [userId, session] of Object.entries(userSessions)) {
     persistibleSessions[userId] = {
       lastActivity: session.lastActivity,
       isActive: session.isActive
     };
   }
-  
+
   fs.writeFileSync(SESSIONS_DB_PATH, JSON.stringify(persistibleSessions), 'utf-8');
 }
 
@@ -91,13 +95,16 @@ async function closeSessionProactively(userId: string): Promise<void> {
   }
 
   // Enviar mensaje de timeout al usuario
+  // Enviar mensaje de timeout al usuario
+  // Enviar mensaje de timeout al usuario
+  // Enviar mensaje de timeout al usuario
   /**if (botInstance) {
     try {
-      const timeoutMessage = 
+      const timeoutMessage =
         '⏰ Tu sesión ha expirado por inactividad de más de 1 hora.\n\n' +
         '🌟 Agradecemos tu preferencia. Nuestra misión es orientarte en cada momento de tu vida.\n\n' +
         'Recuerda que cuando lo desees puedes escribir *"hola"* para iniciar una nueva conversación.';
-      
+
       await botInstance.sendMessage(userId, timeoutMessage);
       //console.log(`✅ Sesión cerrada proactivamente para usuario: ${userId}`);
     } catch (error) {
@@ -142,14 +149,14 @@ export function updateUserActivity(userId: string): void {
  */
 export function isSessionExpired(userId: string): boolean {
   const userSession = userSessions[userId];
-  
+
   if (!userSession || !userSession.isActive) {
     return true; // No hay sesión activa, consideramos expirada
   }
-  
+
   const now = Date.now();
   const timeSinceLastActivity = now - userSession.lastActivity;
-  
+
   return timeSinceLastActivity > SESSION_TIMEOUT_MS;
 }
 
@@ -164,7 +171,7 @@ export function closeUserSession(userId: string): void {
     if (session.timerId) {
       clearTimeout(session.timerId);
     }
-    
+
     session.isActive = false;
     session.timerId = undefined;
     saveUserSessions();
@@ -178,15 +185,15 @@ export function closeUserSession(userId: string): void {
  */
 export function getRemainingSessionTime(userId: string): number {
   const userSession = userSessions[userId];
-  
+
   if (!userSession || !userSession.isActive) {
     return 0;
   }
-  
+
   const now = Date.now();
   const timeSinceLastActivity = now - userSession.lastActivity;
   const remainingTime = SESSION_TIMEOUT_MS - timeSinceLastActivity;
-  
+
   return Math.max(0, Math.ceil(remainingTime / (60 * 1000))); // en minutos
 }
 
@@ -199,11 +206,11 @@ export function restoreActiveTimers(): void {
   let restoredCount = 0;
   let expiredSafeCount = 0;
   let expiredUnsafeCount = 0;
-  
+
   for (const [userId, session] of Object.entries(userSessions)) {
     if (session.isActive) {
       const timeSinceLastActivity = now - session.lastActivity;
-      
+
       if (timeSinceLastActivity >= SESSION_TIMEOUT_MS) {
         // La sesión ya debería haber expirado, cerrarla inmediatamente
         if (timeSinceLastActivity > META_MESSAGE_LIMIT_MS) {
@@ -215,7 +222,7 @@ export function restoreActiveTimers(): void {
         } else {
           // Menos de 12 horas: cerrar con mensaje
           closeSessionProactively(userId);
-          
+
           expiredSafeCount++;
         }
       } else {
@@ -224,7 +231,7 @@ export function restoreActiveTimers(): void {
         const timerId = setTimeout(() => {
           closeSessionProactively(userId);
         }, remainingTime);
-        
+
         session.timerId = timerId;
         restoredCount++;
       }
@@ -233,7 +240,7 @@ export function restoreActiveTimers(): void {
   if (expiredUnsafeCount > 0) {
     saveUserSessions();
   }
-  
+
   console.log(`🔄 Timers restaurados para ${restoredCount} sesiones activas`);
 }
 
@@ -243,7 +250,7 @@ export function restoreActiveTimers(): void {
 export function cleanupExpiredSessions(): void {
   const now = Date.now();
   let hasChanges = false;
-  
+
   for (const userId in userSessions) {
     const session = userSessions[userId];
     if (session.isActive && (now - session.lastActivity) > SESSION_TIMEOUT_MS) {
@@ -251,7 +258,7 @@ export function cleanupExpiredSessions(): void {
       hasChanges = true;
     }
   }
-  
+
   if (hasChanges) {
     console.log('🧹 Sesiones expiradas limpiadas');
   }
@@ -260,11 +267,11 @@ export function cleanupExpiredSessions(): void {
 export function cleanupOldSessionsWithoutNotification(): void {
   const now = Date.now();
   let cleanedCount = 0;
-  
+
   for (const userId in userSessions) {
     const session = userSessions[userId];
     const timeSinceLastActivity = now - session.lastActivity;
-    
+
     // Si han pasado más de 12 horas, marcar como inactiva sin enviar mensaje
     if (session.isActive && timeSinceLastActivity > META_MESSAGE_LIMIT_MS) {
       session.isActive = false;
@@ -276,7 +283,7 @@ export function cleanupOldSessionsWithoutNotification(): void {
       console.log(`🧹 Sesión limpiada silenciosamente: ${userId} (${Math.floor(timeSinceLastActivity / (60 * 60 * 1000))} horas)`);
     }
   }
-  
+
   if (cleanedCount > 0) {
     saveUserSessions();
     console.log(`🧹 ${cleanedCount} sesiones antiguas limpiadas sin notificación para evitar alertas de Meta`);

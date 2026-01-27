@@ -14,6 +14,8 @@ export function isValidPhoneNumber(input: string): boolean {
   return /^\d{10,15}$/.test(input);
 }
 
+
+
 export function isValidDocumentNumber(input: string): boolean {
   // Solo números y letras, longitud razonable
   return /^[a-zA-Z0-9]{5,20}$/.test(input);
