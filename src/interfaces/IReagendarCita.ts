@@ -44,16 +44,17 @@ export interface IAgendaResponse {
 }
 
 export interface AgendaPendienteResponse {
-  cita_id: string;
-  nombre_paciente: string;
-  profesional: string;
-  especialidad: string;
-  fecha_cita: string;
-  hora_cita: string;
-  convenio?: string;
-  telefono_paciente: string;
-  estado: string;
-  administradora?: string;
+    cita_id: string;
+    nombre_paciente: string;
+    profesional: string;
+    especialidad: string;
+    fecha_cita: string;
+    hora_cita: string;
+    convenio?: string;
+    telefono_paciente: string;
+    estado: string;
+    administradora?: string;
+    tipo_cita?: number;
 }
 
 export interface ICrearCita {
@@ -71,13 +72,13 @@ export interface ICrearCita {
     tipo_usuario_paciente: string;
 }
 
-export interface ICrearAgendaResponse{
+export interface ICrearAgendaResponse {
     sede: string;
     profesional: string;
     especialidad: string;
     horaFinal: string;
     tipoDocumentoPaciente: string;
-    documentoPaciente: string;  
+    documentoPaciente: string;
     nombrePaciente: string;
     telefonoPaciente: string;
     mailPaciente: string;
