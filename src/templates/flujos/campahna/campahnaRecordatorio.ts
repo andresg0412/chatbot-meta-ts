@@ -29,7 +29,7 @@ const ejecutarCampahnaRecordatorioFlow = addKeyword(['recordatorio'])
         }
 
         // 2. Extraer y validar la fecha del comando
-        const fechaFormateada = extraerFechaDelComando(mensajeCompleto);
+        const fechaFormateada = extraerFechaDelComando(mensajeCompleto, 'recordatorio');
         console.log(`Fecha extraída: ${fechaFormateada}`);
 
         if (!fechaFormateada) {
