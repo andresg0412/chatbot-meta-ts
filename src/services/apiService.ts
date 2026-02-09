@@ -226,11 +226,11 @@ export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse)
                         "type": "body",
                         "parameters": [
                             { "type": "text", "text": `${cita.nombre_paciente}` },
-                            { "type": "text", "text": "Dianita" },
                             { "type": "text", "text": `${cita.especialidad}` },
                             { "type": "text", "text": `${fechaFormateada}` },
-                            { "type": "text", "text": `${cita.profesional}` },
                             { "type": "text", "text": `${cita.hora_cita}` },
+                            { "type": "text", "text": `${cita.profesional}` },
+                            { "type": "text", "text": `${cita.tipo_cita === 1 ? 'Presencial' : 'Virtual'}` },
                             { "type": "text", "text": `${administradora}` }
                         ]
                     }
