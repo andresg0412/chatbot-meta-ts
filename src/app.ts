@@ -6,6 +6,7 @@ import "dotenv/config";
 import templates from './templates';
 import { setBotInstance, restoreActiveTimers } from './utils/proactiveSessionManager';
 import { cleanupOldSessionsWithoutNotification } from './utils';
+import { executeDailyCampaign } from './controllers/campaignController';
 
 const PORT = process.env.PORT ?? 3008
 
@@ -36,9 +37,9 @@ const main = async () => {
             }
         }
     };
-    
+
     setBotInstance(botForTimeout);
-    
+
     console.log('🚀 Sistema de timeout proactivo inicializado');
 
     // PASO 1: Limpiar sesiones muy antiguas ANTES de restaurar timers
@@ -46,7 +47,7 @@ const main = async () => {
 
     // PASO 2: Restaurar timers de sesiones activas después de reinicio
     restoreActiveTimers();
-    
+
     // PASO 3: Programar limpieza periódica para evitar acumulación
     setInterval(cleanupOldSessionsWithoutNotification, 2 * 60 * 60 * 1000); // Cada 2 horas
 
@@ -89,6 +90,12 @@ const main = async () => {
             res.writeHead(200, { 'Content-Type': 'application/json' })
             return res.end(JSON.stringify({ status: 'ok', number, intent }))
         })
+    )
+
+    // Endpoint para ejecutar campaña diaria (cron)
+    adapterProvider.server.post(
+        '/v1/campaigns/daily',
+        handleCtx(executeDailyCampaign)
     )
 
     httpServer(+PORT)
