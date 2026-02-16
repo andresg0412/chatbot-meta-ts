@@ -95,7 +95,7 @@ const main = async () => {
     // Endpoint para ejecutar campaña diaria (cron)
     adapterProvider.server.post(
         '/v1/campaigns/daily',
-        handleCtx(executeDailyCampaign)
+        executeDailyCampaign
     )
 
     httpServer(+PORT)
