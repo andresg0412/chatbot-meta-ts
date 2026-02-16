@@ -22,12 +22,15 @@ export const executeDailyCampaign = async (req, res) => {
         const optionsDate: Intl.DateTimeFormatOptions = {
             timeZone: 'America/Bogota',
             year: 'numeric',
-            month: 'numeric',
-            day: 'numeric'
+            month: '2-digit',
+            day: '2-digit'
         };
 
         const currentHour = parseInt(new Intl.DateTimeFormat('en-US', optionsTime).format(now));
-        const fechaFormateada = new Intl.DateTimeFormat('es-CO', optionsDate).format(now);
+
+        // Generar fecha en formato YYYY-MM-DD para el backend
+        const dateParts = new Intl.DateTimeFormat('en-CA', optionsDate).format(now);
+        const fechaFormateada = dateParts; // en-CA locale genera formato YYYY-MM-DD
         // This usually gives 'd/m/yyyy' or 'dd/mm/yyyy' depending on locale implementation in Node.
         // If Node runs in UTC it might be different date. 
         // PRO TIP: To be safe about timezone "current daily", we should probably use a library or offset.
@@ -39,7 +42,6 @@ export const executeDailyCampaign = async (req, res) => {
         //debemos es obtener las citas con estado confirmado
 
         const citasConfirmadasDia: AgendaPendienteResponse[] = await obtenerCitasConfirmadas(fechaFormateada);
-
         //de las citas obtenidas debemos obtener solo las que la hora sea 2 horas posterior a la actual, ejemplo si son las 9:10 am, entonces se obtienen solo las citas entre las 11:00 y las 11:59
 
         const citasFiltradas = citasConfirmadasDia.filter(cita => {
