@@ -7,6 +7,8 @@ import templates from './templates';
 import { setBotInstance, restoreActiveTimers } from './utils/proactiveSessionManager';
 import { cleanupOldSessionsWithoutNotification } from './utils';
 import { executeDailyCampaign } from './controllers/campaignController';
+import { executeReminderCampaign } from './controllers/reminderCampaignController';
+import { executeConfirmationCampaign } from './controllers/executeCampaignController';
 
 const PORT = process.env.PORT ?? 3008
 
@@ -96,6 +98,18 @@ const main = async () => {
     adapterProvider.server.post(
         '/v1/campaigns/daily',
         executeDailyCampaign
+    )
+
+    // Endpoint para ejecutar campaña de recordatorio (cron o manual) 48 horas
+    adapterProvider.server.post(
+        '/v1/campaigns/reminder',
+        executeReminderCampaign
+    )
+
+    // Endpoint para ejecutar campaña de confirmación (cron o manual) 24 horas
+    adapterProvider.server.post(
+        '/v1/campaigns/execute',
+        executeConfirmationCampaign
     )
 
     httpServer(+PORT)

@@ -7,9 +7,10 @@ import {
   Cita
 } from '../../../services/citasService';
 import {
-  obtenerCitasPendientesPorFecha,
+  obtenerCitasProgramadas,
   enviarPlantillaConfirmacion,
-  confirmarCitaCampahna
+  confirmarCitaCampahna,
+  enviarPlantillaRecordatorio24h
 } from '../../../services/apiService';
 
 import { esNumeroAutorizado } from '../../../constants/authConstants';
@@ -19,6 +20,155 @@ import { esBotHabilitado } from '../../../services/citasService';
 import { registrarActividadBot } from '../../../services/apiService';
 import { sanitizeString, isValidDocumentNumber } from '../../../utils/sanitize';
 
+/**
+ * Función core que ejecuta la campaña de confirmación para una fecha específica.
+ * Puede ser llamada desde el flujo de WhatsApp o desde un endpoint HTTP.
+ * @param fechaFormateada - Fecha en formato DD/MM/YYYY
+ * @param origen - Origen de la ejecución ('whatsapp' o 'endpoint')
+ * @returns Objeto con resultados de la ejecución
+ */
+export const ejecutarCampahnaConfirmacionPorFecha = async (
+  fechaFormateada: string,
+  origen: 'whatsapp' | 'endpoint' = 'whatsapp'
+) => {
+  try {
+    console.log(`🔄 Ejecutando campaña de confirmación para fecha: ${fechaFormateada} (origen: ${origen})`);
+
+    // 1. Consultar citas pendientes para la fecha especificada
+    const citasProgramadas = await obtenerCitasProgramadas(fechaFormateada);
+
+    if (citasProgramadas.length === 0) {
+      console.log(`ℹ️ No se encontraron citas programadas para la fecha ${fechaFormateada}`);
+      return {
+        success: true,
+        fecha: fechaFormateada,
+        total_procesados: 0,
+        exitosos: 0,
+        errores: 0,
+        mensaje: `No se encontraron citas programadas para la fecha ${fechaFormateada}`
+      };
+    }
+
+    console.log(`📋 Se encontraron ${citasProgramadas.length} citas programadas. Iniciando envío...`);
+
+    // 2. Procesar cada cita
+    let exitosos = 0;
+    let errores = 0;
+    const resultadosDetalle = [];
+
+    for (const cita of citasProgramadas) {
+      try {
+        console.log('Estado Cita: ', cita.estado);
+        let response;
+        const resultado = {
+          paciente: cita.nombre_paciente,
+          telefono: cita.telefono_paciente,
+          estado: 'error'
+        };
+        if (cita.estado === 'confirmado') {
+          response = await enviarPlantillaRecordatorio24h(cita);
+          if (response.exito) {
+            await registrarActividadBot('campahna_envio_confirmados_24hrs', cita.telefono_paciente, {
+              estado: 'enviado',
+              resultado: 'exitoso',
+              campahna: 'meta-' + fechaFormateada,
+              fecha_campahna: fechaFormateada,
+              origen
+            });
+            exitosos++;
+            resultado.estado = 'exitoso';
+          } else {
+            await registrarActividadBot('campahna_envio_confirmados_24hrs', cita.telefono_paciente, {
+              estado: 'no_enviado',
+              resultado: 'error',
+              campahna: 'meta-' + fechaFormateada,
+              fecha_campahna: fechaFormateada,
+              origen
+            });
+            errores++;
+          }
+        } else if (cita.estado === 'pendiente') {
+          response = await enviarPlantillaConfirmacion(cita);
+          if (response.exito) {
+            await registrarActividadBot('campahna_envio', cita.telefono_paciente, {
+              estado: 'enviado',
+              resultado: 'exitoso',
+              campahna: 'meta-' + fechaFormateada,
+              fecha_campahna: fechaFormateada,
+              origen
+            });
+            exitosos++;
+            resultado.estado = 'exitoso';
+          } else {
+            await registrarActividadBot('campahna_envio', cita.telefono_paciente, {
+              estado: 'no_enviado',
+              resultado: 'error',
+              campahna: 'meta-' + fechaFormateada,
+              fecha_campahna: fechaFormateada,
+              origen
+            });
+            errores++;
+          }
+        }
+
+        resultadosDetalle.push(resultado);
+
+        // Pausa entre envíos
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+      } catch (error) {
+        console.error(`❌ Error procesando cita de ${cita.nombre_paciente}:`, error);
+        errores++;
+        try {
+          await registrarActividadBot('campahna_envio', cita.telefono_paciente, {
+            estado: 'error_excepcion',
+            resultado: 'error',
+            error_detalle: error instanceof Error ? error.message : String(error),
+            campahna: 'meta-' + fechaFormateada,
+            fecha_campahna: fechaFormateada,
+            origen
+          });
+        } catch (e) {
+          console.error('Error registrando error en DB', e);
+        }
+        resultadosDetalle.push({
+          paciente: cita.nombre_paciente,
+          telefono: cita.telefono_paciente,
+          estado: 'error_excepcion',
+          error: String(error)
+        });
+      }
+    }
+
+    // 3. Registrar resumen final
+    await registrarActividadBot('campahna_envio', 'EJECUCION_CAMPAHNA', {
+      estado: 'finalizado',
+      campahna: 'meta-' + fechaFormateada,
+      fecha_campahna: fechaFormateada,
+      envios_exitosos: exitosos,
+      envios_errores: errores,
+      total_procesados: citasProgramadas.length,
+      origen
+    });
+
+    return {
+      success: true,
+      fecha: fechaFormateada,
+      total_procesados: citasProgramadas.length,
+      exitosos,
+      errores,
+      detalles: resultadosDetalle
+    };
+
+  } catch (error) {
+    console.error('Error ejecutando campaña:', error);
+    return {
+      success: false,
+      error: 'Error interno al procesar la campaña',
+      detalle: error instanceof Error ? error.message : String(error)
+    };
+  }
+};
 
 const ejecutarPlantillaDiariaFlow = addKeyword(['ejecutar'])
   .addAction(async (ctx, ctxFn) => {
@@ -38,7 +188,7 @@ const ejecutarPlantillaDiariaFlow = addKeyword(['ejecutar'])
       return ctxFn.endFlow();
     }
 
-    // 2. Extraer y validar la fecha del comando
+    // Extraer y validar la fecha del comando
     const fechaFormateada = extraerFechaDelComando(mensajeCompleto);
     console.log(`Fecha extraída: ${fechaFormateada}`);
 
@@ -52,85 +202,32 @@ const ejecutarPlantillaDiariaFlow = addKeyword(['ejecutar'])
 
     await ctxFn.flowDynamic(`🔄 Procesando campaña para la fecha: ${fechaFormateada}`);
 
-    try {
-      // 3. Consultar citas pendientes para la fecha especificada
-      const citasPendientes = await obtenerCitasPendientesPorFecha(fechaFormateada);
+    // Ejecutar la campaña usando la función extraída
+    const resultado = await ejecutarCampahnaConfirmacionPorFecha(fechaFormateada, 'whatsapp');
 
-      if (citasPendientes.length === 0) {
-        await ctxFn.flowDynamic(`ℹ️ No se encontraron citas pendientes para la fecha ${fechaFormateada}`);
-        return;
-      }
-
-      await ctxFn.flowDynamic(`📋 Se encontraron ${citasPendientes.length} citas pendientes. Iniciando envío...`);
-
-      // 4. Procesar cada cita
-      let exitosos = 0;
-      let errores = 0;
-
-      for (const cita of citasPendientes) {
-        try {
-          //enviar plantilla con metodo POST
-          const response = await enviarPlantillaConfirmacion(cita);
-          if (response.exito) {
-            await registrarActividadBot('campahna_envio', cita.telefono_paciente, {
-              estado: 'enviado',
-              resultado: 'exitoso',
-              campahna: 'meta-' + fechaFormateada,
-              fecha_campahna: fechaFormateada,
-            });
-            exitosos++;
-          } else {
-            await registrarActividadBot('campahna_envio', cita.telefono_paciente, {
-              estado: 'no_enviado',
-              resultado: 'error',
-              campahna: 'meta-' + fechaFormateada,
-              fecha_campahna: fechaFormateada,
-            });
-            errores++;
-          }
-          await new Promise(resolve => setTimeout(resolve, 1000));
-
-        } catch (error) {
-          console.error(`❌ Error procesando cita de ${cita.nombre_paciente}:`, error);
-          errores++;
-          try {
-            await registrarActividadBot('campahna_envio', cita.telefono_paciente, {
-              estado: 'error_excepcion',
-              resultado: 'error',
-              error_detalle: error instanceof Error ? error.message : String(error),
-              campahna: 'meta-' + fechaFormateada,
-              fecha_campahna: fechaFormateada,
-            });
-          } catch (e) { console.error('Error registrando error en DB', e) }
-        }
-      }
-
-      // 5. Reporte final
-      const mensaje = `
-📊 *Reporte de Campaña Completado*
-📅 Fecha: ${fechaFormateada}
-✅ Exitosos: ${exitosos}
-❌ Errores: ${errores}
-📱 Total procesados: ${citasPendientes.length}
-      `.trim();
-
-      await ctxFn.flowDynamic(mensaje);
-      await registrarActividadBot('campahna_envio', 'EJECUCION_CAMPAHNA', {
-        estado: 'finalizado',
-        campahna: 'meta-' + fechaFormateada,
-        fecha_campahna: fechaFormateada,
-        envios_exitosos: exitosos,
-        envios_errores: errores,
-        total_procesados: citasPendientes.length
-      });
-
-    } catch (error) {
-      console.error('Error ejecutando campaña:', error);
+    if (!resultado.success) {
       await ctxFn.flowDynamic(
         '❌ Error interno al procesar la campaña. ' +
         'Revisa los logs para más detalles.'
       );
+      return;
     }
+
+    if (resultado.total_procesados === 0) {
+      await ctxFn.flowDynamic(`ℹ️ ${resultado.mensaje}`);
+      return;
+    }
+
+    // Reporte final
+    const mensaje = `
+📊 *Reporte de Campaña Completado*
+📅 Fecha: ${resultado.fecha}
+✅ Exitosos: ${resultado.exitosos}
+❌ Errores: ${resultado.errores}
+📱 Total procesados: ${resultado.total_procesados}
+    `.trim();
+
+    await ctxFn.flowDynamic(mensaje);
   });
 
 /**

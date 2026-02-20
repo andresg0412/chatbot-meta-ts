@@ -198,6 +198,17 @@ export async function obtenerCitasPendientesPorFecha(fecha: string): Promise<Age
     }
 }
 
+export async function obtenerCitasProgramadas(fecha: string): Promise<AgendaPendienteResponse[] | []> {
+    try {
+        const url = `${API_BACKEND_URL}/chatbot/citasprogramadas?fecha=${encodeURIComponent(fecha)}`;
+        const response = await axios.get(url);
+        return response.data.data || [];
+    } catch (error) {
+        console.error('Error obteniendo citas programadas:', error);
+        return [];
+    }
+}
+
 export async function obtenerCitasConfirmadas(fecha: string): Promise<AgendaPendienteResponse[] | []> {
     try {
         const url = `${API_BACKEND_URL}/chatbot/citasconfirmadas?fecha=${encodeURIComponent(fecha)}`;
@@ -243,6 +254,63 @@ export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse)
                             { "type": "text", "text": `${cita.profesional}` },
                             { "type": "text", "text": `${cita.tipo_cita === 1 ? 'Presencial' : 'Virtual'}` },
                             { "type": "text", "text": `${administradora}` }
+                        ]
+                    }
+                ]
+            }
+        };
+        const response = await axios.post(url, body, {
+            headers: {
+                'Authorization': `Bearer ${process.env.jwtToken}`,
+                'Content-Type': 'application/json'
+            },
+            timeout: 15000 // 15 segundos timeout
+        });
+        console.log('Respuesta de Meta:', response.data);
+        if (response.data.messages && response.data.messages.length > 0) {
+            console.log('Plantilla enviada correctamente:', response.data);
+        } else {
+            console.error('Error al enviar plantilla:', response.data);
+        }
+        if (response.data.messages[0].message_status === 'accepted') {
+            console.log(`Plantilla enviada exitosamente a ${cita.nombre_paciente} (${cita.telefono_paciente})`);
+            return { exito: true };
+        }
+        return { exito: false };
+    } catch (error) {
+        console.error('Error enviando plantilla:', error);
+        return { exito: false };
+    }
+}
+
+export async function enviarPlantillaRecordatorio24h(cita: AgendaPendienteResponse): Promise<{ exito: boolean }> {
+    try {
+        // Formatear la fecha, aparece en formato YYYY-MM-ddTHH:mm:ss.SSSZ convertir en formato '31 de julio de 2025'
+        const fechaCita = new Date(cita.fecha_cita);
+        const fechaFormateada = fechaCita.toLocaleDateString('es-CO', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric'
+        });
+
+        const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
+        const administradora = cita.administradora ? cita.administradora : 'PARTICULAR';
+        const body = {
+            "messaging_product": "whatsapp",
+            "to": `${cita.telefono_paciente}`,
+            "type": "template",
+            "template": {
+                "name": `${process.env.NOMBRE_PLANTILLA_META_CONFIRMADO_24H}`,
+                "language": {
+                    "code": "es_CO"
+                },
+                "components": [
+                    {
+                        "type": "body",
+                        "parameters": [
+                            { "type": "text", "text": `${cita.nombre_paciente}` },
+                            { "type": "text", "text": `${fechaFormateada}` },
+                            { "type": "text", "text": `${cita.hora_cita}` }
                         ]
                     }
                 ]
