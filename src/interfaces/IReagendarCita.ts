@@ -57,6 +57,20 @@ export interface AgendaPendienteResponse {
     tipo_cita?: number;
 }
 
+export interface AgendaProgramadaResponse {
+    cita_id: string;
+    nombre_paciente: string;
+    profesional: string;
+    especialidad: string;
+    fecha_cita: string;
+    hora_cita: string;
+    convenio?: string;
+    telefono_paciente: string;
+    estado_agenda: string;
+    administradora?: string;
+    tipo_cita?: number;
+}
+
 export interface ICrearCita {
     especialidad: string;
     fecha_cita: string;

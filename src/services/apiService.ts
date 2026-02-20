@@ -2,7 +2,7 @@ import axios from 'axios';
 import { metricCita } from '../utils/metrics';
 import { IPaciente } from '../interfaces/IPacienteIn';
 import { IReagendarCita, IAgendaResponse, ICrearCita } from '../interfaces/IReagendarCita';
-import { AgendaPendienteResponse } from '../interfaces/IReagendarCita';
+import { AgendaPendienteResponse, AgendaProgramadaResponse } from '../interfaces/IReagendarCita';
 
 export const API_BACKEND_URL = process.env.API_BACKEND_URL;
 
@@ -198,7 +198,7 @@ export async function obtenerCitasPendientesPorFecha(fecha: string): Promise<Age
     }
 }
 
-export async function obtenerCitasProgramadas(fecha: string): Promise<AgendaPendienteResponse[] | []> {
+export async function obtenerCitasProgramadas(fecha: string): Promise<AgendaProgramadaResponse[] | []> {
     try {
         const url = `${API_BACKEND_URL}/chatbot/citasprogramadas?fecha=${encodeURIComponent(fecha)}`;
         const response = await axios.get(url);
@@ -220,7 +220,7 @@ export async function obtenerCitasConfirmadas(fecha: string): Promise<AgendaPend
     }
 }
 
-export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse): Promise<{ exito: boolean }> {
+export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse | AgendaProgramadaResponse): Promise<{ exito: boolean }> {
     try {
         // Formatear la fecha, aparece en formato YYYY-MM-ddTHH:mm:ss.SSSZ convertir en formato '31 de julio de 2025'
         const fechaCita = new Date(cita.fecha_cita);
@@ -283,7 +283,7 @@ export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse)
     }
 }
 
-export async function enviarPlantillaRecordatorio24h(cita: AgendaPendienteResponse): Promise<{ exito: boolean }> {
+export async function enviarPlantillaRecordatorio24h(cita: AgendaProgramadaResponse): Promise<{ exito: boolean }> {
     try {
         // Formatear la fecha, aparece en formato YYYY-MM-ddTHH:mm:ss.SSSZ convertir en formato '31 de julio de 2025'
         const fechaCita = new Date(cita.fecha_cita);

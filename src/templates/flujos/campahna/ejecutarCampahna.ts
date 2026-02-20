@@ -58,14 +58,14 @@ export const ejecutarCampahnaConfirmacionPorFecha = async (
 
     for (const cita of citasProgramadas) {
       try {
-        console.log('Estado Cita: ', cita.estado);
+        console.log('Estado Cita: ', cita.estado_agenda);
         let response;
         const resultado = {
           paciente: cita.nombre_paciente,
           telefono: cita.telefono_paciente,
           estado: 'error'
         };
-        if (cita.estado === 'confirmado') {
+        if (cita.estado_agenda === 'Confirmado') {
           response = await enviarPlantillaRecordatorio24h(cita);
           if (response.exito) {
             await registrarActividadBot('campahna_envio_confirmados_24hrs', cita.telefono_paciente, {
@@ -87,7 +87,7 @@ export const ejecutarCampahnaConfirmacionPorFecha = async (
             });
             errores++;
           }
-        } else if (cita.estado === 'pendiente') {
+        } else if (cita.estado_agenda === 'Pendiente') {
           response = await enviarPlantillaConfirmacion(cita);
           if (response.exito) {
             await registrarActividadBot('campahna_envio', cita.telefono_paciente, {
