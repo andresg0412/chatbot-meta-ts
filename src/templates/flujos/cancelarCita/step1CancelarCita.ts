@@ -4,7 +4,7 @@ import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 import { registrarActividadBot } from '../../../services/apiService';
 
 
-const step1CencelarCita = addKeyword(['280525004', '4', 'cancelar'])
+const step1CencelarCita = addKeyword(['280525004', '4', 'cancelar', 'Cancelo', 'Cancelar', 'cancelo'])
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
         // Verificar si la sesión ha expirado por inactividad
         const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
