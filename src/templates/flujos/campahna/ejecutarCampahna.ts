@@ -277,4 +277,52 @@ const confirmarCitaDocumentoFlow = addKeyword(['Confirmar cita', 'Confirmar', 'c
     }
   );
 
-export { ejecutarPlantillaDiariaFlow, confirmarCitaFlow, confirmarCitaDocumentoFlow };
+
+/**
+ * Flow para confirmar citas (respuesta a plantillas)
+ */
+const confirmarCitaCampahna48Flow = addKeyword(EVENTS.ACTION)
+  .addAction(async (ctx, ctxFn) => {
+    const celular = ctx.from;
+    const fechaFormateada = new Date().toISOString().split('T')[0];
+    const numeroDoc = ctxFn.state.getMyState().numeroDoc;
+    try {
+      const response = await confirmarCitaCampahna(celular, numeroDoc);
+
+      if (response) {
+        await ctxFn.flowDynamic('✅ ¡Tu cita ha sido confirmada exitosamente!');
+        await ctxFn.flowDynamic('Gracias por confirmar tu cita. Si necesitas más ayuda, no dudes en preguntar. ¡Feliz día!');
+        await registrarActividadBot('campahna_recordatorio', celular, {
+          estado: 'confirmado',
+          resultado: 'exitoso',
+          campahna: 'meta-' + fechaFormateada,
+          fecha_campahna: fechaFormateada,
+        });
+        return ctxFn.endFlow();
+      } else {
+        await ctxFn.flowDynamic('No se han encontrado citas relacionadas a este número de documento. Intentalo nuevamente');
+        return ctxFn.gotoFlow(confirmarCitaDocumentoFlow);
+      }
+
+    } catch (error) {
+      console.error('Error confirmando cita:', error);
+      await ctxFn.flowDynamic('❌ Error interno. Intenta nuevamente.');
+      return ctxFn.endFlow();
+    }
+  });
+
+const confirmarCitaDocumentoCampahna48Flow = addKeyword(['Confirmo'])
+  .addAnswer('Para confirmar por favor digita el número de documento del paciente 🔢:',
+    { capture: true },
+    async (ctx, { state, gotoFlow, flowDynamic }) => {
+      const numeroDoc = sanitizeString(ctx.body, 20);
+      if (!isValidDocumentNumber(numeroDoc)) {
+        await flowDynamic('El número de documento ingresado no es válido. Intenta nuevamente.');
+        return gotoFlow(confirmarCitaDocumentoFlow);
+      }
+      await state.update({ numeroDoc });
+      return gotoFlow(confirmarCitaCampahna48Flow);
+    }
+  );
+
+export { ejecutarPlantillaDiariaFlow, confirmarCitaFlow, confirmarCitaDocumentoFlow, confirmarCitaDocumentoCampahna48Flow, confirmarCitaCampahna48Flow };
