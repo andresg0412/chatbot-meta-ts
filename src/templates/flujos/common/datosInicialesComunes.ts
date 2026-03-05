@@ -3,12 +3,6 @@ import { datosinicialesComunes2 } from './datosinicialesComunes2';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 
 const datosinicialesComunes = addKeyword(EVENTS.ACTION)
-    .addAction(async (ctx, { flowDynamic, endFlow }) => {
-        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
-        if (!sessionValid) {
-            return endFlow();
-        }
-    })
     .addAction(async (ctx, { provider }) => {
         const list = {
             header: { type: 'text', text: 'Tipo de documento' },

@@ -5,12 +5,6 @@ import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 import { closeUserSession } from '../../../utils/proactiveSessionManager';
 
 const stepOpcionReprogramar = addKeyword(EVENTS.ACTION)
-    .addAction(async (ctx, { flowDynamic, endFlow }) => {
-        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
-        if (!sessionValid) {
-            return endFlow();
-        }
-    })
     .addAnswer(
         '¿Que deseas hacer?',
         {
