@@ -4,12 +4,6 @@ import { sanitizeString } from '../../../utils/sanitize';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 
 const step6CancelarCita = addKeyword(EVENTS.ACTION)
-    .addAction(async (ctx, { flowDynamic, endFlow }) => {
-        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
-        if (!sessionValid) {
-            return endFlow();
-        }
-    })
     .addAction(async (ctx, { state, flowDynamic, gotoFlow }) => {
         const numeroCitaRaw = ctx.body;
         const numeroCita = parseInt(sanitizeString(numeroCitaRaw, 3), 10) || 0;

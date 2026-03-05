@@ -7,10 +7,6 @@ import { registrarActividadBot } from '../../../services/apiService';
 
 const step5CancelarCita = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
-        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
-        if (!sessionValid) {
-            return endFlow();
-        }
         await registrarActividadBot('chat_flujo_cancelar_cita', ctx.from, {
             step: 'consulta_citas_agendadas'
         });
