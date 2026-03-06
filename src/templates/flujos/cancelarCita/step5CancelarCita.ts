@@ -11,7 +11,7 @@ const step5CancelarCita = addKeyword(EVENTS.ACTION)
             step: 'consulta_citas_agendadas'
         });
     })
-    .addAnswer('Por favor, escribe el número de la cita que deseas cancelar 🗓️:',
+    .addAnswer('Por favor, escribe el *NÚMERO* de la cita que deseas cancelar 🗓️: (Ejemplo: 1)',
         { capture: true },
         async (ctx, { state, flowDynamic, gotoFlow }) => {
             const esperaSeleccionCita = state.getMyState().esperaSeleccionCita;
