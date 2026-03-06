@@ -1,5 +1,6 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { step7CancelarCita } from './step7CancelarCita';
+import { step5CancelarCita } from './step5CancelarCita';
 import { sanitizeString } from '../../../utils/sanitize';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 
@@ -10,7 +11,7 @@ const step6CancelarCita = addKeyword(EVENTS.ACTION)
         const { citasProgramadas } = state.getMyState();
         if (!citasProgramadas || !citasProgramadas[numeroCita - 1]) {
             await flowDynamic('Número de cita inválido. Por favor, intenta nuevamente.');
-            return gotoFlow(step6CancelarCita);
+            return gotoFlow(step5CancelarCita);
         }
         const citaSeleccionadaCancelar = citasProgramadas[numeroCita - 1];
         await state.update({ citaSeleccionadaCancelar });
