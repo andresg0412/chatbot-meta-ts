@@ -11,6 +11,7 @@ const step6CancelarCita = addKeyword(EVENTS.ACTION)
         const { citasProgramadas } = state.getMyState();
         if (!citasProgramadas || !citasProgramadas[numeroCita - 1]) {
             await flowDynamic('Número de cita inválido. Por favor, intenta nuevamente.');
+            await state.update({ esperaSeleccionCita: true });
             return gotoFlow(step5CancelarCita);
         }
         const citaSeleccionadaCancelar = citasProgramadas[numeroCita - 1];
