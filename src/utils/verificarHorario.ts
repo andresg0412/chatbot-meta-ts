@@ -1,8 +1,8 @@
 // Constantes de horario laboral
 export const WORKING_HOURS = {
   workDays: [1, 2, 3, 4, 5], // Lunes a Viernes
-  start: 8, // 8 AM
-  end: 18,  // 6 PM
+  start: 7, // 7 AM
+  end: 19,  // 7 PM
 };
 
 /**
@@ -11,8 +11,13 @@ export const WORKING_HOURS = {
  */
 export function isWorkingHours(): boolean {
   const now = new Date();
-  const hour = now.getHours();
-  const day = now.getDay(); // 0 = Domingo, 1 = Lunes, ..., 6 = Sábado
+  // Convertir hora actual a la zona horaria de Colombia
+  const bogotaTime = new Date(now.toLocaleString("en-US", { timeZone: "America/Bogota" }));
+
+  const hour = bogotaTime.getHours();
+  const day = bogotaTime.getDay(); // 0 = Domingo, 1 = Lunes, ..., 6 = Sábado
+  console.log("Hora actual en Bogotá:", hour);
+  console.log("Día actual en Bogotá:", day);
 
   if (!WORKING_HOURS.workDays.includes(day)) {
     return false;

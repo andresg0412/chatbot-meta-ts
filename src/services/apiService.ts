@@ -2,7 +2,7 @@ import axios from 'axios';
 import { metricCita } from '../utils/metrics';
 import { IPaciente } from '../interfaces/IPacienteIn';
 import { IReagendarCita, IAgendaResponse, ICrearCita } from '../interfaces/IReagendarCita';
-import { AgendaPendienteResponse } from '../interfaces/IReagendarCita';
+import { AgendaPendienteResponse, AgendaProgramadaResponse } from '../interfaces/IReagendarCita';
 
 export const API_BACKEND_URL = process.env.API_BACKEND_URL;
 
@@ -104,7 +104,7 @@ export async function crearPacienteDataBase(datosPaciente: any) {
     }
 }*/
 
-export async function consultarFechasCitasDisponibles(tipoConsulta:string, especialidad:string, profesionalId?: string): Promise<string[]> {
+export async function consultarFechasCitasDisponibles(tipoConsulta: string, especialidad: string, profesionalId?: string): Promise<string[]> {
     try {
         const tipoConsultaparse = tipoConsulta === 'Primera vez' ? 'primera' : 'control';
         const especialidadParse = especialidad === 'Psicología' ? 'Psicologia' : especialidad === 'NeuroPsicología' ? 'Neuropsicologia' : especialidad === 'Psiquiatría' ? 'Psiquiatria' : especialidad;
@@ -120,7 +120,7 @@ export async function consultarFechasCitasDisponibles(tipoConsulta:string, espec
         console.error('Error consultando fechas de citas disponibles:', error);
         return [];
     }
-    
+
 }
 
 export async function consultarCitasFecha(fecha: string, tipoConsulta: string, especialidad: string, profesionalId?: string) {
@@ -198,7 +198,29 @@ export async function obtenerCitasPendientesPorFecha(fecha: string): Promise<Age
     }
 }
 
-export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse): Promise<{ exito: boolean }> {
+export async function obtenerCitasProgramadas(fecha: string): Promise<AgendaProgramadaResponse[] | []> {
+    try {
+        const url = `${API_BACKEND_URL}/chatbot/citasprogramadas?fecha=${encodeURIComponent(fecha)}`;
+        const response = await axios.get(url);
+        return response.data.data || [];
+    } catch (error) {
+        console.error('Error obteniendo citas programadas:', error);
+        return [];
+    }
+}
+
+export async function obtenerCitasConfirmadas(fecha: string): Promise<AgendaPendienteResponse[] | []> {
+    try {
+        const url = `${API_BACKEND_URL}/chatbot/citasconfirmadas?fecha=${encodeURIComponent(fecha)}`;
+        const response = await axios.get(url);
+        return response.data.data || [];
+    } catch (error) {
+        console.error('Error obteniendo citas confirmadas:', error);
+        return [];
+    }
+}
+
+export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse | AgendaProgramadaResponse): Promise<{ exito: boolean }> {
     try {
         // Formatear la fecha, aparece en formato YYYY-MM-ddTHH:mm:ss.SSSZ convertir en formato '31 de julio de 2025'
         const fechaCita = new Date(cita.fecha_cita);
@@ -219,21 +241,21 @@ export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse)
             "template": {
                 "name": `${process.env.NOMBRE_PLANTILLA_META}`,
                 "language": {
-                "code": "es_CO"
+                    "code": "es_CO"
                 },
                 "components": [
-                {
-                    "type": "body",
-                    "parameters": [
-                    { "type": "text", "text": `${cita.nombre_paciente}` },
-                    { "type": "text", "text": "Dianita" },
-                    { "type": "text", "text": `${cita.especialidad}` },
-                    { "type": "text", "text": `${fechaFormateada}` },
-                    { "type": "text", "text": `${cita.profesional}` },
-                    { "type": "text", "text": `${cita.hora_cita}` },
-                    { "type": "text", "text": `${administradora}` }
-                    ]
-                }
+                    {
+                        "type": "body",
+                        "parameters": [
+                            { "type": "text", "text": `${cita.nombre_paciente}` },
+                            { "type": "text", "text": `${cita.especialidad}` },
+                            { "type": "text", "text": `${fechaFormateada}` },
+                            { "type": "text", "text": `${cita.hora_cita}` },
+                            { "type": "text", "text": `${cita.profesional}` },
+                            { "type": "text", "text": `${cita.tipo_cita === 1 ? 'Presencial' : 'Virtual'}` },
+                            { "type": "text", "text": `${administradora}` }
+                        ]
+                    }
                 ]
             }
         };
@@ -241,7 +263,186 @@ export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse)
             headers: {
                 'Authorization': `Bearer ${process.env.jwtToken}`,
                 'Content-Type': 'application/json'
+            },
+            timeout: 15000 // 15 segundos timeout
+        });
+        console.log('Respuesta de Meta:', response.data);
+        if (response.data.messages && response.data.messages.length > 0) {
+            console.log('Plantilla enviada correctamente:', response.data);
+        } else {
+            console.error('Error al enviar plantilla:', response.data);
+        }
+        if (response.data.messages[0].message_status === 'accepted') {
+            console.log(`Plantilla enviada exitosamente a ${cita.nombre_paciente} (${cita.telefono_paciente})`);
+            return { exito: true };
+        }
+        return { exito: false };
+    } catch (error) {
+        console.error('Error enviando plantilla:', error);
+        return { exito: false };
+    }
+}
+
+export async function enviarPlantillaRecordatorio24h(cita: AgendaProgramadaResponse): Promise<{ exito: boolean }> {
+    try {
+        // Formatear la fecha, aparece en formato YYYY-MM-ddTHH:mm:ss.SSSZ convertir en formato '31 de julio de 2025'
+        const fechaCita = new Date(cita.fecha_cita);
+        const fechaFormateada = fechaCita.toLocaleDateString('es-CO', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric'
+        });
+
+        const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
+        const administradora = cita.administradora ? cita.administradora : 'PARTICULAR';
+        const body = {
+            "messaging_product": "whatsapp",
+            "to": `${cita.telefono_paciente}`,
+            "type": "template",
+            "template": {
+                "name": `${process.env.NOMBRE_PLANTILLA_META_CONFIRMADO_24H}`,
+                "language": {
+                    "code": "es_CO"
+                },
+                "components": [
+                    {
+                        "type": "body",
+                        "parameters": [
+                            { "type": "text", "text": `${cita.nombre_paciente}` },
+                            { "type": "text", "text": `${fechaFormateada}` },
+                            { "type": "text", "text": `${cita.hora_cita}` }
+                        ]
+                    }
+                ]
             }
+        };
+        const response = await axios.post(url, body, {
+            headers: {
+                'Authorization': `Bearer ${process.env.jwtToken}`,
+                'Content-Type': 'application/json'
+            },
+            timeout: 15000 // 15 segundos timeout
+        });
+        console.log('Respuesta de Meta:', response.data);
+        if (response.data.messages && response.data.messages.length > 0) {
+            console.log('Plantilla enviada correctamente:', response.data);
+        } else {
+            console.error('Error al enviar plantilla:', response.data);
+        }
+        if (response.data.messages[0].message_status === 'accepted') {
+            console.log(`Plantilla enviada exitosamente a ${cita.nombre_paciente} (${cita.telefono_paciente})`);
+            return { exito: true };
+        }
+        return { exito: false };
+    } catch (error) {
+        console.error('Error enviando plantilla:', error);
+        return { exito: false };
+    }
+}
+
+export async function enviarPlantillaDiaria(cita: AgendaPendienteResponse): Promise<{ exito: boolean }> {
+    try {
+        // Formatear la fecha, aparece en formato YYYY-MM-ddTHH:mm:ss.SSSZ convertir en formato '31 de julio de 2025'
+        const fechaCita = new Date(cita.fecha_cita);
+        const fechaFormateada = fechaCita.toLocaleDateString('es-CO', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric'
+        });
+
+        const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
+        console.log('Enviando plantilla URL:', url);
+        const body = {
+            "messaging_product": "whatsapp",
+            "to": `${cita.telefono_paciente}`,
+            "type": "template",
+            "template": {
+                "name": `${process.env.NOMBRE_PLANTILLA_META_DIARIA}`,
+                "language": {
+                    "code": "es_CO"
+                },
+                "components": [
+                    {
+                        "type": "body",
+                        "parameters": [
+                            { "type": "text", "text": `${cita.nombre_paciente}` },
+                            { "type": "text", "text": `${cita.especialidad}` },
+                            { "type": "text", "text": `${cita.tipo_cita === 1 ? 'Presencial' : 'Virtual'}` },
+                            { "type": "text", "text": `${cita.hora_cita}` }
+                        ]
+                    }
+                ]
+            }
+        };
+        const response = await axios.post(url, body, {
+            headers: {
+                'Authorization': `Bearer ${process.env.jwtToken}`,
+                'Content-Type': 'application/json'
+            },
+            timeout: 15000 // 15 segundos timeout
+        });
+        console.log('Respuesta de Meta:', response.data);
+        if (response.data.messages && response.data.messages.length > 0) {
+            console.log('Plantilla enviada correctamente:', response.data);
+        } else {
+            console.error('Error al enviar plantilla:', response.data);
+        }
+        if (response.data.messages[0].message_status === 'accepted') {
+            console.log(`Plantilla enviada exitosamente a ${cita.nombre_paciente} (${cita.telefono_paciente})`);
+            return { exito: true };
+        }
+        return { exito: false };
+    } catch (error) {
+        console.error('Error enviando plantilla:', error);
+        return { exito: false };
+    }
+}
+
+export async function enviarPlantillaRecordatorio(cita: AgendaPendienteResponse): Promise<{ exito: boolean }> {
+    try {
+        // Formatear la fecha, aparece en formato YYYY-MM-ddTHH:mm:ss.SSSZ convertir en formato '31 de julio de 2025'
+        const fechaCita = new Date(cita.fecha_cita);
+        const fechaFormateada = fechaCita.toLocaleDateString('es-CO', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric'
+        });
+
+        const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
+        const administradora = cita.administradora ? cita.administradora : 'PARTICULAR';
+        console.log('Enviando plantilla URL:', url);
+        console.log('Administradora:', administradora);
+        const body = {
+            "messaging_product": "whatsapp",
+            "to": `${cita.telefono_paciente}`,
+            "type": "template",
+            "template": {
+                "name": `${process.env.NOMBRE_PLANTILLA_RECORDATORIO_META}`,
+                "language": {
+                    "code": "es_CO"
+                },
+                "components": [
+                    {
+                        "type": "body",
+                        "parameters": [
+                            { "type": "text", "text": `${cita.nombre_paciente}` },
+                            { "type": "text", "text": `${cita.especialidad}` },
+                            { "type": "text", "text": `${fechaFormateada}` },
+                            { "type": "text", "text": `${cita.hora_cita}` },
+                            { "type": "text", "text": `${cita.profesional}` },
+                            { "type": "text", "text": `${cita.tipo_cita === 1 ? 'Presencial' : 'Virtual'}` },
+                            { "type": "text", "text": `${administradora}` }
+                        ]
+                    }
+                ]
+            }
+        };
+        const response = await axios.post(url, body, {
+            headers: {
+                'Authorization': `Bearer ${process.env.jwtToken}`,
+                'Content-Type': 'application/json'
+            },
+            timeout: 15000 // 15 segundos timeout
         });
         console.log('Respuesta de Meta:', response.data);
         if (response.data.messages && response.data.messages.length > 0) {
@@ -279,13 +480,13 @@ export async function confirmarCitaCampahna(celular: string, numeroDoc: string):
  * @returns Promise<boolean> - true si se registró exitosamente, false en caso contrario
  */
 export async function registrarActividadBot(
-    tipoEvento: string, 
-    idUsuario: string, 
+    tipoEvento: string,
+    idUsuario: string,
     metadata: Record<string, any> = {}
 ): Promise<boolean> {
     try {
         const url = `${API_BACKEND_URL}/stats`;
-        
+
         const body = {
             tipo_evento: tipoEvento,
             id_usuario: idUsuario,
@@ -295,15 +496,15 @@ export async function registrarActividadBot(
             }
         };
 
-        const response = await axios.post(url, body);
-        
+        const response = await axios.post(url, body, { timeout: 10000 });
+
         if (response.status >= 200 && response.status < 300) {
             return true;
         }
-        
+
         console.warn(`Respuesta inesperada al registrar actividad: ${response.status}`);
         return false;
-        
+
     } catch (error) {
         console.error('Error registrando actividad del bot:', error);
         return false;
@@ -341,16 +542,16 @@ export async function enviarPlantillaRecuperar(cita: AgendaPendienteResponse): P
             "template": {
                 "name": `${process.env.NOMBRE_PLANTILLA_META_CANCELADOS}`,
                 "language": {
-                "code": "es_CO"
+                    "code": "es_CO"
                 },
                 "components": [
-                {
-                    "type": "body",
-                    "parameters": [
-                    { "type": "text", "text": `${cita.nombre_paciente}` },
-                    { "type": "text", "text": `${fechaFormateada}` },
-                    ]
-                }
+                    {
+                        "type": "body",
+                        "parameters": [
+                            { "type": "text", "text": `${cita.nombre_paciente}` },
+                            { "type": "text", "text": `${fechaFormateada}` },
+                        ]
+                    }
                 ]
             }
         };
@@ -358,7 +559,8 @@ export async function enviarPlantillaRecuperar(cita: AgendaPendienteResponse): P
             headers: {
                 'Authorization': `Bearer ${process.env.jwtToken}`,
                 'Content-Type': 'application/json'
-            }
+            },
+            timeout: 15000 // 15 segundos timeout
         });
         console.log('Respuesta de Meta:', response.data);
         if (response.data.messages && response.data.messages.length > 0) {
@@ -408,16 +610,16 @@ export async function enviarPlantillaUsuariosConAsistencia(cita: AgendaPendiente
             "template": {
                 "name": `${process.env.NOMBRE_PLANTILLA_META_ASISTIDOS}`,
                 "language": {
-                "code": "es_CO"
+                    "code": "es_CO"
                 },
                 "components": [
-                {
-                    "type": "body",
-                    "parameters": [
-                    { "type": "text", "text": `${cita.nombre_paciente}` },
-                    { "type": "text", "text": `${fechaFormateada}` },
-                    ]
-                }
+                    {
+                        "type": "body",
+                        "parameters": [
+                            { "type": "text", "text": `${cita.nombre_paciente}` },
+                            { "type": "text", "text": `${fechaFormateada}` },
+                        ]
+                    }
                 ]
             }
         };
@@ -425,7 +627,8 @@ export async function enviarPlantillaUsuariosConAsistencia(cita: AgendaPendiente
             headers: {
                 'Authorization': `Bearer ${process.env.jwtToken}`,
                 'Content-Type': 'application/json'
-            }
+            },
+            timeout: 15000 // 15 segundos timeout
         });
         console.log('Respuesta de Meta:', response.data);
         if (response.data.messages && response.data.messages.length > 0) {

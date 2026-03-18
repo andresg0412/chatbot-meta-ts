@@ -4,12 +4,6 @@ import { stepConfirmaCancelarCita } from './stepConfirmaCancelarCita';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 
 const step7CancelarCita = addKeyword(EVENTS.ACTION)
-    .addAction(async (ctx, { flowDynamic, endFlow }) => {
-        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
-        if (!sessionValid) {
-            return endFlow();
-        }
-    })
     .addAnswer(
         '¿Estás seguro que deseas cancelar tu cita? 🤔',
         {
