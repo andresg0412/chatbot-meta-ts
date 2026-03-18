@@ -9,6 +9,8 @@ import { cleanupOldSessionsWithoutNotification } from './utils';
 import { executeDailyCampaign } from './controllers/campaignController';
 import { executeReminderCampaign } from './controllers/reminderCampaignController';
 import { executeConfirmationCampaign } from './controllers/executeCampaignController';
+import { executeRecuperacionCampaign } from './controllers/recuperacionCampaignController';
+import { executeConAsistenciaCampaign } from './controllers/conAsistenciaCampaignController';
 
 const PORT = process.env.PORT ?? 3008
 
@@ -110,6 +112,18 @@ const main = async () => {
     adapterProvider.server.post(
         '/v1/campaigns/execute',
         executeConfirmationCampaign
+    )
+
+    // Endpoint para ejecutar campaña de recuperación de pacientes sin asistencia
+    adapterProvider.server.post(
+        '/v1/campaigns/recuperacion',
+        executeRecuperacionCampaign
+    )
+
+    // Endpoint para ejecutar campaña de usuarios con asistencia
+    adapterProvider.server.post(
+        '/v1/campaigns/conasistencia',
+        executeConAsistenciaCampaign
     )
 
     httpServer(+PORT)
