@@ -13,5 +13,7 @@ SISTEMA_PROACTIVO.md
 src/utils/metricsDB.json
 src/utils/userSessionsDB.json
 src/utils/userAttemptsDB.json
+src/services/confBot.json
+src/services/citasDB.json
 DOCUMENTACION_TECNICA.md
 CAMPANAS_README.md
