@@ -14,6 +14,14 @@ import { executeConAsistenciaCampaign } from './controllers/conAsistenciaCampaig
 
 const PORT = process.env.PORT ?? 3008
 
+process.on('uncaughtException', (error) => {
+    console.error('🚨 uncaughtException (proceso NO se detiene):', error);
+});
+
+process.on('unhandledRejection', (reason) => {
+    console.error('🚨 unhandledRejection (proceso NO se detiene):', reason);
+});
+
 const main = async () => {
     const adapterProvider = createProvider(Provider, {
         jwtToken: process.env.jwtToken,

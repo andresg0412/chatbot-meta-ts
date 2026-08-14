@@ -9,6 +9,10 @@ import { registrarActividadBot } from '../services/apiService';
 
 const welcomeFlow = addKeyword(EVENTS.WELCOME)
     .addAction(async (ctx, ctxFn) => {
+        if (!ctx.from) {
+            console.warn('⚠️ Mensaje entrante sin remitente (ctx.from indefinido), se ignora:', ctx);
+            return ctxFn.endFlow();
+        }
         if (!esBotHabilitado()) {
             await ctxFn.flowDynamic(
                 'Lo sentimos, el servicio no está disponible en este momento. ' +
@@ -32,6 +36,10 @@ const welcomeFlow = addKeyword(EVENTS.WELCOME)
 
 const exitFlow = addKeyword(['Salir', 'Exit', 'salir', 'exit'])
     .addAction(async (ctx, ctxFn) => {
+        if (!ctx.from) {
+            console.warn('⚠️ Mensaje entrante sin remitente (ctx.from indefinido), se ignora:', ctx);
+            return ctxFn.endFlow();
+        }
         closeUserSession(ctx.from);
         await ctxFn.flowDynamic('Gracias por usar nuestro servicio. ¡Hasta luego! 👋');
         return ctxFn.endFlow();
