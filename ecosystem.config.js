@@ -6,6 +6,7 @@ module.exports = {
       interpreter: 'node',
       node_args: '-r tsx/cjs --max-old-space-size=4096',
       instances: 1,
+      exec_mode: 'fork',
       autorestart: true,
       watch: false,
       max_restarts: 10,
