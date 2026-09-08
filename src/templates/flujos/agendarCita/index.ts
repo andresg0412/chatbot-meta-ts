@@ -26,3 +26,5 @@ export * from './step20AgendarCita';
 export * from './step21AgendarCita';
 export * from './step22AgendarCita';
 export * from './step23AgendarCita';
+
+export * from './listaEspera/stepListaEsperaOptIn';

@@ -5,6 +5,7 @@ import { step20AgendarCita } from './step20AgendarCita';
 import { crearCita } from '../../../services/apiService';
 import { closeUserSession } from '../../../utils/proactiveSessionManager';
 import { registrarActividadBot } from '../../../services/apiService';
+import { stepListaEsperaOptIn } from './listaEspera/stepListaEsperaOptIn';
 
 
 function generarAgendaIdAleatorio() {
@@ -76,8 +77,10 @@ const step19AgendarCita = addKeyword(EVENTS.ACTION)
             await flowDynamic('Te esperamos en nuestra IPS para brindarte la mejor atención.\n ¡Gracias por confiar en nosotros! 😊');
             await state.update({ citaReprogramada: true });
             //return gotoFlow(step20AgendarCita);
-            closeUserSession(ctx.from);
-            return endFlow();
+            // Fase 1 de "lista de espera inteligente": tras confirmar la cita, se ofrece (opcional)
+            // inscribirse para ser avisado si se libera un cupo antes. La cita ya quedó firme arriba;
+            // esto no bloquea ni condiciona lo anterior.
+            return gotoFlow(stepListaEsperaOptIn);
         } catch (e) {
             metricError(e, ctx.from);
             closeUserSession(ctx.from);

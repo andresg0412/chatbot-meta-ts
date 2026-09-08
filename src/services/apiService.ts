@@ -579,6 +579,57 @@ export async function enviarPlantillaRecuperar(cita: AgendaPendienteResponse): P
     }
 }
 
+// ---------------------------------------------------------------------------
+// Lista de espera inteligente (Fase 1)
+// Ver proyecto-ips/docs/features/2026-09-07-lista-espera-inteligente.md, sección 4 (contrato).
+// ---------------------------------------------------------------------------
+
+export interface IInscribirListaEspera {
+    paciente_id: string;
+    profesional_id: string;
+    fecha_cita: string; // YYYY-MM-DD de la cita ya agendada
+    hora_cita: string;  // HH:MM o HH:MM:SS de esa misma cita
+    especialidad?: string;
+    consentimiento_texto: string;
+    disponibilidad_dias?: string;
+    disponibilidad_franjas?: string;
+}
+
+export interface IListaEsperaResponse {
+    lista_espera_id: string;
+    paciente_id: string;
+    profesional_id: string;
+    cita_actual_id: string | null;
+    estado: string;
+    [key: string]: any;
+}
+
+export async function inscribirListaEspera(data: IInscribirListaEspera): Promise<IListaEsperaResponse | null> {
+    try {
+        const url = `${API_BACKEND_URL}/chatbot/listaespera/inscribir`;
+        const response = await axios.post(url, data);
+        return response.data?.data ?? null;
+    } catch (error) {
+        console.error('Error inscribiendo en lista de espera:', error);
+        return null;
+    }
+}
+
+export async function retirarListaEspera(params: {
+    lista_espera_id?: string;
+    paciente_id?: string;
+    profesional_id?: string;
+}): Promise<boolean> {
+    try {
+        const url = `${API_BACKEND_URL}/chatbot/listaespera/retirar`;
+        const response = await axios.post(url, params);
+        return response.data?.code === 200;
+    } catch (error) {
+        console.error('Error retirando de lista de espera:', error);
+        return false;
+    }
+}
+
 export async function obtenerCitasUsuariosConAsistencia(): Promise<AgendaPendienteResponse[] | []> {
     try {
         const url = `${API_BACKEND_URL}/chatbot/citasusuarioconasistencia`;

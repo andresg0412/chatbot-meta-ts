@@ -11,6 +11,7 @@ import { executeReminderCampaign } from './controllers/reminderCampaignControlle
 import { executeConfirmationCampaign } from './controllers/executeCampaignController';
 import { executeRecuperacionCampaign } from './controllers/recuperacionCampaignController';
 import { executeConAsistenciaCampaign } from './controllers/conAsistenciaCampaignController';
+import { createCrisisInterceptor } from './utils/crisisProtocol';
 
 const PORT = process.env.PORT ?? 3008
 
@@ -31,11 +32,26 @@ const main = async () => {
     })
     const adapterDB = new Database()
 
-    const { handleCtx, httpServer } = await createBot({
+    // Protocolo de crisis (ver src/utils/crisisProtocol.ts): se registra ANTES de createBot() para
+    // que este listener corra primero cuando llegue un mensaje (Node invoca los listeners de un
+    // mismo evento en orden de registro) y pueda bloquear el flujo automático (blacklist) antes de
+    // que el propio framework empiece a procesar el mensaje entrante.
+    let botInstance: { dynamicBlacklist?: { add: (n: string | string[]) => any; checkIf?: (n: string) => boolean } } | undefined;
+    adapterProvider.on(
+        'message',
+        createCrisisInterceptor(
+            () => botInstance,
+            async (to: string, message: string) => adapterProvider.sendMessage(to, message, {})
+        )
+    );
+
+    const bot = await createBot({
         flow: templates,
         provider: adapterProvider,
         database: adapterDB,
     })
+    botInstance = bot as any;
+    const { handleCtx, httpServer } = bot
 
     // Configurar el bot para el sistema de timeout proactivo
     // Usar el método del provider correctamente

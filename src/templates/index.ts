@@ -106,6 +106,8 @@ import {
     step21AgendarCita,
     step22AgendarCita,
     step23AgendarCita,
+    // LISTA DE ESPERA (Fase 1)
+    stepListaEsperaOptIn,
 } from './flujos/agendarCita'
 
 export default createFlow([
@@ -183,6 +185,7 @@ export default createFlow([
     step21AgendarCita,
     step22AgendarCita,
     step23AgendarCita,
+    stepListaEsperaOptIn,
     step5Reprogramar,
     step6Reprogramar,
     step7Reprogramar,
