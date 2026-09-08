@@ -109,6 +109,12 @@ import {
     // LISTA DE ESPERA (Fase 1)
     stepListaEsperaOptIn,
 } from './flujos/agendarCita'
+import {
+    // LISTA DE ESPERA (Fase 2) — respuesta a la cascada de ofertas de cupo
+    ofertaCupoAceptaDocumentoFlow,
+    ofertaCupoRechazaDocumentoFlow,
+    ofertaCupoAccionFlow,
+} from './flujos/listaEspera'
 
 export default createFlow([
     killSwitchFlow,
@@ -186,6 +192,9 @@ export default createFlow([
     step22AgendarCita,
     step23AgendarCita,
     stepListaEsperaOptIn,
+    ofertaCupoAceptaDocumentoFlow,
+    ofertaCupoRechazaDocumentoFlow,
+    ofertaCupoAccionFlow,
     step5Reprogramar,
     step6Reprogramar,
     step7Reprogramar,

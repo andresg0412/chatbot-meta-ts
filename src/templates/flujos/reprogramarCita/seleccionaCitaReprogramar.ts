@@ -9,6 +9,7 @@ import { CONVENIOS_SERVICIOS, ID_CONVENIOS_SERVICIOS } from '../../../constants/
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 import { closeUserSession } from '../../../utils/proactiveSessionManager';
 import { registrarActividadBot } from '../../../services/apiService';
+import { triggerCascadaTickNow } from '../../../utils/listaEsperaCascadaPoller';
 
 
 function generarAgendaIdAleatorio() {
@@ -73,6 +74,17 @@ const confirmarReprogramarCita = addKeyword(EVENTS.ACTION)
                 closeUserSession(ctx.from);
                 return endFlow();
             }
+
+            // Path rápido de la cascada de lista de espera (Fase 2): la franja anterior también
+            // queda libre al reprogramar (ver docs/features/2026-09-07-lista-espera-inteligente.md,
+            // sección 13.4-e). Fire-and-forget, no bloquea la respuesta al paciente ni puede romper
+            // el flujo de reprogramación si falla.
+            try {
+                triggerCascadaTickNow();
+            } catch (cascadaError) {
+                console.error('[confirmarReprogramarCita] Error disparando triggerCascadaTickNow():', cascadaError);
+            }
+
             metricFlujoFinalizado('reagendar');
             await registrarActividadBot('chat_flujo_reprogramar', ctx.from, {
                 step: 'confirmar_cita',

@@ -5,6 +5,7 @@ import { metricFlujoFinalizado, metricCita, metricError } from '../../../utils/m
 import { cancelarCita } from '../../../services/apiService';
 import { closeUserSession } from '../../../utils/proactiveSessionManager';
 import { registrarActividadBot } from '../../../services/apiService';
+import { triggerCascadaTickNow } from '../../../utils/listaEsperaCascadaPoller';
 
 
 const stepConfirmaCancelarCita = addKeyword(EVENTS.ACTION)
@@ -16,6 +17,15 @@ const stepConfirmaCancelarCita = addKeyword(EVENTS.ACTION)
                 return gotoFlow(volverMenuPrincipal);
             }
             const response = await cancelarCita(citaSeleccionadaCancelar.agenda_id_externa);
+            if (response) {
+                // Path rápido de la cascada de lista de espera (Fase 2): fire-and-forget, no bloquea
+                // la respuesta al paciente ni puede romper el flujo de cancelación si falla.
+                try {
+                    triggerCascadaTickNow();
+                } catch (cascadaError) {
+                    console.error('[stepConfirmaCancelarCita] Error disparando triggerCascadaTickNow():', cascadaError);
+                }
+            }
             metricFlujoFinalizado('cancelar');
             await registrarActividadBot('chat_flujo_cancelar_cita', ctx.from, {
                 step: 'cita_cancelada'

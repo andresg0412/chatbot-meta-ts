@@ -3,6 +3,7 @@ import { metricCita } from '../utils/metrics';
 import { IPaciente } from '../interfaces/IPacienteIn';
 import { IReagendarCita, IAgendaResponse, ICrearCita } from '../interfaces/IReagendarCita';
 import { AgendaPendienteResponse, AgendaProgramadaResponse } from '../interfaces/IReagendarCita';
+import { AccionCascada } from '../interfaces/ICascadaListaEspera';
 
 export const API_BACKEND_URL = process.env.API_BACKEND_URL;
 
@@ -695,5 +696,178 @@ export async function enviarPlantillaUsuariosConAsistencia(cita: AgendaPendiente
     } catch (error) {
         console.error('Error enviando plantilla:', error);
         return { exito: false };
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Lista de espera inteligente — Fase 2: cascada de ofertas de cupo liberado.
+// Ver proyecto-ips/docs/features/2026-09-07-lista-espera-inteligente.md, sección 13.6 (contrato
+// definitivo, ya implementado y probado en el backend).
+// ---------------------------------------------------------------------------
+
+/**
+ * Sondea el motor de cascada del backend (idempotente, sin más efectos secundarios que los que el
+ * propio backend decide aplicar internamente: expirar ofertas, avanzar la fila, escalar, etc.).
+ * Se llama cada `LISTA_ESPERA_CASCADA_POLL_INTERVAL_MS` desde `listaEsperaCascadaPoller.ts` y también
+ * de forma inmediata (path rápido) tras cancelar/reagendar una cita desde el propio bot.
+ */
+export async function tickCascadaListaEspera(limite?: number): Promise<AccionCascada[]> {
+    try {
+        const url = `${API_BACKEND_URL}/chatbot/listaespera/cascada/tick`;
+        const body = typeof limite === 'number' ? { limite } : {};
+        const response = await axios.post(url, body);
+        return response.data?.data?.acciones ?? [];
+    } catch (error) {
+        console.error('Error consultando tick de cascada de lista de espera:', error);
+        return [];
+    }
+}
+
+/**
+ * Envía la plantilla de oferta de cupo liberado (`NOMBRE_PLANTILLA_OFERTA_CUPO`, pendiente de
+ * aprobación en Meta Business — ver docs/features/2026-09-07-lista-espera-inteligente.md, 13.8).
+ *
+ * Regla de privacidad transversal (9.1, no negociable): ningún mensaje puede mencionar la
+ * especialidad ni palabras como "psicología"/"terapia"/"sesión". Por eso esta función deliberadamente
+ * NO recibe ni envía `especialidad` como variable de la plantilla, aunque el `AccionCascada` de
+ * origen sí la traiga disponible — solo se usan nombre, profesional, fecha y hora.
+ */
+export async function enviarPlantillaOfertaCupo(
+    nombrePaciente: string,
+    telefonoPaciente: string,
+    profesional: string,
+    fechaCita: string,
+    horaCita: string
+): Promise<{ exito: boolean; mensajeWaId?: string }> {
+    try {
+        const fechaParseada = new Date(fechaCita);
+        const fechaFormateada = isNaN(fechaParseada.getTime())
+            ? fechaCita
+            : fechaParseada.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
+
+        const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
+        const body = {
+            "messaging_product": "whatsapp",
+            "to": `${telefonoPaciente}`,
+            "type": "template",
+            "template": {
+                "name": `${process.env.NOMBRE_PLANTILLA_OFERTA_CUPO}`,
+                "language": {
+                    "code": "es_CO"
+                },
+                "components": [
+                    {
+                        "type": "body",
+                        "parameters": [
+                            { "type": "text", "text": `${nombrePaciente}` },
+                            { "type": "text", "text": `${profesional}` },
+                            { "type": "text", "text": `${fechaFormateada}` },
+                            { "type": "text", "text": `${horaCita}` }
+                        ]
+                    }
+                ]
+            }
+        };
+        const response = await axios.post(url, body, {
+            headers: {
+                'Authorization': `Bearer ${process.env.jwtToken}`,
+                'Content-Type': 'application/json'
+            },
+            timeout: 15000 // 15 segundos timeout
+        });
+        console.log('Respuesta de Meta (oferta de cupo):', response.data);
+        if (response.data.messages && response.data.messages.length > 0) {
+            console.log('Plantilla de oferta de cupo enviada correctamente:', response.data);
+        } else {
+            console.error('Error al enviar plantilla de oferta de cupo:', response.data);
+        }
+        if (response.data.messages?.[0]?.message_status === 'accepted') {
+            console.log(`Plantilla de oferta de cupo enviada exitosamente a ${nombrePaciente} (${telefonoPaciente})`);
+            return { exito: true, mensajeWaId: response.data.messages[0]?.id };
+        }
+        return { exito: false };
+    } catch (error) {
+        console.error('Error enviando plantilla de oferta de cupo:', error);
+        return { exito: false };
+    }
+}
+
+export async function confirmarEnvioOfertaCupo(
+    cupoLiberadoId: string,
+    listaEsperaId: string,
+    mensajeWaId?: string
+): Promise<boolean> {
+    try {
+        const url = `${API_BACKEND_URL}/chatbot/listaespera/cascada/oferta/confirmar-envio`;
+        const response = await axios.post(url, {
+            cupo_liberado_id: cupoLiberadoId,
+            lista_espera_id: listaEsperaId,
+            ...(mensajeWaId ? { mensaje_wa_id: mensajeWaId } : {})
+        });
+        return response.data?.code === 200;
+    } catch (error: any) {
+        if (error?.response?.status === 409) {
+            // OFERTA_NO_DISPONIBLE: la fila ya no estaba en 'en_cola' (llamada duplicada / carrera
+            // entre dos ticks) — no es un error grave, solo se ignora (ver contrato 13.6).
+            console.warn('Oferta ya no disponible al confirmar envío (llamada duplicada o carrera de ticks):', cupoLiberadoId, listaEsperaId);
+            return false;
+        }
+        console.error('Error confirmando envío de oferta de cupo:', error);
+        return false;
+    }
+}
+
+export async function marcarFalloOfertaCupo(
+    cupoLiberadoId: string,
+    listaEsperaId: string,
+    motivo?: string
+): Promise<boolean> {
+    try {
+        const url = `${API_BACKEND_URL}/chatbot/listaespera/cascada/oferta/marcar-fallo`;
+        const response = await axios.post(url, {
+            cupo_liberado_id: cupoLiberadoId,
+            lista_espera_id: listaEsperaId,
+            ...(motivo ? { motivo } : {})
+        });
+        return response.data?.code === 200;
+    } catch (error) {
+        console.error('Error marcando fallo de oferta de cupo:', error);
+        return false;
+    }
+}
+
+/**
+ * Registra la respuesta del paciente ('acepta'/'rechaza') a una oferta de cupo. Se distingue el
+ * código de estado (no solo boolean) porque 404/409 requieren mensajes distintos al paciente:
+ * - 404 SIN_OFERTA_ACTIVA: ya no tiene ninguna oferta pendiente.
+ * - 409 CUPO_YA_ASIGNADO: alguien más aceptó primero.
+ * - 200: `data.registrado` (rechaza) o `data.movimiento/nueva_fecha_cita/...` (acepta).
+ */
+export async function responderOfertaCupo(
+    documento: string,
+    celular: string,
+    respuesta: 'acepta' | 'rechaza'
+): Promise<{ ok: boolean; code?: number; data?: any }> {
+    try {
+        const url = `${API_BACKEND_URL}/chatbot/listaespera/cascada/respuesta`;
+        const response = await axios.post(url, { documento, celular, respuesta });
+        return { ok: true, code: response.data?.code ?? response.status, data: response.data?.data };
+    } catch (error: any) {
+        if (error?.response) {
+            return { ok: false, code: error.response.status, data: error.response.data };
+        }
+        console.error('Error respondiendo oferta de cupo:', error);
+        return { ok: false };
+    }
+}
+
+export async function confirmarEscalamientoListaEspera(cupoLiberadoId: string): Promise<boolean> {
+    try {
+        const url = `${API_BACKEND_URL}/chatbot/listaespera/cascada/escalar/confirmar`;
+        const response = await axios.post(url, { cupo_liberado_id: cupoLiberadoId });
+        return response.data?.code === 200;
+    } catch (error) {
+        console.error('Error confirmando escalamiento de lista de espera:', error);
+        return false;
     }
 }

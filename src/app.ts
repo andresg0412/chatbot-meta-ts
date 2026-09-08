@@ -12,6 +12,7 @@ import { executeConfirmationCampaign } from './controllers/executeCampaignContro
 import { executeRecuperacionCampaign } from './controllers/recuperacionCampaignController';
 import { executeConAsistenciaCampaign } from './controllers/conAsistenciaCampaignController';
 import { createCrisisInterceptor } from './utils/crisisProtocol';
+import { startCascadaPoller } from './utils/listaEsperaCascadaPoller';
 
 const PORT = process.env.PORT ?? 3008
 
@@ -37,12 +38,14 @@ const main = async () => {
     // mismo evento en orden de registro) y pueda bloquear el flujo automático (blacklist) antes de
     // que el propio framework empiece a procesar el mensaje entrante.
     let botInstance: { dynamicBlacklist?: { add: (n: string | string[]) => any; checkIf?: (n: string) => boolean } } | undefined;
+
+    // Función cruda de envío reutilizada por el protocolo de crisis y por el poller de cascada de
+    // lista de espera (Fase 2) — no duplicar esta función en más sitios.
+    const sendRaw = async (to: string, message: string) => adapterProvider.sendMessage(to, message, {});
+
     adapterProvider.on(
         'message',
-        createCrisisInterceptor(
-            () => botInstance,
-            async (to: string, message: string) => adapterProvider.sendMessage(to, message, {})
-        )
+        createCrisisInterceptor(() => botInstance, sendRaw)
     );
 
     const bot = await createBot({
@@ -80,6 +83,11 @@ const main = async () => {
     setInterval(cleanupOldSessionsWithoutNotification, 2 * 60 * 60 * 1000); // Cada 2 horas
 
     console.log('✅ Sistema proactivo inicializado con protección contra alertas de Meta');
+
+    // Poller de la cascada de ofertas de cupo de lista de espera (Fase 2) — ver
+    // src/utils/listaEsperaCascadaPoller.ts y docs/features/2026-09-07-lista-espera-inteligente.md,
+    // sección 13.4-a. Reutiliza el mismo `sendRaw` que ya usa el protocolo de crisis.
+    startCascadaPoller(sendRaw);
 
     adapterProvider.server.post(
         '/v1/messages',
