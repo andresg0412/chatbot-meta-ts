@@ -6,7 +6,7 @@ import { closeUserSession } from '../../../utils/proactiveSessionManager';
 import { registrarActividadBot } from '../../../services/apiService';
 
 
-const NUMERO_ASESOR = '573158070460';
+const NUMERO_ASESOR = process.env.NUMERO_ASESOR_HUMANO || '573158070460';
 
 const pqrsFlow = addKeyword(['280525006', 'PQRS', 'pqrs', '6', 'peticiones', 'quejas', 'reclamos', 'solicitudes'])
     .addAction(async (ctx, ctxFn) => {

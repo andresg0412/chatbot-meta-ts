@@ -7,6 +7,19 @@ import { AccionCascada } from '../interfaces/ICascadaListaEspera';
 
 export const API_BACKEND_URL = process.env.API_BACKEND_URL;
 
+/**
+ * Bandera de seguridad (default apagada, mismo patrón que `LISTA_ESPERA_CASCADA_ENABLED` de Fase 2 —
+ * ver `utils/listaEsperaCascadaPoller.ts`): mientras las 4 plantillas nuevas con botones
+ * (`NOMBRE_PLANTILLA_META_BOTONES`, `NOMBRE_PLANTILLA_META_CONFIRMADO_24H_BOTONES`,
+ * `NOMBRE_PLANTILLA_META_DIARIA_BOTONES`, `NOMBRE_PLANTILLA_RECORDATORIO_META_BOTONES`) no estén
+ * aprobadas en Meta Business Manager, los 4 recordatorios siguen enviándose exactamente igual que hoy
+ * (mismos textos/plantillas actuales, sin registrar envío en el backend).
+ * Ver proyecto-ips/docs/features/2026-09-07-lista-espera-inteligente.md, sección 15.6.
+ */
+function isRecordatoriosBotonesEnabled(): boolean {
+    return process.env.RECORDATORIOS_BOTONES_ENABLED === 'true';
+}
+
 export async function consultarCitasPaciente(documento: string, especialidad: string): Promise<IPaciente[] | null> {
     try {
         const especialidadParse = especialidad === 'Psicologia' ? 'Psicología' : especialidad === 'NeuroPsicologia' ? 'Neuropsicología' : especialidad === 'Psiquiatria' ? 'Psiquiatría' : especialidad;
@@ -233,6 +246,8 @@ export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse 
 
         const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
         const administradora = cita.administradora ? cita.administradora : 'PARTICULAR';
+        const usarBotones = isRecordatoriosBotonesEnabled();
+        const nombrePlantilla = usarBotones ? process.env.NOMBRE_PLANTILLA_META_BOTONES : process.env.NOMBRE_PLANTILLA_META;
         console.log('Enviando plantilla URL:', url);
         console.log('Administradora:', administradora);
         const body = {
@@ -240,7 +255,7 @@ export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse 
             "to": `${cita.telefono_paciente}`,
             "type": "template",
             "template": {
-                "name": `${process.env.NOMBRE_PLANTILLA_META}`,
+                "name": `${nombrePlantilla}`,
                 "language": {
                     "code": "es_CO"
                 },
@@ -275,6 +290,12 @@ export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse 
         }
         if (response.data.messages[0].message_status === 'accepted') {
             console.log(`Plantilla enviada exitosamente a ${cita.nombre_paciente} (${cita.telefono_paciente})`);
+            if (usarBotones) {
+                // Fire-and-forget (15.6): un fallo de registro nunca debe afectar el envío ya exitoso.
+                registrarEnvioRecordatorio(cita.cita_id, '24h').catch((error) =>
+                    console.error('Error registrando envío de recordatorio (fire-and-forget):', error)
+                );
+            }
             return { exito: true };
         }
         return { exito: false };
@@ -296,12 +317,14 @@ export async function enviarPlantillaRecordatorio24h(cita: AgendaProgramadaRespo
 
         const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
         const administradora = cita.administradora ? cita.administradora : 'PARTICULAR';
+        const usarBotones = isRecordatoriosBotonesEnabled();
+        const nombrePlantilla = usarBotones ? process.env.NOMBRE_PLANTILLA_META_CONFIRMADO_24H_BOTONES : process.env.NOMBRE_PLANTILLA_META_CONFIRMADO_24H;
         const body = {
             "messaging_product": "whatsapp",
             "to": `${cita.telefono_paciente}`,
             "type": "template",
             "template": {
-                "name": `${process.env.NOMBRE_PLANTILLA_META_CONFIRMADO_24H}`,
+                "name": `${nombrePlantilla}`,
                 "language": {
                     "code": "es_CO"
                 },
@@ -332,6 +355,12 @@ export async function enviarPlantillaRecordatorio24h(cita: AgendaProgramadaRespo
         }
         if (response.data.messages[0].message_status === 'accepted') {
             console.log(`Plantilla enviada exitosamente a ${cita.nombre_paciente} (${cita.telefono_paciente})`);
+            if (usarBotones) {
+                // Fire-and-forget (15.6): un fallo de registro nunca debe afectar el envío ya exitoso.
+                registrarEnvioRecordatorio(cita.cita_id, '24h').catch((error) =>
+                    console.error('Error registrando envío de recordatorio (fire-and-forget):', error)
+                );
+            }
             return { exito: true };
         }
         return { exito: false };
@@ -352,13 +381,15 @@ export async function enviarPlantillaDiaria(cita: AgendaPendienteResponse): Prom
         });
 
         const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
+        const usarBotones = isRecordatoriosBotonesEnabled();
+        const nombrePlantilla = usarBotones ? process.env.NOMBRE_PLANTILLA_META_DIARIA_BOTONES : process.env.NOMBRE_PLANTILLA_META_DIARIA;
         console.log('Enviando plantilla URL:', url);
         const body = {
             "messaging_product": "whatsapp",
             "to": `${cita.telefono_paciente}`,
             "type": "template",
             "template": {
-                "name": `${process.env.NOMBRE_PLANTILLA_META_DIARIA}`,
+                "name": `${nombrePlantilla}`,
                 "language": {
                     "code": "es_CO"
                 },
@@ -390,6 +421,12 @@ export async function enviarPlantillaDiaria(cita: AgendaPendienteResponse): Prom
         }
         if (response.data.messages[0].message_status === 'accepted') {
             console.log(`Plantilla enviada exitosamente a ${cita.nombre_paciente} (${cita.telefono_paciente})`);
+            if (usarBotones) {
+                // Fire-and-forget (15.6): un fallo de registro nunca debe afectar el envío ya exitoso.
+                registrarEnvioRecordatorio(cita.cita_id, '2h').catch((error) =>
+                    console.error('Error registrando envío de recordatorio (fire-and-forget):', error)
+                );
+            }
             return { exito: true };
         }
         return { exito: false };
@@ -411,6 +448,8 @@ export async function enviarPlantillaRecordatorio(cita: AgendaPendienteResponse)
 
         const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
         const administradora = cita.administradora ? cita.administradora : 'PARTICULAR';
+        const usarBotones = isRecordatoriosBotonesEnabled();
+        const nombrePlantilla = usarBotones ? process.env.NOMBRE_PLANTILLA_RECORDATORIO_META_BOTONES : process.env.NOMBRE_PLANTILLA_RECORDATORIO_META;
         console.log('Enviando plantilla URL:', url);
         console.log('Administradora:', administradora);
         const body = {
@@ -418,7 +457,7 @@ export async function enviarPlantillaRecordatorio(cita: AgendaPendienteResponse)
             "to": `${cita.telefono_paciente}`,
             "type": "template",
             "template": {
-                "name": `${process.env.NOMBRE_PLANTILLA_RECORDATORIO_META}`,
+                "name": `${nombrePlantilla}`,
                 "language": {
                     "code": "es_CO"
                 },
@@ -453,6 +492,12 @@ export async function enviarPlantillaRecordatorio(cita: AgendaPendienteResponse)
         }
         if (response.data.messages[0].message_status === 'accepted') {
             console.log(`Plantilla enviada exitosamente a ${cita.nombre_paciente} (${cita.telefono_paciente})`);
+            if (usarBotones) {
+                // Fire-and-forget (15.6): un fallo de registro nunca debe afectar el envío ya exitoso.
+                registrarEnvioRecordatorio(cita.cita_id, '48h').catch((error) =>
+                    console.error('Error registrando envío de recordatorio (fire-and-forget):', error)
+                );
+            }
             return { exito: true };
         }
         return { exito: false };
@@ -869,5 +914,52 @@ export async function confirmarEscalamientoListaEspera(cupoLiberadoId: string): 
     } catch (error) {
         console.error('Error confirmando escalamiento de lista de espera:', error);
         return false;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Lista de espera inteligente — Fase 3: captura de respuesta en recordatorios (Funcionalidad 1).
+// Ver proyecto-ips/docs/features/2026-09-07-lista-espera-inteligente.md, sección 15.5 (contrato
+// definitivo, ya implementado y probado en el backend).
+// ---------------------------------------------------------------------------
+
+export type TipoRecordatorio = '48h' | '24h' | '2h';
+
+/**
+ * Registra que un recordatorio (con botones) fue enviado para una cita, para poder correlacionar
+ * después la respuesta del paciente. `citaId` es `agenda_id_externa` (el mismo `cita_id` que ya trae
+ * `AgendaPendienteResponse`/`AgendaProgramadaResponse`), no el `agenda_id` interno (bug 6.8, sigue sin
+ * corregirse — el endpoint lo resuelve server-side). Se llama en modo fire-and-forget desde las 4
+ * funciones de envío de plantillas cuando `RECORDATORIOS_BOTONES_ENABLED === 'true'` — nunca debe
+ * hacer fallar el envío del recordatorio en sí.
+ */
+export async function registrarEnvioRecordatorio(citaId: string, tipoRecordatorio: TipoRecordatorio): Promise<boolean> {
+    try {
+        const url = `${API_BACKEND_URL}/chatbot/recordatorios/registrar-envio`;
+        const response = await axios.post(url, { cita_id: citaId, tipo_recordatorio: tipoRecordatorio });
+        return response.data?.isError === false;
+    } catch (error) {
+        console.error('Error registrando envío de recordatorio:', error);
+        return false;
+    }
+}
+
+/**
+ * Registra la respuesta del paciente ('confirma'/'no_asistira') a un botón de recordatorio. Importante
+ * (15.8): si `respuesta === 'no_asistira'`, el backend cancela la cita de verdad (Globho + BD) y
+ * dispara la detección de cupo liberado de Fase 2 — no es una operación de solo lectura.
+ */
+export async function responderRecordatorio(
+    celular: string,
+    documento: string,
+    respuesta: 'confirma' | 'no_asistira'
+): Promise<{ accion: string; persistido: boolean } | null> {
+    try {
+        const url = `${API_BACKEND_URL}/chatbot/recordatorios/responder`;
+        const response = await axios.post(url, { celular, documento, respuesta });
+        return response.data?.data ?? null;
+    } catch (error) {
+        console.error('Error respondiendo recordatorio:', error);
+        return null;
     }
 }

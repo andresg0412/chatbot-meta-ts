@@ -1,0 +1,59 @@
+// Respuesta al botón "Necesito cancelar" de los recordatorios con botones (48h/24h) — Fase 3 de
+// "lista de espera inteligente" (Funcionalidad 1). Ver
+// proyecto-ips/docs/features/2026-09-07-lista-espera-inteligente.md, secciones 15.5, 15.6 y 15.8.
+//
+// Importante (15.8): responder 'no_asistira' hace que el backend cancele la cita de verdad (Globho +
+// BD) y dispare la detección de cupo liberado de Fase 2 — no es una operación de solo lectura, mismo
+// camino crítico que ya usa el flujo "Cancelar cita" del menú principal.
+
+import { addKeyword, EVENTS } from '@builderbot/bot';
+import { responderRecordatorio, registrarActividadBot } from '../../../services/apiService';
+import { sanitizeString, isValidDocumentNumber } from '../../../utils/sanitize';
+
+const necesitoCancelarAccionFlow = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { state, flowDynamic, endFlow }) => {
+        const numeroDoc = state.getMyState().numeroDocRecordatorio;
+
+        if (!numeroDoc) {
+            await flowDynamic('No pudimos identificar tu respuesta. Por favor intenta nuevamente.');
+            return endFlow();
+        }
+
+        const resultado = await responderRecordatorio(ctx.from, numeroDoc, 'no_asistira');
+
+        if (!resultado) {
+            await registrarActividadBot('recordatorio_respuesta', ctx.from, {
+                accion: 'no_asistira',
+                origen_boton: 'necesito_cancelar',
+                resultado: 'error_o_sin_cita'
+            });
+            await flowDynamic('No encontramos una cita activa asociada a ese número de documento. Si crees que es un error, contáctanos.');
+            return endFlow();
+        }
+
+        await registrarActividadBot('recordatorio_respuesta', ctx.from, {
+            accion: 'no_asistira',
+            origen_boton: 'necesito_cancelar',
+            resultado: 'exitoso',
+            persistido: resultado.persistido
+        });
+        await flowDynamic('Entendido, cancelamos tu cita. Gracias por avisarnos con tiempo. Si quieres agendar un nuevo espacio cuando puedas, aquí estamos. 😊');
+        return endFlow();
+    });
+
+const necesitoCancelarFlow = addKeyword(['Necesito cancelar'])
+    .addAnswer(
+        'Para cancelar tu cita, por favor digita tu número de documento 🔢:',
+        { capture: true },
+        async (ctx, { state, gotoFlow, flowDynamic }) => {
+            const numeroDoc = sanitizeString(ctx.body, 20);
+            if (!isValidDocumentNumber(numeroDoc)) {
+                await flowDynamic('El número de documento ingresado no es válido. Intenta nuevamente.');
+                return gotoFlow(necesitoCancelarFlow);
+            }
+            await state.update({ numeroDocRecordatorio: numeroDoc });
+            return gotoFlow(necesitoCancelarAccionFlow);
+        }
+    );
+
+export { necesitoCancelarFlow, necesitoCancelarAccionFlow };

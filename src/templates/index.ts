@@ -115,6 +115,15 @@ import {
     ofertaCupoRechazaDocumentoFlow,
     ofertaCupoAccionFlow,
 } from './flujos/listaEspera'
+import {
+    // RECORDATORIOS (Fase 3) — captura de respuesta en recordatorios con botones
+    confirmoAsistenciaFlow,
+    confirmoAsistenciaAccionFlow,
+    necesitoCancelarFlow,
+    necesitoCancelarAccionFlow,
+    noPodreAsistirFlow,
+    noPodreAsistirAccionFlow,
+} from './flujos/recordatorios'
 
 export default createFlow([
     killSwitchFlow,
@@ -195,6 +204,12 @@ export default createFlow([
     ofertaCupoAceptaDocumentoFlow,
     ofertaCupoRechazaDocumentoFlow,
     ofertaCupoAccionFlow,
+    confirmoAsistenciaFlow,
+    confirmoAsistenciaAccionFlow,
+    necesitoCancelarFlow,
+    necesitoCancelarAccionFlow,
+    noPodreAsistirFlow,
+    noPodreAsistirAccionFlow,
     step5Reprogramar,
     step6Reprogramar,
     step7Reprogramar,
