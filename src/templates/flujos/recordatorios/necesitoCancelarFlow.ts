@@ -9,6 +9,7 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { responderRecordatorio, registrarActividadBot } from '../../../services/apiService';
 import { sanitizeString, isValidDocumentNumber } from '../../../utils/sanitize';
+import { KW_NECESITO_CANCELAR, OPCIONES_REGEX } from '../keywordsBotones';
 
 const necesitoCancelarAccionFlow = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { state, flowDynamic, endFlow }) => {
@@ -41,7 +42,8 @@ const necesitoCancelarAccionFlow = addKeyword(EVENTS.ACTION)
         return endFlow();
     });
 
-const necesitoCancelarFlow = addKeyword(['Necesito cancelar'])
+// Coincidencia exacta anclada (runbook B1): ver templates/flujos/keywordsBotones.ts.
+const necesitoCancelarFlow = addKeyword(KW_NECESITO_CANCELAR, OPCIONES_REGEX)
     .addAnswer(
         'Para cancelar tu cita, por favor digita tu número de documento 🔢:',
         { capture: true },

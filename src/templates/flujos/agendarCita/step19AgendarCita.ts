@@ -6,6 +6,7 @@ import { crearCita } from '../../../services/apiService';
 import { closeUserSession } from '../../../utils/proactiveSessionManager';
 import { registrarActividadBot } from '../../../services/apiService';
 import { stepListaEsperaOptIn } from './listaEspera/stepListaEsperaOptIn';
+import { isListaEsperaOptinEnabled, esTelefonoPiloto } from '../../../utils/listaEsperaFlags';
 
 
 function generarAgendaIdAleatorio() {
@@ -80,7 +81,14 @@ const step19AgendarCita = addKeyword(EVENTS.ACTION)
             // Fase 1 de "lista de espera inteligente": tras confirmar la cita, se ofrece (opcional)
             // inscribirse para ser avisado si se libera un cupo antes. La cita ya quedó firme arriba;
             // esto no bloquea ni condiciona lo anterior.
-            return gotoFlow(stepListaEsperaOptIn);
+            // Runbook B4/B7: solo si LISTA_ESPERA_OPTIN_ENABLED === 'true' y el número está en
+            // LISTA_ESPERA_TELEFONOS_PILOTO (o esa lista está vacía). Si no, el flujo termina igual que
+            // antes de la Fase 1 (cerrar sesión + endFlow, sin más mensajes).
+            if (isListaEsperaOptinEnabled() && esTelefonoPiloto(ctx.from)) {
+                return gotoFlow(stepListaEsperaOptIn);
+            }
+            closeUserSession(ctx.from);
+            return endFlow();
         } catch (e) {
             metricError(e, ctx.from);
             closeUserSession(ctx.from);

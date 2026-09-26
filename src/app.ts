@@ -13,6 +13,9 @@ import { executeRecuperacionCampaign } from './controllers/recuperacionCampaignC
 import { executeConAsistenciaCampaign } from './controllers/conAsistenciaCampaignController';
 import { createCrisisInterceptor } from './utils/crisisProtocol';
 import { startCascadaPoller } from './utils/listaEsperaCascadaPoller';
+import { procesarNoticeProvider } from './utils/avisoAsesor';
+import { obtenerBloqueadosPorCrisis, quitarBloqueoPorCrisis } from './utils/crisisBlacklistStore';
+import { isCrisisProtocolEnabled } from './utils/listaEsperaFlags';
 
 const PORT = process.env.PORT ?? 3008
 
@@ -48,12 +51,33 @@ const main = async () => {
         createCrisisInterceptor(() => botInstance, sendRaw)
     );
 
+    // Runbook B6: el provider convierte los webhooks de estado 'failed' de Meta en un evento 'notice'.
+    // Si corresponde a un aviso reciente al asesor (crisis / escalamiento), se registra en chat_stats.
+    adapterProvider.on('notice', procesarNoticeProvider);
+
     const bot = await createBot({
         flow: templates,
         provider: adapterProvider,
         database: adapterDB,
     })
     botInstance = bot as any;
+
+    // Runbook B8: restaurar los números bloqueados por el protocolo de crisis (persistidos en
+    // src/utils/crisisBlacklistDB.json) para que un reinicio no los desbloquee sin intervención
+    // humana. Se restauran aunque CRISIS_PROTOCOL_ENABLED esté en false: apagar la detección no debe
+    // liberar a alguien que ya estaba bloqueado. Se liberan con POST /v1/blacklist {intent:'remove'}.
+    try {
+        const bloqueadosPorCrisis = obtenerBloqueadosPorCrisis();
+        if (bloqueadosPorCrisis.length > 0) {
+            bot.dynamicBlacklist.add(bloqueadosPorCrisis);
+        }
+        console.log(
+            `[crisisProtocol] Protocolo de crisis ${isCrisisProtocolEnabled() ? 'ACTIVO' : 'inactivo (CRISIS_PROTOCOL_ENABLED != true)'}; ` +
+            `${bloqueadosPorCrisis.length} número(s) bloqueado(s) por crisis restaurado(s) en la lista negra.`
+        );
+    } catch (error) {
+        console.error('[crisisProtocol] Error restaurando la lista negra por crisis:', error);
+    }
     const { handleCtx, httpServer } = bot
 
     // Configurar el bot para el sistema de timeout proactivo
@@ -120,6 +144,9 @@ const main = async () => {
         '/v1/blacklist',
         handleCtx(async (bot, req, res) => {
             const { number, intent } = req.body
+            // Runbook B8: al reactivar un número, quitarlo también del registro persistente de
+            // bloqueos por crisis (antes de la línea original, que lanza si el número no está).
+            if (intent === 'remove') quitarBloqueoPorCrisis(number)
             if (intent === 'remove') bot.blacklist.remove(number)
             if (intent === 'add') bot.blacklist.add(number)
 

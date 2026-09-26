@@ -1,5 +1,6 @@
 // Poller de la cascada de ofertas de cupo — Fase 2 de "lista de espera inteligente".
-// Ver proyecto-ips/docs/features/2026-09-07-lista-espera-inteligente.md, secciones 13.4-a y 13.7.
+// Ver proyecto-ips/docs/features/2026-09-07-lista-espera-inteligente.md, secciones 13.4-a y 13.7, y
+// proyecto-ips/docs/features/2026-09-26-lista-espera-runbook-produccion.md (B3, B6, B7, B9).
 //
 // Modelo "tick" (no push backend→bot, ver 13.4-a): este módulo sondea
 // `POST /chatbot/listaespera/cascada/tick` cada `LISTA_ESPERA_CASCADA_POLL_INTERVAL_MS` (default 60s)
@@ -17,6 +18,10 @@ import {
     confirmarEscalamientoListaEspera,
 } from '../services/apiService';
 import { AccionCascada, AccionOfertar, AccionEscalar, AccionNotificarPausa } from '../interfaces/ICascadaListaEspera';
+import { isCascadaEnabled, esTelefonoPiloto, hayListaPiloto } from './listaEsperaFlags';
+import { normalizarTelefonoWhatsApp, enmascararTelefono } from './telefono';
+import { formatearFechaLarga, formatearHoraHHMM, instanteBogota } from './fechaHora';
+import { enviarAvisoAsesor } from './avisoAsesor';
 
 const DEFAULT_POLL_INTERVAL_MS = 60000;
 
@@ -26,32 +31,72 @@ let pollerStarted = false;
 let cachedSendRaw: SendRawMessage | null = null;
 
 /**
- * Bandera de seguridad (default apagada): mientras la plantilla `oferta_cupo_disponible` no esté
- * aprobada por Meta, el motor de cascada puede desplegarse igual en modo "observar sin actuar" —
- * sigue llamando al tick (para no perder visibilidad de lo que pasaría) pero NO envía la plantilla
- * de oferta ni llama a los endpoints de confirmación de envío/fallo asociados a esa acción. Ver
- * docs/features/2026-09-07-lista-espera-inteligente.md, sección 13.8.
+ * Modo observación (LISTA_ESPERA_CASCADA_ENABLED != 'true', default): el poller sigue llamando al
+ * tick (para no perder visibilidad) pero NO envía nada por WhatsApp — ni la plantilla de oferta, ni el
+ * aviso de escalamiento al asesor, ni el aviso de pausa al paciente (runbook B3) — y tampoco llama a
+ * confirmar-envio / marcar-fallo / escalar/confirmar, para no dejar en el backend constancia de envíos
+ * que no se hicieron. Efecto en el backend de no confirmar:
+ * - 'ofertar': la oferta sigue 'en_cola' y el cupo 'en_oferta'; se vuelve a proponer en cada tick
+ *   (hasta que la antelación baja de 1h y el propio backend escala el cupo).
+ * - 'escalar': el cupo queda 'escalado' sin evento 'escalamiento_notificado', así que cada tick lo
+ *   vuelve a devolver; al encender el interruptor se envía (y confirma) en el primer tick. Si para
+ *   entonces el cupo ya pasó, el aviso lo indica como informativo.
+ * - 'notificar_pausa': el backend ya pausó la inscripción y no vuelve a emitir la acción; en modo
+ *   observación el aviso se pierde (en la práctica no ocurre: sin ofertas enviadas no hay expiraciones
+ *   que lleven a una pausa).
+ * Para no inundar el log cada 60s, cada acción observada se loguea una sola vez por proceso.
+ * Ver docs/features/2026-09-07-lista-espera-inteligente.md, sección 13.8.
  */
-function isCascadaEnabled(): boolean {
-    return process.env.LISTA_ESPERA_CASCADA_ENABLED === 'true';
+const accionesObservadasLogueadas = new Set<string>();
+
+function logObservacionUnaVez(clave: string, mensaje: string): void {
+    if (accionesObservadasLogueadas.has(clave)) return;
+    accionesObservadasLogueadas.add(clave);
+    console.log(`[listaEsperaCascadaPoller] (LISTA_ESPERA_CASCADA_ENABLED != 'true', modo observación) ${mensaje}`);
 }
 
 async function procesarAccionOfertar(accion: AccionOfertar): Promise<void> {
+    // Runbook B9: en logs, teléfono enmascarado y sin nombre del paciente.
+    const telefonoLog = enmascararTelefono(accion.telefono_paciente);
+    const descripcion =
+        `cupo ${accion.cupo_liberado_id} -> lista_espera ${accion.lista_espera_id} (paciente ${accion.paciente_id}, ` +
+        `tel ${telefonoLog}) para el ${accion.fecha_cita} ${formatearHoraHHMM(accion.hora_cita)} ` +
+        `(nivel de cascada ${accion.nivel_cascada_origen})`;
+
     if (!isCascadaEnabled()) {
-        console.log(
-            `[listaEsperaCascadaPoller] (LISTA_ESPERA_CASCADA_ENABLED != 'true', modo observación) ` +
-            `Acción 'ofertar' pendiente: cupo ${accion.cupo_liberado_id} -> paciente ${accion.paciente_id} ` +
-            `(${accion.nombre_paciente}, ${accion.telefono_paciente}) para ${accion.profesional} el ` +
-            `${accion.fecha_cita} ${accion.hora_cita} (nivel de cascada ${accion.nivel_cascada_origen}). ` +
-            `No se envió ninguna plantilla ni se llamó a confirmar-envio/marcar-fallo.`
+        logObservacionUnaVez(
+            `ofertar:${accion.cupo_liberado_id}:${accion.lista_espera_id}`,
+            `Acción 'ofertar' pendiente: ${descripcion}. No se envió ninguna plantilla ni se llamó a confirmar-envio/marcar-fallo.`
         );
+        return;
+    }
+
+    // El backend puede mandar el teléfono ya normalizado (57XXXXXXXXXX), con 10 dígitos, con espacios/+,
+    // o null/vacío si no es contactable. Se normaliza aquí; si no hay número utilizable no se envía y se
+    // marca fallo para que la cascada avance al siguiente candidato (no penaliza al paciente).
+    const telefonoDestino = normalizarTelefonoWhatsApp(accion.telefono_paciente);
+    if (!telefonoDestino) {
+        console.warn(`[listaEsperaCascadaPoller] Oferta no enviada: teléfono no contactable. ${descripcion}. Se marca fallo 'telefono_no_contactable'.`);
+        await marcarFalloOfertaCupo(accion.cupo_liberado_id, accion.lista_espera_id, 'telefono_no_contactable');
+        return;
+    }
+
+    // Runbook B7: con lista piloto, solo los números piloto reciben ofertas. Para el resto se llama a
+    // marcar-fallo: el backend deja esa oferta en 'error' (solo para ESTE cupo), registra el evento
+    // 'oferta_fallo_envio' con el motivo, no penaliza al paciente (no cuenta como "sin respuesta" ni
+    // cambia su inscripción, que sigue 'activa') y el siguiente tick ofrece al siguiente de la fila o
+    // escala el cupo ('fila_agotada'). Así la cascada no queda bloqueada esperando una oferta que
+    // nunca se va a enviar. Ver proyecto-ips/backend CupoLiberadoService.marcarFalloEnvio().
+    if (!esTelefonoPiloto(telefonoDestino)) {
+        console.log(`[listaEsperaCascadaPoller] Oferta no enviada: número fuera de LISTA_ESPERA_TELEFONOS_PILOTO. ${descripcion}. Se marca fallo 'fuera_de_piloto'.`);
+        await marcarFalloOfertaCupo(accion.cupo_liberado_id, accion.lista_espera_id, 'fuera_de_piloto');
         return;
     }
 
     try {
         const resultado = await enviarPlantillaOfertaCupo(
             accion.nombre_paciente,
-            accion.telefono_paciente,
+            telefonoDestino,
             accion.profesional,
             accion.fecha_cita,
             accion.hora_cita
@@ -74,63 +119,103 @@ async function procesarAccionOfertar(accion: AccionOfertar): Promise<void> {
         } else {
             await marcarFalloOfertaCupo(accion.cupo_liberado_id, accion.lista_espera_id, 'envio_meta_fallido');
         }
-    } catch (error) {
-        console.error(`[listaEsperaCascadaPoller] Error inesperado procesando oferta del cupo ${accion.cupo_liberado_id}:`, error);
+    } catch (error: any) {
+        console.error(`[listaEsperaCascadaPoller] Error inesperado procesando oferta del cupo ${accion.cupo_liberado_id}:`, error?.message ?? error);
         try {
             await marcarFalloOfertaCupo(accion.cupo_liberado_id, accion.lista_espera_id, 'excepcion_bot');
-        } catch (error2) {
-            console.error('[listaEsperaCascadaPoller] Error adicional marcando fallo de oferta tras excepción:', error2);
+        } catch (error2: any) {
+            console.error('[listaEsperaCascadaPoller] Error adicional marcando fallo de oferta tras excepción:', error2?.message ?? error2);
         }
     }
 }
 
-async function procesarAccionEscalar(accion: AccionEscalar, sendRaw: SendRawMessage): Promise<void> {
-    const canalEscalamiento = process.env.CANAL_ESCALAMIENTO_LISTA_ESPERA;
-    const mensajeResumen =
+export function construirMensajeEscalamiento(accion: AccionEscalar): string {
+    const instante = instanteBogota(accion.fecha_cita, accion.hora_cita);
+    const vencido = instante !== null && instante <= Date.now();
+    const fecha = formatearFechaLarga(accion.fecha_cita) || accion.fecha_cita;
+    return (
+        (vencido ? 'ℹ️ (Informativo: la fecha y hora de este cupo ya pasaron)\n' : '') +
         '⚠️ Cupo de lista de espera sin asignar — requiere gestión manual de recepción\n' +
         `Profesional: ${accion.profesional}\n` +
-        `Fecha y hora del cupo: ${accion.fecha_cita} ${accion.hora_cita}\n` +
+        `Fecha y hora del cupo: ${fecha} ${formatearHoraHHMM(accion.hora_cita)}\n` +
         `Motivo: ${accion.motivo}\n` +
         `Candidatos contactados: ${accion.candidatos_contactados}\n` +
-        `Respuestas — Aceptaron: ${accion.resumen_respuestas.aceptaron}, ` +
-        `Rechazaron: ${accion.resumen_respuestas.rechazaron}, ` +
-        `Sin respuesta: ${accion.resumen_respuestas.sin_respuesta}\n` +
-        `Cupo liberado ID: ${accion.cupo_liberado_id}`;
+        `Respuestas — Aceptaron: ${accion.resumen_respuestas?.aceptaron ?? 0}, ` +
+        `Rechazaron: ${accion.resumen_respuestas?.rechazaron ?? 0}, ` +
+        `Sin respuesta: ${accion.resumen_respuestas?.sin_respuesta ?? 0}\n` +
+        `Cupo liberado ID: ${accion.cupo_liberado_id}`
+    );
+}
 
-    // Mismo patrón defensivo que CANAL_ESCALAMIENTO_CRISIS (ver src/utils/crisisProtocol.ts): si el
-    // canal no está configurado, solo se loguea y se sigue — no bloquea el resto del motor de cascada.
-    if (canalEscalamiento) {
-        try {
-            await sendRaw(canalEscalamiento, mensajeResumen);
-        } catch (error) {
-            console.error('[listaEsperaCascadaPoller] Error notificando escalamiento al canal configurado:', error);
-        }
-    } else {
+async function procesarAccionEscalar(accion: AccionEscalar): Promise<void> {
+    if (!isCascadaEnabled()) {
+        // Runbook B3: en modo observación no se avisa al asesor ni se confirma el escalamiento.
+        logObservacionUnaVez(
+            `escalar:${accion.cupo_liberado_id}`,
+            `Acción 'escalar' pendiente: cupo ${accion.cupo_liberado_id} (${accion.fecha_cita} ` +
+            `${formatearHoraHHMM(accion.hora_cita)}, motivo ${accion.motivo}). No se avisó al asesor ni se llamó a escalar/confirmar.`
+        );
+        return;
+    }
+
+    const canalEscalamiento = process.env.CANAL_ESCALAMIENTO_LISTA_ESPERA;
+    // Runbook B6: un aviso no entregado (canal vacío, error de Graph API o webhook 'failed', p. ej.
+    // ventana de 24h cerrada) queda registrado en chat_stats como 'aviso_asesor_fallido'. Respecto del
+    // backend se mantiene el comportamiento de siempre: se confirma el escalamiento tras el intento
+    // (no se reintenta cada 60s, para no repetir el aviso ni llenar chat_stats de fallos repetidos).
+    const entregado = await enviarAvisoAsesor({
+        tipo: 'escalamiento_lista_espera',
+        canal: canalEscalamiento,
+        referencia: `cupo:${accion.cupo_liberado_id}`,
+        mensaje: construirMensajeEscalamiento(accion)
+    });
+    if (!canalEscalamiento) {
         console.error(
             `[listaEsperaCascadaPoller] CANAL_ESCALAMIENTO_LISTA_ESPERA no está configurado en .env — no se ` +
-            `pudo notificar a recepción automáticamente. Detalle del escalamiento:\n${mensajeResumen}`
+            `pudo notificar a recepción automáticamente el cupo ${accion.cupo_liberado_id}.`
         );
+    } else if (!entregado) {
+        console.error(`[listaEsperaCascadaPoller] No se pudo entregar el aviso de escalamiento del cupo ${accion.cupo_liberado_id}.`);
     }
 
     try {
         await confirmarEscalamientoListaEspera(accion.cupo_liberado_id);
-    } catch (error) {
-        console.error(`[listaEsperaCascadaPoller] Error confirmando escalamiento del cupo ${accion.cupo_liberado_id}:`, error);
+    } catch (error: any) {
+        console.error(`[listaEsperaCascadaPoller] Error confirmando escalamiento del cupo ${accion.cupo_liberado_id}:`, error?.message ?? error);
     }
 }
 
 async function procesarAccionNotificarPausa(accion: AccionNotificarPausa, sendRaw: SendRawMessage): Promise<void> {
     // No requiere confirmación de vuelta al backend: el backend ya dejó la inscripción en 'pausada'.
+    const telefonoLog = enmascararTelefono(accion.telefono_paciente);
+    if (!isCascadaEnabled()) {
+        logObservacionUnaVez(
+            `pausa:${accion.lista_espera_id}`,
+            `Acción 'notificar_pausa' pendiente: lista_espera ${accion.lista_espera_id} (tel ${telefonoLog}). No se envió el aviso al paciente.`
+        );
+        return;
+    }
+
+    const telefonoDestino = normalizarTelefonoWhatsApp(accion.telefono_paciente);
+    if (!telefonoDestino) {
+        console.warn(`[listaEsperaCascadaPoller] Aviso de pausa no enviado (teléfono no contactable) para lista_espera ${accion.lista_espera_id}.`);
+        return;
+    }
+    if (!esTelefonoPiloto(telefonoDestino)) {
+        console.log(`[listaEsperaCascadaPoller] Aviso de pausa no enviado: tel ${telefonoLog} fuera de LISTA_ESPERA_TELEFONOS_PILOTO (lista_espera ${accion.lista_espera_id}).`);
+        return;
+    }
+
     try {
         await sendRaw(
-            accion.telefono_paciente,
+            telefonoDestino,
             `Hola ${accion.nombre_paciente}, por falta de respuesta saliste de la lista de espera para ` +
             'adelantar tu cita. Si quieres volver a inscribirte, agenda o consulta tu cita nuevamente y ' +
             'acepta la opción de avisos cuando se libere un espacio con el profesional que te atiende. ' +
             '¡Gracias por tu comprensión! 😊'
         );
-    } catch (error) {
-        console.error(`[listaEsperaCascadaPoller] Error notificando pausa de lista de espera a ${accion.telefono_paciente}:`, error);
+    } catch (error: any) {
+        console.error(`[listaEsperaCascadaPoller] Error notificando pausa de lista de espera a tel ${telefonoLog}:`, error?.message ?? error);
     }
 }
 
@@ -139,11 +224,11 @@ async function procesarAccion(accion: AccionCascada, sendRaw: SendRawMessage): P
         case 'ofertar':
             return procesarAccionOfertar(accion);
         case 'escalar':
-            return procesarAccionEscalar(accion, sendRaw);
+            return procesarAccionEscalar(accion);
         case 'notificar_pausa':
             return procesarAccionNotificarPausa(accion, sendRaw);
         default:
-            console.error('[listaEsperaCascadaPoller] Acción de cascada con tipo desconocido, se ignora:', accion);
+            console.error('[listaEsperaCascadaPoller] Acción de cascada con tipo desconocido, se ignora:', (accion as any)?.tipo);
     }
 }
 
@@ -156,8 +241,8 @@ async function runCascadaTick(sendRaw: SendRawMessage): Promise<void> {
             // acción relacionada — más simple de razonar, y el volumen esperado por tick es bajo.
             await procesarAccion(accion, sendRaw);
         }
-    } catch (error) {
-        console.error('[listaEsperaCascadaPoller] Error ejecutando tick de cascada de lista de espera:', error);
+    } catch (error: any) {
+        console.error('[listaEsperaCascadaPoller] Error ejecutando tick de cascada de lista de espera:', error?.message ?? error);
     }
 }
 
@@ -178,12 +263,12 @@ export function startCascadaPoller(sendRaw: SendRawMessage): void {
     const intervalMs = Number(process.env.LISTA_ESPERA_CASCADA_POLL_INTERVAL_MS) || DEFAULT_POLL_INTERVAL_MS;
     console.log(
         `[listaEsperaCascadaPoller] Poller de cascada de lista de espera iniciado (cada ${intervalMs} ms, ` +
-        `LISTA_ESPERA_CASCADA_ENABLED=${isCascadaEnabled()}).`
+        `LISTA_ESPERA_CASCADA_ENABLED=${isCascadaEnabled()}, lista piloto ${hayListaPiloto() ? 'activa' : 'vacía (sin restricción)'}).`
     );
 
     setInterval(() => {
         runCascadaTick(sendRaw).catch((error) =>
-            console.error('[listaEsperaCascadaPoller] Error inesperado en tick programado:', error)
+            console.error('[listaEsperaCascadaPoller] Error inesperado en tick programado:', error?.message ?? error)
         );
     }, intervalMs);
 }
@@ -200,6 +285,12 @@ export function triggerCascadaTickNow(): void {
         return;
     }
     runCascadaTick(cachedSendRaw).catch((error) =>
-        console.error('[listaEsperaCascadaPoller] Error inesperado en tick inmediato (path rápido):', error)
+        console.error('[listaEsperaCascadaPoller] Error inesperado en tick inmediato (path rápido):', error?.message ?? error)
     );
+}
+
+/** Solo para pruebas: ejecuta un tick con el `sendRaw` dado, limpiando antes el registro de logs observados. */
+export async function _runCascadaTickParaPruebas(sendRaw: SendRawMessage): Promise<void> {
+    accionesObservadasLogueadas.clear();
+    await runCascadaTick(sendRaw);
 }

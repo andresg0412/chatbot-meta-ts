@@ -8,7 +8,7 @@ export interface AccionOfertar {
     lista_espera_id: string;
     paciente_id: string;
     nombre_paciente: string;
-    telefono_paciente: string;
+    telefono_paciente: string | null; // el backend puede enviar 57XXXXXXXXXX, 10 dígitos, o null si no es contactable
     especialidad: string | null;
     profesional: string;
     fecha_cita: string;
@@ -37,7 +37,7 @@ export interface AccionNotificarPausa {
     lista_espera_id: string;
     paciente_id: string;
     nombre_paciente: string;
-    telefono_paciente: string;
+    telefono_paciente: string | null; // el backend puede enviar 57XXXXXXXXXX, 10 dígitos, o null si no es contactable
 }
 
 export type AccionCascada = AccionOfertar | AccionEscalar | AccionNotificarPausa;

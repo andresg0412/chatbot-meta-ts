@@ -11,6 +11,7 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { responderRecordatorio, registrarActividadBot } from '../../../services/apiService';
 import { sanitizeString, isValidDocumentNumber } from '../../../utils/sanitize';
+import { KW_CONFIRMO_ASISTENCIA, OPCIONES_REGEX } from '../keywordsBotones';
 
 const confirmoAsistenciaAccionFlow = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { state, flowDynamic, endFlow }) => {
@@ -41,7 +42,8 @@ const confirmoAsistenciaAccionFlow = addKeyword(EVENTS.ACTION)
         return endFlow();
     });
 
-const confirmoAsistenciaFlow = addKeyword(['Confirmo asistencia'])
+// Coincidencia exacta anclada (runbook B1): ver templates/flujos/keywordsBotones.ts.
+const confirmoAsistenciaFlow = addKeyword(KW_CONFIRMO_ASISTENCIA, OPCIONES_REGEX)
     .addAnswer(
         'Para confirmar tu cita, por favor digita tu número de documento 🔢:',
         { capture: true },

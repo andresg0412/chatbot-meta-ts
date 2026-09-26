@@ -1,6 +1,7 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { closeUserSession } from '../../../../utils/proactiveSessionManager';
 import { registrarActividadBot, inscribirListaEspera } from '../../../../services/apiService';
+import { TEXTO_COMANDO_RETIRO_LISTA_ESPERA } from '../../keywordsBotones';
 
 /**
  * Texto exacto de consentimiento mostrado al paciente — se envía tal cual al backend en
@@ -12,7 +13,10 @@ export const TEXTO_CONSENTIMIENTO_LISTA_ESPERA =
     'Tu cita ya quedó agendada y confirmada ✅. Esto es un servicio adicional y totalmente opcional: ' +
     'si se libera un cupo antes con el mismo profesional, ¿quieres que te avisemos por este medio para ' +
     'ofrecerte adelantar tu cita? Aceptes o no, tu cita actual se mantiene exactamente igual. ' +
-    'En cualquier momento puedes escribir *"Salir"* para dejar de recibir estos avisos.';
+    `En cualquier momento puedes escribir *"${TEXTO_COMANDO_RETIRO_LISTA_ESPERA}"* para dejar de recibir estos avisos.`;
+// Runbook B5: antes decía *"Salir"*, pero "Salir" solo cierra la conversación (no retira). El comando
+// "Retirar lista de espera" lo atiende templates/flujos/listaEspera/retiroListaEsperaFlow.ts. Este
+// texto se guarda como auditoría en lista_espera.consentimiento_texto.
 
 const stepListaEsperaOptIn = addKeyword(EVENTS.ACTION)
     .addAnswer(
@@ -75,7 +79,7 @@ const stepListaEsperaOptIn = addKeyword(EVENTS.ACTION)
             // docs/features/2026-09-07-lista-espera-inteligente.md, override explícito de la
             // sección 3.4 del spec original.
             closeUserSession(ctx.from);
-            await flowDynamic('¡Listo! Quedaste inscrito en la lista de espera. Si se libera un cupo antes con tu profesional te vamos a escribir por este mismo medio para ofrecértelo. Te esperamos en tu cita agendada. 😊');
+            await flowDynamic(`¡Listo! Quedaste inscrito en la lista de espera. Si se libera un cupo antes con tu profesional te vamos a escribir por este mismo medio para ofrecértelo. Te esperamos en tu cita agendada. 😊\n\nSi en algún momento ya no quieres recibir estos avisos, escribe *"${TEXTO_COMANDO_RETIRO_LISTA_ESPERA}"*.`);
             return endFlow();
         }
     );

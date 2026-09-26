@@ -20,6 +20,10 @@
 // POST /v1/blacklist { number, intent: 'remove' }.
 
 import { registrarActividadBot } from '../services/apiService';
+import { isCrisisProtocolEnabled } from './listaEsperaFlags';
+import { registrarBloqueoPorCrisis } from './crisisBlacklistStore';
+import { enviarAvisoAsesor } from './avisoAsesor';
+import { enmascararTelefono } from './telefono';
 
 /**
  * Palabras/frases que sugieren ideación suicida, autolesión o crisis aguda.
@@ -72,6 +76,12 @@ type SendRawMessage = (to: string, message: string) => Promise<any>;
 export function createCrisisInterceptor(getBot: () => CrisisCapableBot | undefined, sendRaw: SendRawMessage) {
   return function crisisInterceptor(ctx: any): void {
     try {
+      // Runbook B4: interruptor CRISIS_PROTOCOL_ENABLED (default false). Apagado, el interceptor no
+      // hace nada (ni detecta, ni bloquea, ni envía, ni registra).
+      if (!isCrisisProtocolEnabled()) {
+        return;
+      }
+
       const from: string | undefined = ctx?.from;
       const body: string | undefined = ctx?.body;
 
@@ -87,6 +97,14 @@ export function createCrisisInterceptor(getBot: () => CrisisCapableBot | undefin
         console.error('[crisisProtocol] No hay instancia de bot disponible todavía; no se pudo bloquear el flujo automático para', from);
       }
       // --- Fin del tramo síncrono ---
+
+      // Runbook B8: persistir el bloqueo para que sobreviva a un `pm2 restart` (se restaura al
+      // arrancar en app.ts). Se hace después del tramo síncrono; si falla solo se loguea.
+      try {
+        registrarBloqueoPorCrisis(from);
+      } catch (persistError) {
+        console.error('[crisisProtocol] No se pudo persistir el bloqueo por crisis:', persistError);
+      }
 
       console.error(`[crisisProtocol] Contenido de riesgo detectado para ${from}. Flujo automático bloqueado (blacklist). Requiere intervención humana y liberar el número luego vía POST /v1/blacklist {intent:'remove'}.`);
 
@@ -108,12 +126,19 @@ export function createCrisisInterceptor(getBot: () => CrisisCapableBot | undefin
         // proceso una vez enviado) — el único lugar aceptable para el texto crudo es el console.error
         // de depuración de esta misma función. El humano que reciba esta alerta debe contactar
         // directamente al número para conocer el contexto.
-        sendRaw(
-          canalEscalamiento,
-          `⚠️ ALERTA — PROTOCOLO DE CRISIS\nNúmero: ${from}\nSe detectó contenido de riesgo y se bloqueó el flujo automático para este número. Por privacidad, este aviso no incluye el texto del mensaje — contacta directamente al paciente para conocer el contexto.\n\nPara reactivar el bot para este número una vez atendido, usar POST /v1/blacklist {"number":"${from}","intent":"remove"}.`
-        ).catch((err) => console.error('[crisisProtocol] Error notificando al canal de escalamiento:', err));
+        // Runbook B6: se envía con enviarAvisoAsesor (Graph API directo) y no con sendRaw (provider),
+        // porque el provider no propaga errores: así un aviso no entregado (p. ej. ventana de 24h
+        // cerrada) queda registrado en chat_stats como 'aviso_asesor_fallido'.
+        enviarAvisoAsesor({
+          tipo: 'crisis',
+          canal: canalEscalamiento,
+          referencia: `tel:${enmascararTelefono(from)}`,
+          mensaje: `⚠️ ALERTA — PROTOCOLO DE CRISIS\nNúmero: ${from}\nSe detectó contenido de riesgo y se bloqueó el flujo automático para este número. Por privacidad, este aviso no incluye el texto del mensaje — contacta directamente al paciente para conocer el contexto.\n\nPara reactivar el bot para este número una vez atendido, usar POST /v1/blacklist {"number":"${from}","intent":"remove"}.`
+        }).catch((err) => console.error('[crisisProtocol] Error notificando al canal de escalamiento:', err));
       } else {
         console.error('[crisisProtocol] CANAL_ESCALAMIENTO_CRISIS no está configurado en .env — no se pudo notificar a un humano automáticamente.');
+        // Runbook B6: también queda registrado en chat_stats (fase 'canal_no_configurado').
+        enviarAvisoAsesor({ tipo: 'crisis', canal: '', referencia: `tel:${enmascararTelefono(from)}`, mensaje: '' }).catch(() => undefined);
       }
 
       // Registro de evento — solo metadata, nunca el texto del mensaje (no persistir contenido

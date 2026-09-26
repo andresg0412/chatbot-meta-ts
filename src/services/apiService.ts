@@ -4,6 +4,9 @@ import { IPaciente } from '../interfaces/IPacienteIn';
 import { IReagendarCita, IAgendaResponse, ICrearCita } from '../interfaces/IReagendarCita';
 import { AgendaPendienteResponse, AgendaProgramadaResponse } from '../interfaces/IReagendarCita';
 import { AccionCascada } from '../interfaces/ICascadaListaEspera';
+import { isRecordatoriosBotonesEnabled as flagRecordatoriosBotones, esTelefonoPiloto } from '../utils/listaEsperaFlags';
+import { formatearFechaLarga, formatearHoraHHMM } from '../utils/fechaHora';
+import { enmascararTelefono } from '../utils/telefono';
 
 export const API_BACKEND_URL = process.env.API_BACKEND_URL;
 
@@ -17,7 +20,16 @@ export const API_BACKEND_URL = process.env.API_BACKEND_URL;
  * Ver proyecto-ips/docs/features/2026-09-07-lista-espera-inteligente.md, sección 15.6.
  */
 function isRecordatoriosBotonesEnabled(): boolean {
-    return process.env.RECORDATORIOS_BOTONES_ENABLED === 'true';
+    return flagRecordatoriosBotones();
+}
+
+/**
+ * Runbook B7: con `LISTA_ESPERA_TELEFONOS_PILOTO` configurada, solo los números piloto reciben la
+ * variante con botones; el resto recibe la plantilla actual sin botones (comportamiento de siempre).
+ * Sin lista piloto, decide solo `RECORDATORIOS_BOTONES_ENABLED`.
+ */
+function usarVarianteConBotones(telefonoPaciente: unknown): boolean {
+    return isRecordatoriosBotonesEnabled() && esTelefonoPiloto(telefonoPaciente);
 }
 
 export async function consultarCitasPaciente(documento: string, especialidad: string): Promise<IPaciente[] | null> {
@@ -246,7 +258,7 @@ export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse 
 
         const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
         const administradora = cita.administradora ? cita.administradora : 'PARTICULAR';
-        const usarBotones = isRecordatoriosBotonesEnabled();
+        const usarBotones = usarVarianteConBotones(cita.telefono_paciente);
         const nombrePlantilla = usarBotones ? process.env.NOMBRE_PLANTILLA_META_BOTONES : process.env.NOMBRE_PLANTILLA_META;
         console.log('Enviando plantilla URL:', url);
         console.log('Administradora:', administradora);
@@ -265,8 +277,8 @@ export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse 
                         "parameters": [
                             { "type": "text", "text": `${cita.nombre_paciente}` },
                             { "type": "text", "text": `${cita.especialidad}` },
-                            { "type": "text", "text": `${fechaFormateada}` },
-                            { "type": "text", "text": `${cita.hora_cita}` },
+                            { "type": "text", "text": `${usarBotones ? formatearFechaLarga(cita.fecha_cita) : fechaFormateada}` },
+                            { "type": "text", "text": `${usarBotones ? formatearHoraHHMM(cita.hora_cita) : cita.hora_cita}` },
                             { "type": "text", "text": `${cita.profesional}` },
                             { "type": "text", "text": `${cita.tipo_cita === 1 ? 'Presencial' : 'Virtual'}` },
                             { "type": "text", "text": `${administradora}` }
@@ -317,7 +329,7 @@ export async function enviarPlantillaRecordatorio24h(cita: AgendaProgramadaRespo
 
         const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
         const administradora = cita.administradora ? cita.administradora : 'PARTICULAR';
-        const usarBotones = isRecordatoriosBotonesEnabled();
+        const usarBotones = usarVarianteConBotones(cita.telefono_paciente);
         const nombrePlantilla = usarBotones ? process.env.NOMBRE_PLANTILLA_META_CONFIRMADO_24H_BOTONES : process.env.NOMBRE_PLANTILLA_META_CONFIRMADO_24H;
         const body = {
             "messaging_product": "whatsapp",
@@ -333,8 +345,8 @@ export async function enviarPlantillaRecordatorio24h(cita: AgendaProgramadaRespo
                         "type": "body",
                         "parameters": [
                             { "type": "text", "text": `${cita.nombre_paciente}` },
-                            { "type": "text", "text": `${fechaFormateada}` },
-                            { "type": "text", "text": `${cita.hora_cita}` }
+                            { "type": "text", "text": `${usarBotones ? formatearFechaLarga(cita.fecha_cita) : fechaFormateada}` },
+                            { "type": "text", "text": `${usarBotones ? formatearHoraHHMM(cita.hora_cita) : cita.hora_cita}` }
                         ]
                     }
                 ]
@@ -381,7 +393,7 @@ export async function enviarPlantillaDiaria(cita: AgendaPendienteResponse): Prom
         });
 
         const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
-        const usarBotones = isRecordatoriosBotonesEnabled();
+        const usarBotones = usarVarianteConBotones(cita.telefono_paciente);
         const nombrePlantilla = usarBotones ? process.env.NOMBRE_PLANTILLA_META_DIARIA_BOTONES : process.env.NOMBRE_PLANTILLA_META_DIARIA;
         console.log('Enviando plantilla URL:', url);
         const body = {
@@ -400,7 +412,7 @@ export async function enviarPlantillaDiaria(cita: AgendaPendienteResponse): Prom
                             { "type": "text", "text": `${cita.nombre_paciente}` },
                             { "type": "text", "text": `${cita.especialidad}` },
                             { "type": "text", "text": `${cita.tipo_cita === 1 ? 'Presencial' : 'Virtual'}` },
-                            { "type": "text", "text": `${cita.hora_cita}` }
+                            { "type": "text", "text": `${usarBotones ? formatearHoraHHMM(cita.hora_cita) : cita.hora_cita}` }
                         ]
                     }
                 ]
@@ -448,7 +460,7 @@ export async function enviarPlantillaRecordatorio(cita: AgendaPendienteResponse)
 
         const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
         const administradora = cita.administradora ? cita.administradora : 'PARTICULAR';
-        const usarBotones = isRecordatoriosBotonesEnabled();
+        const usarBotones = usarVarianteConBotones(cita.telefono_paciente);
         const nombrePlantilla = usarBotones ? process.env.NOMBRE_PLANTILLA_RECORDATORIO_META_BOTONES : process.env.NOMBRE_PLANTILLA_RECORDATORIO_META;
         console.log('Enviando plantilla URL:', url);
         console.log('Administradora:', administradora);
@@ -467,8 +479,8 @@ export async function enviarPlantillaRecordatorio(cita: AgendaPendienteResponse)
                         "parameters": [
                             { "type": "text", "text": `${cita.nombre_paciente}` },
                             { "type": "text", "text": `${cita.especialidad}` },
-                            { "type": "text", "text": `${fechaFormateada}` },
-                            { "type": "text", "text": `${cita.hora_cita}` },
+                            { "type": "text", "text": `${usarBotones ? formatearFechaLarga(cita.fecha_cita) : fechaFormateada}` },
+                            { "type": "text", "text": `${usarBotones ? formatearHoraHHMM(cita.hora_cita) : cita.hora_cita}` },
                             { "type": "text", "text": `${cita.profesional}` },
                             { "type": "text", "text": `${cita.tipo_cita === 1 ? 'Presencial' : 'Virtual'}` },
                             { "type": "text", "text": `${administradora}` }
@@ -785,10 +797,12 @@ export async function enviarPlantillaOfertaCupo(
     horaCita: string
 ): Promise<{ exito: boolean; mensajeWaId?: string }> {
     try {
-        const fechaParseada = new Date(fechaCita);
-        const fechaFormateada = isNaN(fechaParseada.getTime())
-            ? fechaCita
-            : fechaParseada.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
+        // Runbook B2/B9: fecha 'YYYY-MM-DD' formateada sin depender de la zona horaria del proceso
+        // (antes `new Date('YYYY-MM-DD')` + formato local mostraba el día anterior en America/Bogota),
+        // y hora como HH:MM (antes salía HH:MM:SS). Solo cambia el contenido de las variables, no su
+        // cantidad ni su orden.
+        const fechaFormateada = formatearFechaLarga(fechaCita);
+        const horaFormateada = formatearHoraHHMM(horaCita);
 
         const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
         const body = {
@@ -807,7 +821,7 @@ export async function enviarPlantillaOfertaCupo(
                             { "type": "text", "text": `${nombrePaciente}` },
                             { "type": "text", "text": `${profesional}` },
                             { "type": "text", "text": `${fechaFormateada}` },
-                            { "type": "text", "text": `${horaCita}` }
+                            { "type": "text", "text": `${horaFormateada}` }
                         ]
                     }
                 ]
@@ -820,19 +834,26 @@ export async function enviarPlantillaOfertaCupo(
             },
             timeout: 15000 // 15 segundos timeout
         });
-        console.log('Respuesta de Meta (oferta de cupo):', response.data);
+        // Runbook B9: la respuesta de Meta incluye `contacts[].input/wa_id` (el teléfono completo) —
+        // solo se loguea el estado y el id del mensaje.
         if (response.data.messages && response.data.messages.length > 0) {
-            console.log('Plantilla de oferta de cupo enviada correctamente:', response.data);
+            console.log('Plantilla de oferta de cupo enviada correctamente:', {
+                message_status: response.data.messages[0]?.message_status,
+                id: response.data.messages[0]?.id
+            });
         } else {
-            console.error('Error al enviar plantilla de oferta de cupo:', response.data);
+            console.error('Error al enviar plantilla de oferta de cupo (sin messages en la respuesta de Meta).');
         }
         if (response.data.messages?.[0]?.message_status === 'accepted') {
-            console.log(`Plantilla de oferta de cupo enviada exitosamente a ${nombrePaciente} (${telefonoPaciente})`);
+            // Runbook B9: sin nombre ni teléfono completo en logs.
+            console.log(`Plantilla de oferta de cupo enviada exitosamente a ${enmascararTelefono(telefonoPaciente)}`);
             return { exito: true, mensajeWaId: response.data.messages[0]?.id };
         }
         return { exito: false };
-    } catch (error) {
-        console.error('Error enviando plantilla de oferta de cupo:', error);
+    } catch (error: any) {
+        // Runbook B9: no se imprime el objeto de error completo (su config.data lleva el cuerpo del
+        // mensaje con nombre y teléfono del paciente); solo estado HTTP y error de Meta.
+        console.error('Error enviando plantilla de oferta de cupo:', resumirErrorMeta(error));
         return { exito: false };
     }
 }
@@ -961,5 +982,89 @@ export async function responderRecordatorio(
     } catch (error) {
         console.error('Error respondiendo recordatorio:', error);
         return null;
+    }
+}
+// ---------------------------------------------------------------------------
+// Runbook 2026-09-26 (B5/B6): utilidades nuevas.
+// ---------------------------------------------------------------------------
+
+/**
+ * Resumen corto y sin datos personales de un error de axios contra Graph API: estado HTTP, código y
+ * mensaje de Meta (p. ej. 131047 "Re-engagement message" / 131026 "Message undeliverable").
+ * Nunca incluye `config.data` (lleva el cuerpo del mensaje y el teléfono de destino).
+ */
+export function resumirErrorMeta(error: any): { http_status: number | null; code: number | string | null; mensaje: string } {
+    const metaError = error?.response?.data?.error;
+    const mensajeBase = metaError?.error_data?.details || metaError?.message || error?.message || 'error_desconocido';
+    return {
+        http_status: error?.response?.status ?? null,
+        code: metaError?.code ?? error?.code ?? null,
+        mensaje: String(mensajeBase).slice(0, 200)
+    };
+}
+
+/**
+ * Envía un mensaje de texto libre directo a Graph API (mismo endpoint que ya usan las plantillas de
+ * este archivo). Se usa para los avisos al asesor humano (runbook B6) en vez de
+ * `adapterProvider.sendMessage`, porque el provider de Meta encola el envío y NO propaga el error al
+ * llamador (`sendMessage` no retorna la promesa de `sendText` y `queue.add` descarta el resultado —
+ * ver node_modules/@builderbot/provider-meta/dist/index.cjs): con el provider, un fallo nunca llega al
+ * `catch` del llamador.
+ *
+ * Nota: un texto libre fuera de la ventana de 24h suele ser ACEPTADO por la API (HTTP 200) y fallar
+ * después de forma asíncrona (webhook de estado `failed`, código 131047). Ese caso se captura aparte
+ * (ver src/utils/avisoAsesor.ts, listener de 'notice').
+ */
+export async function enviarMensajeTextoMeta(
+    to: string,
+    texto: string
+): Promise<{ exito: boolean; mensajeWaId?: string; error?: ReturnType<typeof resumirErrorMeta> }> {
+    try {
+        const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
+        const body = {
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to,
+            type: 'text',
+            text: { preview_url: false, body: texto }
+        };
+        const response = await axios.post(url, body, {
+            headers: {
+                'Authorization': `Bearer ${process.env.jwtToken}`,
+                'Content-Type': 'application/json'
+            },
+            timeout: 15000
+        });
+        const mensajeWaId = response.data?.messages?.[0]?.id;
+        if (mensajeWaId) {
+            return { exito: true, mensajeWaId };
+        }
+        return { exito: false, error: { http_status: response.status ?? null, code: null, mensaje: 'respuesta_sin_messages' } };
+    } catch (error) {
+        return { exito: false, error: resumirErrorMeta(error) };
+    }
+}
+
+/**
+ * Consulta las inscripciones de lista de espera de un paciente por documento
+ * (`GET /chatbot/listaespera?documento=`, contrato de Fase 1). El backend responde 400
+ * (INVALID_QUERY) cuando el documento no corresponde a ningún paciente: se reporta como
+ * `encontrado: false`, no como error.
+ */
+export async function consultarListaEsperaPorDocumento(
+    documento: string
+): Promise<{ ok: boolean; encontrado: boolean; inscripciones: IListaEsperaResponse[] }> {
+    try {
+        const url = `${API_BACKEND_URL}/chatbot/listaespera`;
+        const response = await axios.get(url, { params: { documento } });
+        const inscripciones = Array.isArray(response.data?.data) ? response.data.data : [];
+        return { ok: true, encontrado: true, inscripciones };
+    } catch (error: any) {
+        const status = error?.response?.status;
+        if (status === 400 || status === 404) {
+            return { ok: true, encontrado: false, inscripciones: [] };
+        }
+        console.error('Error consultando lista de espera por documento:', error?.message ?? error);
+        return { ok: false, encontrado: false, inscripciones: [] };
     }
 }
