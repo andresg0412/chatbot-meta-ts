@@ -3,13 +3,14 @@ import {
     consultarCitasProximasPaciente,
     crearPacienteDataBase,
 } from '../services/apiService';
+import { esEstadoCitaGestionable } from '../constants/estadosCita';
 
 export async function consultarCitasPorDocumento(tipoDoc: string, numeroDoc: string) {
     const citas = await consultarCitasProximasPaciente(numeroDoc);
     if (!citas || citas.length === 0) {
         return [];
     }
-    const citasProgramadas = citas.filter((cita: any) => cita.estado_agenda === 'Pendiente');
+    const citasProgramadas = citas.filter((cita: any) => esEstadoCitaGestionable(cita?.estado_agenda));
     return citasProgramadas;
 }
 

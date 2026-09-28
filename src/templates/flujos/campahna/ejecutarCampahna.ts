@@ -19,6 +19,12 @@ import { isNumberValid } from '../../../constants/killSwichConstants';
 import { esBotHabilitado } from '../../../services/citasService';
 import { registrarActividadBot } from '../../../services/apiService';
 import { sanitizeString, isValidDocumentNumber } from '../../../utils/sanitize';
+import type { ResultadoConfirmacion } from '../../../services/apiService';
+import {
+  construirRespuestaConfirmacion,
+  metricaConfirmacionCampahna,
+  MENSAJE_ERROR_CONFIRMACION
+} from '../../../utils/mensajesConfirmacion';
 
 /**
  * Función core que ejecuta la campaña de confirmación para una fecha específica.
@@ -230,46 +236,101 @@ const ejecutarPlantillaDiariaFlow = addKeyword(['ejecutar'])
     await ctxFn.flowDynamic(mensaje);
   });
 
+// ---------------------------------------------------------------------------
+// Respuesta a "Confirmar" (plantilla de confirmación 24h) y "Confirmo" (recordatorio 48h).
+// proyecto-ips/docs/features/2026-09-27-confirmar-cita-ya-confirmada.md, sección 4.6.
+//
+// State usado:
+// - numeroDoc: documento capturado.
+// - intentosConfirmacion: reintentos de documento ya consumidos (máximo 1, decisión 9.4). Se reinicia
+//   en todo cierre y cada vez que el paciente entra de nuevo por la keyword.
+// - reintentoConfirmacionEnCurso: true solo mientras se vuelve a pedir el documento por gotoFlow, para
+//   distinguir ese reingreso (conserva el contador) de una entrada nueva por keyword (lo reinicia). Sin
+//   esto, un paciente que abandonó tras el primer reintento quedaría con el contador consumido.
+// ---------------------------------------------------------------------------
+
+type TipoEventoConfirmacion = 'campahna_envio' | 'campahna_recordatorio';
+
+const MENSAJE_PEDIR_DOCUMENTO_CONFIRMAR = 'Para confirmar por favor digita el número de documento del paciente 🔢:';
+const MENSAJE_DOCUMENTO_NO_VALIDO = 'El número de documento ingresado no es válido. Intenta nuevamente.';
+
+/** Primer paso de los flujos de documento: reinicia el contador salvo que sea un reintento en curso. */
+async function prepararIntentosConfirmacion(state: any): Promise<void> {
+  if (state.getMyState()?.reintentoConfirmacionEnCurso) {
+    await state.update({ reintentoConfirmacionEnCurso: false });
+  } else {
+    await state.update({ intentosConfirmacion: 0 });
+  }
+}
+
 /**
- * Flow para confirmar citas (respuesta a plantillas)
+ * Helper común de `confirmarCitaFlow` y `confirmarCitaCampahna48Flow`: envía los mensajes de 4.6,
+ * registra la métrica y decide entre reintentar (flujo de documento del mismo tipo) o cerrar.
  */
-const confirmarCitaFlow = addKeyword(EVENTS.ACTION)
-  .addAction(async (ctx, ctxFn) => {
-    const celular = ctx.from;
-    const fechaFormateada = new Date().toISOString().split('T')[0];
-    const numeroDoc = ctxFn.state.getMyState().numeroDoc;
-    try {
-      const response = await confirmarCitaCampahna(celular, numeroDoc);
+async function manejarResultadoConfirmacion(
+  resultado: ResultadoConfirmacion,
+  ctx: any,
+  ctxFn: any,
+  tipoEvento: TipoEventoConfirmacion,
+  flujoDocumento: any
+) {
+  const celular = ctx.from;
+  const fechaFormateada = new Date().toISOString().split('T')[0];
+  const intentosPrevios = Number(ctxFn.state.getMyState()?.intentosConfirmacion) || 0;
+  const respuesta = construirRespuestaConfirmacion(resultado, 'campahna', intentosPrevios);
 
-      if (response) {
-        await ctxFn.flowDynamic('✅ ¡Tu cita ha sido confirmada exitosamente!');
-        await ctxFn.flowDynamic('Gracias por confirmar tu cita. Si necesitas más ayuda, no dudes en preguntar. ¡Feliz día!');
-        await registrarActividadBot('campahna_envio', celular, {
-          estado: 'confirmado',
-          resultado: 'exitoso',
-          campahna: 'meta-' + fechaFormateada,
-          fecha_campahna: fechaFormateada,
-        });
-        return ctxFn.endFlow();
-      } else {
-        await ctxFn.flowDynamic('No se han encontrado citas relacionadas a este número de documento. Intentalo nuevamente');
-        return ctxFn.gotoFlow(confirmarCitaDocumentoFlow);
-      }
-
-    } catch (error) {
-      console.error('Error confirmando cita:', error);
-      await ctxFn.flowDynamic('❌ Error interno. Intenta nuevamente.');
-      return ctxFn.endFlow();
-    }
+  for (const mensaje of respuesta.mensajes) {
+    await ctxFn.flowDynamic(mensaje);
+  }
+  await registrarActividadBot(tipoEvento, celular, {
+    ...metricaConfirmacionCampahna(resultado),
+    campahna: 'meta-' + fechaFormateada,
+    fecha_campahna: fechaFormateada,
   });
 
+  if (respuesta.siguiente === 'reintentar') {
+    await ctxFn.state.update({ intentosConfirmacion: intentosPrevios + 1, reintentoConfirmacionEnCurso: true });
+    return ctxFn.gotoFlow(flujoDocumento);
+  }
+  await ctxFn.state.update({ intentosConfirmacion: 0, reintentoConfirmacionEnCurso: false });
+  return ctxFn.endFlow();
+}
+
+async function confirmarYResponder(
+  ctx: any,
+  ctxFn: any,
+  tipoEvento: TipoEventoConfirmacion,
+  flujoDocumento: any
+) {
+  try {
+    const numeroDoc = ctxFn.state.getMyState()?.numeroDoc;
+    const resultado = await confirmarCitaCampahna(ctx.from, numeroDoc);
+    return await manejarResultadoConfirmacion(resultado, ctx, ctxFn, tipoEvento, flujoDocumento);
+  } catch (error) {
+    console.error('Error confirmando cita:', (error as any)?.message ?? error);
+    await ctxFn.state.update({ intentosConfirmacion: 0, reintentoConfirmacionEnCurso: false });
+    await ctxFn.flowDynamic(MENSAJE_ERROR_CONFIRMACION);
+    return ctxFn.endFlow();
+  }
+}
+
+/**
+ * Flow para confirmar citas (respuesta a la plantilla de confirmación 24h)
+ */
+const confirmarCitaFlow = addKeyword(EVENTS.ACTION)
+  .addAction(async (ctx, ctxFn) => confirmarYResponder(ctx, ctxFn, 'campahna_envio', confirmarCitaDocumentoFlow));
+
 const confirmarCitaDocumentoFlow = addKeyword(['Confirmar cita', 'Confirmar', 'confirmar'])
-  .addAnswer('Para confirmar por favor digita el número de documento del paciente 🔢:',
+  .addAction(async (_ctx, { state }) => {
+    await prepararIntentosConfirmacion(state);
+  })
+  .addAnswer(MENSAJE_PEDIR_DOCUMENTO_CONFIRMAR,
     { capture: true },
     async (ctx, { state, gotoFlow, flowDynamic }) => {
       const numeroDoc = sanitizeString(ctx.body, 20);
       if (!isValidDocumentNumber(numeroDoc)) {
-        await flowDynamic('El número de documento ingresado no es válido. Intenta nuevamente.');
+        await flowDynamic(MENSAJE_DOCUMENTO_NO_VALIDO);
+        await state.update({ reintentoConfirmacionEnCurso: true });
         return gotoFlow(confirmarCitaDocumentoFlow);
       }
       await state.update({ numeroDoc });
@@ -279,46 +340,23 @@ const confirmarCitaDocumentoFlow = addKeyword(['Confirmar cita', 'Confirmar', 'c
 
 
 /**
- * Flow para confirmar citas (respuesta a plantillas)
+ * Flow para confirmar citas (respuesta a la plantilla de recordatorio 48h)
  */
 const confirmarCitaCampahna48Flow = addKeyword(EVENTS.ACTION)
-  .addAction(async (ctx, ctxFn) => {
-    const celular = ctx.from;
-    const fechaFormateada = new Date().toISOString().split('T')[0];
-    const numeroDoc = ctxFn.state.getMyState().numeroDoc;
-    try {
-      const response = await confirmarCitaCampahna(celular, numeroDoc);
-
-      if (response) {
-        await ctxFn.flowDynamic('✅ ¡Tu cita ha sido confirmada exitosamente!');
-        await ctxFn.flowDynamic('Gracias por confirmar tu cita. Si necesitas más ayuda, no dudes en preguntar. ¡Feliz día!');
-        await registrarActividadBot('campahna_recordatorio', celular, {
-          estado: 'confirmado',
-          resultado: 'exitoso',
-          campahna: 'meta-' + fechaFormateada,
-          fecha_campahna: fechaFormateada,
-        });
-        return ctxFn.endFlow();
-      } else {
-        await ctxFn.flowDynamic('No se han encontrado citas relacionadas a este número de documento. Intentalo nuevamente');
-        return ctxFn.gotoFlow(confirmarCitaDocumentoFlow);
-      }
-
-    } catch (error) {
-      console.error('Error confirmando cita:', error);
-      await ctxFn.flowDynamic('❌ Error interno. Intenta nuevamente.');
-      return ctxFn.endFlow();
-    }
-  });
+  .addAction(async (ctx, ctxFn) => confirmarYResponder(ctx, ctxFn, 'campahna_recordatorio', confirmarCitaDocumentoCampahna48Flow));
 
 const confirmarCitaDocumentoCampahna48Flow = addKeyword(['Confirmo'])
-  .addAnswer('Para confirmar por favor digita el número de documento del paciente 🔢:',
+  .addAction(async (_ctx, { state }) => {
+    await prepararIntentosConfirmacion(state);
+  })
+  .addAnswer(MENSAJE_PEDIR_DOCUMENTO_CONFIRMAR,
     { capture: true },
     async (ctx, { state, gotoFlow, flowDynamic }) => {
       const numeroDoc = sanitizeString(ctx.body, 20);
       if (!isValidDocumentNumber(numeroDoc)) {
-        await flowDynamic('El número de documento ingresado no es válido. Intenta nuevamente.');
-        return gotoFlow(confirmarCitaDocumentoFlow);
+        await flowDynamic(MENSAJE_DOCUMENTO_NO_VALIDO);
+        await state.update({ reintentoConfirmacionEnCurso: true });
+        return gotoFlow(confirmarCitaDocumentoCampahna48Flow);
       }
       await state.update({ numeroDoc });
       return gotoFlow(confirmarCitaCampahna48Flow);

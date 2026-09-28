@@ -519,14 +519,107 @@ export async function enviarPlantillaRecordatorio(cita: AgendaPendienteResponse)
     }
 }
 
-export async function confirmarCitaCampahna(celular: string, numeroDoc: string): Promise<boolean> {
+// ---------------------------------------------------------------------------
+// Confirmación de citas con detalle del resultado
+// (proyecto-ips/docs/features/2026-09-27-confirmar-cita-ya-confirmada.md, secciones 4.3 y 4.6).
+// ---------------------------------------------------------------------------
+
+/** Causas de "no se confirmó" que el bot distingue (4.6). */
+export type CausaFalloConfirmacion =
+    | 'CITA_CANCELADA'
+    | 'CITA_REPROGRAMADA'
+    | 'CITA_PASADA'
+    | 'CITA_NOT_FOUND'
+    | 'DOCUMENTO_INVALIDO'
+    | 'GLOBHO_ERROR'
+    | 'ERROR';
+
+export type FalloConfirmacion = {
+    ok: false;
+    causa: CausaFalloConfirmacion;
+    fecha_cita?: string;
+    hora_cita?: string;
+    especialidad?: string;
+};
+
+export type ResultadoConfirmacion =
+    | { ok: true; estado: 'confirmada' | 'ya_confirmada'; fecha_cita?: string; hora_cita?: string; especialidad?: string }
+    | FalloConfirmacion;
+
+/** `cause` del backend que se usan tal cual (el resto de valores se tratan según el HTTP status). */
+const CAUSAS_BACKEND_CONOCIDAS: ReadonlyArray<CausaFalloConfirmacion> = [
+    'CITA_CANCELADA',
+    'CITA_REPROGRAMADA',
+    'CITA_PASADA',
+    'CITA_NOT_FOUND',
+    'GLOBHO_ERROR',
+];
+
+function textoOpcional(valor: unknown): string | undefined {
+    return typeof valor === 'string' && valor.trim() !== '' ? valor : undefined;
+}
+
+/**
+ * Traduce el error de axios de `confirmarcitameta` / `recordatorios/responder` a una causa. Compatible
+ * con el backend viejo: 400 → DOCUMENTO_INVALIDO; `cause` conocida → tal cual; 404 sin causa conocida →
+ * CITA_NOT_FOUND; cualquier otra cosa (5xx sin causa conocida, red, timeout) → ERROR.
+ */
+export function mapearErrorConfirmacion(error: any): FalloConfirmacion {
+    const status: number | undefined = error?.response?.status;
+    const body = error?.response?.data;
+    const cause = body?.cause;
+    const detalle = body?.data && typeof body.data === 'object' ? body.data : {};
+
+    let causa: CausaFalloConfirmacion;
+    if (status === 400) {
+        causa = 'DOCUMENTO_INVALIDO';
+    } else if (typeof cause === 'string' && CAUSAS_BACKEND_CONOCIDAS.includes(cause as CausaFalloConfirmacion)) {
+        causa = cause as CausaFalloConfirmacion;
+    } else if (status === 404) {
+        causa = 'CITA_NOT_FOUND';
+    } else {
+        causa = 'ERROR';
+    }
+
+    const fallo: FalloConfirmacion = { ok: false, causa };
+    const fecha = textoOpcional(detalle.fecha_cita);
+    const hora = textoOpcional(detalle.hora_cita);
+    const especialidad = textoOpcional(detalle.especialidad);
+    if (fecha) fallo.fecha_cita = fecha;
+    if (hora) fallo.hora_cita = hora;
+    if (especialidad) fallo.especialidad = especialidad;
+    return fallo;
+}
+
+/**
+ * Confirma la cita activa más próxima de (celular, documento) vía `POST /chatbot/confirmarcitameta`.
+ * Nunca lanza: devuelve el resultado con detalle (4.6). Un 200 sin `estado_resultado` (backend viejo)
+ * se trata como 'confirmada'.
+ */
+export async function confirmarCitaCampahna(celular: string, numeroDoc: string): Promise<ResultadoConfirmacion> {
     try {
         const url = `${API_BACKEND_URL}/chatbot/confirmarcitameta`;
         const response = await axios.post(url, { celular: celular, documento: numeroDoc });
-        return response.data.code === 200;
+        const body = response?.data;
+        if (body?.code !== 200) {
+            return { ok: false, causa: 'ERROR' };
+        }
+        const data = body.data && typeof body.data === 'object' ? body.data : {};
+        const resultado: ResultadoConfirmacion = {
+            ok: true,
+            estado: data.estado_resultado === 'ya_confirmada' ? 'ya_confirmada' : 'confirmada',
+        };
+        const fecha = textoOpcional(data.fecha_cita);
+        const hora = textoOpcional(data.hora_cita);
+        const especialidad = textoOpcional(data.especialidad);
+        if (fecha) resultado.fecha_cita = fecha;
+        if (hora) resultado.hora_cita = hora;
+        if (especialidad) resultado.especialidad = especialidad;
+        return resultado;
     } catch (error) {
-        console.error('Error confirmando cita:', error);
-        return false;
+        const fallo = mapearErrorConfirmacion(error);
+        console.error(`Error confirmando cita (causa: ${fallo.causa}):`, (error as any)?.message ?? error);
+        return fallo;
     }
 }
 
@@ -970,18 +1063,36 @@ export async function registrarEnvioRecordatorio(citaId: string, tipoRecordatori
  * (15.8): si `respuesta === 'no_asistira'`, el backend cancela la cita de verdad (Globho + BD) y
  * dispara la detección de cupo liberado de Fase 2 — no es una operación de solo lectura.
  */
+export interface RespuestaRecordatorioData {
+    accion: string;
+    agenda_id?: string;
+    persistido: boolean;
+    estado_resultado?: 'confirmada' | 'ya_confirmada' | 'cancelada';
+    fecha_cita?: string;
+    hora_cita?: string;
+}
+
+export type ResultadoRespuestaRecordatorio =
+    | { ok: true; data: RespuestaRecordatorioData }
+    | FalloConfirmacion;
+
 export async function responderRecordatorio(
     celular: string,
     documento: string,
     respuesta: 'confirma' | 'no_asistira'
-): Promise<{ accion: string; persistido: boolean } | null> {
+): Promise<ResultadoRespuestaRecordatorio> {
     try {
         const url = `${API_BACKEND_URL}/chatbot/recordatorios/responder`;
         const response = await axios.post(url, { celular, documento, respuesta });
-        return response.data?.data ?? null;
+        const data = response?.data?.data;
+        if (!data || typeof data !== 'object') {
+            return { ok: false, causa: 'ERROR' };
+        }
+        return { ok: true, data };
     } catch (error) {
-        console.error('Error respondiendo recordatorio:', error);
-        return null;
+        const fallo = mapearErrorConfirmacion(error);
+        console.error(`Error respondiendo recordatorio (causa: ${fallo.causa}):`, (error as any)?.message ?? error);
+        return fallo;
     }
 }
 // ---------------------------------------------------------------------------

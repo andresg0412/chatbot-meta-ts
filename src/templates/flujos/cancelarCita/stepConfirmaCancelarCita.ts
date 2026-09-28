@@ -17,14 +17,21 @@ const stepConfirmaCancelarCita = addKeyword(EVENTS.ACTION)
                 return gotoFlow(volverMenuPrincipal);
             }
             const response = await cancelarCita(citaSeleccionadaCancelar.agenda_id_externa);
-            if (response) {
-                // Path rápido de la cascada de lista de espera (Fase 2): fire-and-forget, no bloquea
-                // la respuesta al paciente ni puede romper el flujo de cancelación si falla.
-                try {
-                    triggerCascadaTickNow();
-                } catch (cascadaError) {
-                    console.error('[stepConfirmaCancelarCita] Error disparando triggerCascadaTickNow():', cascadaError);
-                }
+            if (!response) {
+                // El backend no confirmó la cancelación: no se informa éxito, no se cuenta como flujo
+                // finalizado ni se dispara la cascada de lista de espera.
+                await registrarActividadBot('chat_flujo_cancelar_cita', ctx.from, {
+                    step: 'error_cancelacion'
+                });
+                await flowDynamic('No pudimos cancelar tu cita en este momento. Por favor, intenta nuevamente más tarde o comunícate con un asesor.');
+                return gotoFlow(volverMenuPrincipal);
+            }
+            // Path rápido de la cascada de lista de espera (Fase 2): fire-and-forget, no bloquea
+            // la respuesta al paciente ni puede romper el flujo de cancelación si falla.
+            try {
+                triggerCascadaTickNow();
+            } catch (cascadaError) {
+                console.error('[stepConfirmaCancelarCita] Error disparando triggerCascadaTickNow():', cascadaError);
             }
             metricFlujoFinalizado('cancelar');
             await registrarActividadBot('chat_flujo_cancelar_cita', ctx.from, {

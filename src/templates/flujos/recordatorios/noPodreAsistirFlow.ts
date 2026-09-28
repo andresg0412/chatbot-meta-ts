@@ -9,6 +9,7 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { responderRecordatorio, registrarActividadBot } from '../../../services/apiService';
 import { sanitizeString, isValidDocumentNumber } from '../../../utils/sanitize';
+import { MENSAJE_ERROR_RESPUESTA_RECORDATORIO } from '../../../utils/mensajesConfirmacion';
 import { KW_NO_PODRE_ASISTIR, OPCIONES_REGEX } from '../keywordsBotones';
 
 const noPodreAsistirAccionFlow = addKeyword(EVENTS.ACTION)
@@ -22,13 +23,20 @@ const noPodreAsistirAccionFlow = addKeyword(EVENTS.ACTION)
 
         const resultado = await responderRecordatorio(ctx.from, numeroDoc, 'no_asistira');
 
-        if (!resultado) {
+        if (resultado.ok === false) {
+            // Error técnico (incluye un eventual GLOBHO_ERROR) ≠ "no hay cita" (404 con causa).
+            const esErrorTecnico = resultado.causa === 'ERROR' || resultado.causa === 'GLOBHO_ERROR';
             await registrarActividadBot('recordatorio_respuesta', ctx.from, {
                 accion: 'no_asistira',
                 origen_boton: 'no_podre_asistir',
-                resultado: 'error_o_sin_cita'
+                resultado: 'error_o_sin_cita',
+                causa: resultado.causa.toLowerCase()
             });
-            await flowDynamic('No encontramos una cita activa asociada a ese número de documento. Si crees que es un error, contáctanos.');
+            await flowDynamic(
+                esErrorTecnico
+                    ? MENSAJE_ERROR_RESPUESTA_RECORDATORIO
+                    : 'No encontramos una cita activa asociada a ese número de documento. Si crees que es un error, contáctanos.'
+            );
             return endFlow();
         }
 
@@ -36,7 +44,7 @@ const noPodreAsistirAccionFlow = addKeyword(EVENTS.ACTION)
             accion: 'no_asistira',
             origen_boton: 'no_podre_asistir',
             resultado: 'exitoso',
-            persistido: resultado.persistido
+            persistido: resultado.data.persistido
         });
         await flowDynamic('Entendido, cancelamos tu cita. Gracias por avisarnos con tiempo. Si quieres agendar un nuevo espacio cuando puedas, aquí estamos. 😊');
         return endFlow();

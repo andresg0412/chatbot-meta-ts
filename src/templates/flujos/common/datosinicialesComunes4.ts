@@ -6,6 +6,12 @@ import { sanitizeString } from '../../../utils/sanitize';
 import { datosinicialesComunes5 } from './datosinicialesComunes5';
 import { datosinicialesComunes3 } from './datosinicialesComunes3';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
+import { formatearFechaLarga, formatearHoraHHMM } from '../../../utils/fechaHora';
+
+const ETIQUETA_ESTADO_CITA: Record<string, string> = {
+    Confirmado: '(Confirmada)',
+    Pendiente: '(Pendiente por confirmar)',
+};
 
 const datosinicialesComunes4 = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { state, flowDynamic, gotoFlow }) => {
@@ -30,7 +36,8 @@ const datosinicialesComunes4 = addKeyword(EVENTS.ACTION)
         }
         let mensaje = `Estimado/a *${nombreCompleto}* Tienes las siguientes citas agendadas y vigentes:\n`;
         citasValidas.forEach((cita: any, idx: number) => {
-            mensaje += `*${idx + 1}*. *Fecha*: ${cita.fecha_cita}, *Hora*: ${cita.hora_cita}, *Especialidad*: ${cita.especialidad}\n`;
+            const etiqueta = ETIQUETA_ESTADO_CITA[cita.estado_agenda];
+            mensaje += `*${idx + 1}*. *Fecha*: ${formatearFechaLarga(cita.fecha_cita)}, *Hora*: ${formatearHoraHHMM(cita.hora_cita)}, *Especialidad*: ${cita.especialidad}${etiqueta ? ` ${etiqueta}` : ''}\n`;
         });
         await flowDynamic(mensaje);
         await state.update({ esperaSeleccionCita: true });

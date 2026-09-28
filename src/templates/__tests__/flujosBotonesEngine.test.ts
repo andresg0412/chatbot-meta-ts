@@ -19,11 +19,11 @@ jest.mock('../../services/apiService', () => {
     return {
         ...real,
         registrarActividadBot: jest.fn(async () => true),
-        responderRecordatorio: jest.fn(async () => ({ accion: 'confirma', persistido: true })),
+        responderRecordatorio: jest.fn(async () => ({ ok: true, data: { accion: 'confirma', persistido: true } })),
         responderOfertaCupo: jest.fn(async () => ({ ok: true, code: 200, data: { registrado: true } })),
         consultarListaEsperaPorDocumento: jest.fn(async () => ({ ok: true, encontrado: true, inscripciones: [] })),
         retirarListaEspera: jest.fn(async () => true),
-        confirmarCitaCampahna: jest.fn(async () => true),
+        confirmarCitaCampahna: jest.fn(async () => ({ ok: true, estado: 'confirmada' })),
     };
 });
 
@@ -32,6 +32,11 @@ import { createBot, MemoryDB } from '@builderbot/bot';
 import templates from '../index';
 import * as api from '../../services/apiService';
 import { MENSAJE_RETIRO_EXITOSO, MENSAJE_RETIRO_NO_INSCRITO } from '../flujos/listaEspera/retiroListaEsperaFlow';
+import {
+    MENSAJE_DOCUMENTO_FINAL,
+    MENSAJE_DOCUMENTO_REINTENTO,
+    MENSAJE_ERROR_RESPUESTA_RECORDATORIO,
+} from '../../utils/mensajesConfirmacion';
 
 const mockedApi = api as jest.Mocked<typeof api>;
 
@@ -94,7 +99,7 @@ describe('Motor real de builderbot con los flujos registrados', () => {
         expect(salida[0]).toMatch(/Para confirmar tu cita, por favor digita tu número de documento/);
         expect(mockedApi.responderRecordatorio).toHaveBeenCalledWith(expect.any(String), '1234567890', 'confirma');
         expect(mockedApi.confirmarCitaCampahna).not.toHaveBeenCalled();
-        expect(salida.join('\n')).toMatch(/Confirmamos tu cita/);
+        expect(salida.join('\n')).toMatch(/quedó confirmada/);
     });
 
     it('"Necesito cancelar" → flujo de recordatorio (no el de cancelar del menú) → no_asistira', async () => {
@@ -123,6 +128,59 @@ describe('Motor real de builderbot con los flujos registrados', () => {
         expect(mockedApi.responderRecordatorio).not.toHaveBeenCalled();
         expect(mockedApi.confirmarCitaCampahna).toHaveBeenCalled();
         expect(salida.length).toBeGreaterThan(0);
+    });
+
+    it('"Confirmo" con CITA_NOT_FOUND dos veces → un solo reintento en el flujo de 48h y luego cierra', async () => {
+        mockedApi.confirmarCitaCampahna
+            .mockResolvedValueOnce({ ok: false, causa: 'CITA_NOT_FOUND' })
+            .mockResolvedValueOnce({ ok: false, causa: 'CITA_NOT_FOUND' });
+        const salida = await conversar(['Confirmo', '1234567890', '1234567891']);
+        expect(mockedApi.confirmarCitaCampahna).toHaveBeenCalledTimes(2);
+        expect(salida).toContain(MENSAJE_DOCUMENTO_REINTENTO);
+        expect(salida).toContain(MENSAJE_DOCUMENTO_FINAL);
+        expect(salida.filter((m) => /Para confirmar por favor digita/.test(m))).toHaveLength(2);
+        // El reintento vuelve al flujo de 48h (métrica campahna_recordatorio), no al de 24h.
+        const eventos = (mockedApi.registrarActividadBot.mock.calls as any[]).map((c) => c[0]);
+        expect(eventos).toContain('campahna_recordatorio');
+        expect(eventos).not.toContain('campahna_envio');
+    });
+
+    it('"Confirmo" tras un cierre por reintentos: una entrada nueva reinicia el contador', async () => {
+        mockedApi.confirmarCitaCampahna.mockResolvedValue({ ok: false, causa: 'CITA_NOT_FOUND' });
+        try {
+            const salida = await conversar(['Confirmo', '12345678', '12345679', 'Confirmo', '12345678']);
+            expect(salida.filter((m) => m === MENSAJE_DOCUMENTO_REINTENTO)).toHaveLength(2);
+            expect(salida.filter((m) => m === MENSAJE_DOCUMENTO_FINAL)).toHaveLength(1);
+        } finally {
+            mockedApi.confirmarCitaCampahna.mockResolvedValue({ ok: true, estado: 'confirmada' });
+        }
+    });
+
+    it('"Confirmar" con ya_confirmada → mensaje de ya confirmada con fecha y hora', async () => {
+        mockedApi.confirmarCitaCampahna.mockResolvedValueOnce({
+            ok: true, estado: 'ya_confirmada', fecha_cita: '2026-09-28', hora_cita: '10:00:00',
+        });
+        const salida = await conversar(['Confirmar', '1234567890']);
+        expect(salida).toContain('😊 Tu cita del 28 de septiembre de 2026 a las 10:00 ya se encuentra confirmada. No necesitas hacer nada más. ¡Te esperamos!');
+        expect(mockedApi.registrarActividadBot).toHaveBeenCalledWith('campahna_envio', expect.any(String),
+            expect.objectContaining({ estado: 'ya_confirmado', resultado: 'exitoso' }));
+    });
+
+    it('"Confirmo asistencia" con CITA_NOT_FOUND dos veces → un reintento y mensaje final', async () => {
+        mockedApi.responderRecordatorio
+            .mockResolvedValueOnce({ ok: false, causa: 'CITA_NOT_FOUND' })
+            .mockResolvedValueOnce({ ok: false, causa: 'CITA_NOT_FOUND' });
+        const salida = await conversar(['Confirmo asistencia', '1234567890', '1234567891']);
+        expect(mockedApi.responderRecordatorio).toHaveBeenCalledTimes(2);
+        expect(salida).toContain(MENSAJE_DOCUMENTO_REINTENTO);
+        expect(salida).toContain(MENSAJE_DOCUMENTO_FINAL);
+    });
+
+    it('"Necesito cancelar" con error técnico → mensaje de error técnico, no "no encontramos"', async () => {
+        mockedApi.responderRecordatorio.mockResolvedValueOnce({ ok: false, causa: 'ERROR' });
+        const salida = await conversar(['Necesito cancelar', '1234567890']);
+        expect(salida).toContain(MENSAJE_ERROR_RESPUESTA_RECORDATORIO);
+        expect(salida.join('\n')).not.toMatch(/No encontramos una cita activa/);
     });
 
     it('"Retirar lista de espera" con inscripción activa → retira por lista_espera_id', async () => {
