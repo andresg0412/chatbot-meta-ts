@@ -11,6 +11,11 @@ import {
     enviarPlantillaDiaria,
     enviarPlantillaRecordatorio,
     enviarPlantillaOfertaCupo,
+    confirmarEnvioOfertaCupo,
+    marcarFalloOfertaCupo,
+    confirmarEscalamientoListaEspera,
+    tickCascadaListaEspera,
+    TIMEOUT_BACKEND_CASCADA_MS,
     retirarListaEspera,
     consultarListaEsperaPorDocumento,
     enviarMensajeTextoMeta,
@@ -113,13 +118,89 @@ it('variante con botones: fecha "5 de octubre de 2026" (sin desfase) en la plant
     expect(params(llamadaMeta())[2]).toBe('5 de octubre de 2026');
 });
 
-it('oferta de cupo: 4 variables en el mismo orden, fecha correcta y hora HH:MM', async () => {
-    const r = await enviarPlantillaOfertaCupo('Paciente', '573001234567', 'Profesional', '2026-10-05', '14:00:00');
+it('oferta de cupo: 5 variables en orden (nombre, profesional, fecha, hora HH:MM, minutos)', async () => {
+    const r = await enviarPlantillaOfertaCupo('Paciente', '573001234567', 'Profesional', '2026-10-05', '14:00:00', 7);
     expect(r).toEqual({ exito: true, mensajeWaId: 'wamid.1' });
     const body = llamadaMeta();
     expect(body.to).toBe('573001234567');
     expect(body.template.name).toBe('oferta_cupo_disponible');
-    expect(params(body)).toEqual(['Paciente', 'Profesional', '5 de octubre de 2026', '14:00']);
+    expect(params(body)).toEqual(['Paciente', 'Profesional', '5 de octubre de 2026', '14:00', '7']);
+});
+
+it('confirmarEnvioOfertaCupo manda ventana_respuesta_segundos en el body (eco de la ventana)', async () => {
+    const ok = await confirmarEnvioOfertaCupo('CUPO1', 'LE1', 'wamid.1', 900);
+    expect(ok).toBe(true);
+    expect(post).toHaveBeenCalledWith(
+        expect.stringMatching(/\/chatbot\/listaespera\/cascada\/oferta\/confirmar-envio$/),
+        { cupo_liberado_id: 'CUPO1', lista_espera_id: 'LE1', mensaje_wa_id: 'wamid.1', ventana_respuesta_segundos: 900 },
+        { timeout: TIMEOUT_BACKEND_CASCADA_MS }
+    );
+});
+
+describe('timeout en las llamadas al backend dentro del tick de cascada', () => {
+    it('la constante es 20000 ms', () => {
+        expect(TIMEOUT_BACKEND_CASCADA_MS).toBe(20000);
+    });
+
+    it('tickCascadaListaEspera pasa timeout y devuelve las acciones', async () => {
+        post.mockResolvedValueOnce({ data: { data: { acciones: [{ tipo: 'escalar' }] } } });
+        expect(await tickCascadaListaEspera()).toEqual([{ tipo: 'escalar' }]);
+        expect(post).toHaveBeenCalledWith(
+            expect.stringMatching(/\/chatbot\/listaespera\/cascada\/tick$/),
+            {},
+            expect.objectContaining({ timeout: TIMEOUT_BACKEND_CASCADA_MS })
+        );
+    });
+
+    it('tickCascadaListaEspera: timeout de axios (ECONNABORTED) → [] sin lanzar', async () => {
+        post.mockRejectedValueOnce({ code: 'ECONNABORTED', message: 'timeout of 20000ms exceeded' });
+        expect(await tickCascadaListaEspera()).toEqual([]);
+    });
+
+    it('confirmarEnvioOfertaCupo pasa timeout; timeout de axios → false sin lanzar', async () => {
+        await confirmarEnvioOfertaCupo('CUPO1', 'LE1', 'wamid.1', 600);
+        expect(post.mock.calls[0][2]).toEqual(expect.objectContaining({ timeout: TIMEOUT_BACKEND_CASCADA_MS }));
+        post.mockRejectedValueOnce({ code: 'ECONNABORTED', message: 'timeout of 20000ms exceeded' });
+        expect(await confirmarEnvioOfertaCupo('CUPO1', 'LE1', 'wamid.1', 600)).toBe(false);
+    });
+
+    it('marcarFalloOfertaCupo y confirmarEscalamientoListaEspera pasan timeout', async () => {
+        await marcarFalloOfertaCupo('CUPO1', 'LE1', 'envio_meta_fallido');
+        await confirmarEscalamientoListaEspera('CUPO1');
+        expect(post.mock.calls[0][0]).toMatch(/marcar-fallo$/);
+        expect(post.mock.calls[0][2]).toEqual(expect.objectContaining({ timeout: TIMEOUT_BACKEND_CASCADA_MS }));
+        expect(post.mock.calls[1][2]).toEqual(expect.objectContaining({ timeout: TIMEOUT_BACKEND_CASCADA_MS }));
+    });
+
+    it('enviarMensajeTextoMeta (aviso al asesor) ya pasa timeout de 15000', async () => {
+        await enviarMensajeTextoMeta('573158070460', 'x');
+        expect(llamadaMetaConfig()).toEqual(expect.objectContaining({ timeout: 15000 }));
+    });
+});
+
+function llamadaMetaConfig() {
+    const call = post.mock.calls.find((c) => String(c[0]).includes('graph.facebook.com'));
+    return call?.[2];
+}
+
+it.each([
+    ['PACIENTE_CON_OFERTA_ACTIVA'],
+    ['CUPO_NO_DISPONIBLE'],
+    ['OFERTA_NO_DISPONIBLE'],
+    [undefined],
+])('confirmarEnvioOfertaCupo con 409 (cause %p) → false, una sola llamada, sin marcar-fallo, cause en el log', async (cause) => {
+    const warn = console.warn as jest.Mock;
+    post.mockRejectedValueOnce({
+        message: 'Request failed with status code 409',
+        response: { status: 409, data: { isError: true, code: 409, ...(cause ? { cause } : {}) } },
+    });
+    const ok = await confirmarEnvioOfertaCupo('CUPO1', 'LE1', 'wamid.1', 900);
+    expect(ok).toBe(false);
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post.mock.calls.some((c) => String(c[0]).includes('marcar-fallo'))).toBe(false);
+    const todo = warn.mock.calls.map((c) => c.map(String).join(' ')).join('\n');
+    expect(todo).toContain(`cause=${cause ?? 'SIN_CAUSE'}`);
+    expect(todo).toContain('CUPO1');
 });
 
 it('retirarListaEspera usa el contrato POST /chatbot/listaespera/retirar', async () => {

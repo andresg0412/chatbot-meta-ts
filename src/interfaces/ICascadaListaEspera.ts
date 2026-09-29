@@ -14,6 +14,10 @@ export interface AccionOfertar {
     fecha_cita: string;
     hora_cita: string;
     nivel_cascada_origen: number;
+    // Ventana para responder, variable según la antelación del cupo (Ajuste 1,
+    // docs/features/2026-09-28-ajustes-lista-espera.md): 900, 600 o 420 por defecto (configurable en el
+    // backend). El bot pone Math.round(valor/60) en {{5}} de la plantilla y hace eco del valor en
+    // segundos a confirmar-envio. Si no es un entero > 0, el bot no envía y marca fallo 'ventana_invalida'.
     ventana_respuesta_segundos: number;
 }
 
@@ -23,6 +27,11 @@ export interface AccionEscalar {
     profesional: string;
     fecha_cita: string;
     hora_cita: string;
+    // Valores posibles: 'antelacion_critica' (faltan 2h o menos; al abrir la cascada o a mitad de ella,
+    // puede llegar con candidatos_contactados 0), 'fuera_de_horario_antelacion_critica' (cupo detectado
+    // fuera del horario de contacto que al abrir tendría 2h o menos; se escala de inmediato, incluso de
+    // madrugada), 'fila_agotada', 'sin_candidatos', 'cascada_maxima'. Se deja como string: un motivo
+    // desconocido se muestra con su código tal cual en el aviso a recepción.
     motivo: string;
     candidatos_contactados: number;
     resumen_respuestas: {

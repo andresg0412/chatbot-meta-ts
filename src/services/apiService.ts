@@ -861,11 +861,19 @@ export async function enviarPlantillaUsuariosConAsistencia(cita: AgendaPendiente
  * Se llama cada `LISTA_ESPERA_CASCADA_POLL_INTERVAL_MS` desde `listaEsperaCascadaPoller.ts` y también
  * de forma inmediata (path rápido) tras cancelar/reagendar una cita desde el propio bot.
  */
+/**
+ * Timeout de las llamadas al backend que corren dentro del tick de cascada. Axios no tiene timeout por
+ * defecto (0 = infinito) y el poller serializa los ticks (guarda de ejecución única, corrección R2):
+ * una llamada colgada sin timeout dejaría la guarda tomada y la cascada detenida en silencio. Con
+ * timeout, el error cae en el catch de cada función (que ya retorna []/false) y el tick termina.
+ */
+export const TIMEOUT_BACKEND_CASCADA_MS = 20000;
+
 export async function tickCascadaListaEspera(limite?: number): Promise<AccionCascada[]> {
     try {
         const url = `${API_BACKEND_URL}/chatbot/listaespera/cascada/tick`;
         const body = typeof limite === 'number' ? { limite } : {};
-        const response = await axios.post(url, body);
+        const response = await axios.post(url, body, { timeout: TIMEOUT_BACKEND_CASCADA_MS });
         return response.data?.data?.acciones ?? [];
     } catch (error) {
         console.error('Error consultando tick de cascada de lista de espera:', error);
@@ -880,14 +888,25 @@ export async function tickCascadaListaEspera(limite?: number): Promise<AccionCas
  * Regla de privacidad transversal (9.1, no negociable): ningún mensaje puede mencionar la
  * especialidad ni palabras como "psicología"/"terapia"/"sesión". Por eso esta función deliberadamente
  * NO recibe ni envía `especialidad` como variable de la plantilla, aunque el `AccionCascada` de
- * origen sí la traiga disponible — solo se usan nombre, profesional, fecha y hora.
+ * origen sí la traiga disponible — solo se usan nombre, profesional, fecha, hora y minutos.
+ *
+ * Ajuste 1 (ventana escalonada, docs/features/2026-09-28-ajustes-lista-espera.md 1.5.6/1.5.7): la
+ * plantilla tiene SIEMPRE 5 variables, en este orden:
+ *   {{1}} nombre del paciente, {{2}} profesional, {{3}} fecha (formatearFechaLarga),
+ *   {{4}} hora HH:MM, {{5}} minutos para responder (solo el número, p. ej. '15'; el texto fijo de la
+ *   plantilla ya dice "minutos").
+ * No hay modo compatibilidad de 4 variables.
+ *
+ * @param minutosVentana minutos que tiene el paciente para responder (redondeo de
+ *   `ventana_respuesta_segundos / 60` de la acción 'ofertar'); se envía como {{5}}.
  */
 export async function enviarPlantillaOfertaCupo(
     nombrePaciente: string,
     telefonoPaciente: string,
     profesional: string,
     fechaCita: string,
-    horaCita: string
+    horaCita: string,
+    minutosVentana: number
 ): Promise<{ exito: boolean; mensajeWaId?: string }> {
     try {
         // Runbook B2/B9: fecha 'YYYY-MM-DD' formateada sin depender de la zona horaria del proceso
@@ -914,7 +933,8 @@ export async function enviarPlantillaOfertaCupo(
                             { "type": "text", "text": `${nombrePaciente}` },
                             { "type": "text", "text": `${profesional}` },
                             { "type": "text", "text": `${fechaFormateada}` },
-                            { "type": "text", "text": `${horaFormateada}` }
+                            { "type": "text", "text": `${horaFormateada}` },
+                            { "type": "text", "text": String(minutosVentana) }
                         ]
                     }
                 ]
@@ -951,24 +971,40 @@ export async function enviarPlantillaOfertaCupo(
     }
 }
 
+/**
+ * Confirma al backend que la plantilla de oferta se envió. `ventanaRespuestaSegundos` (Ajuste 1,
+ * 1.5.3) es el eco de la ventana que llegó en la acción 'ofertar' y cuyo equivalente en minutos se
+ * puso en {{5}}: el backend la usa para `expira_at`, de modo que la expiración siga a lo que leyó el
+ * paciente.
+ */
 export async function confirmarEnvioOfertaCupo(
     cupoLiberadoId: string,
     listaEsperaId: string,
-    mensajeWaId?: string
+    mensajeWaId?: string,
+    ventanaRespuestaSegundos?: number
 ): Promise<boolean> {
     try {
         const url = `${API_BACKEND_URL}/chatbot/listaespera/cascada/oferta/confirmar-envio`;
         const response = await axios.post(url, {
             cupo_liberado_id: cupoLiberadoId,
             lista_espera_id: listaEsperaId,
-            ...(mensajeWaId ? { mensaje_wa_id: mensajeWaId } : {})
-        });
+            ...(mensajeWaId ? { mensaje_wa_id: mensajeWaId } : {}),
+            ...(typeof ventanaRespuestaSegundos === 'number' ? { ventana_respuesta_segundos: ventanaRespuestaSegundos } : {})
+        }, { timeout: TIMEOUT_BACKEND_CASCADA_MS });
         return response.data?.code === 200;
     } catch (error: any) {
         if (error?.response?.status === 409) {
-            // OFERTA_NO_DISPONIBLE: la fila ya no estaba en 'en_cola' (llamada duplicada / carrera
-            // entre dos ticks) — no es un error grave, solo se ignora (ver contrato 13.6).
-            console.warn('Oferta ya no disponible al confirmar envío (llamada duplicada o carrera de ticks):', cupoLiberadoId, listaEsperaId);
+            // Corrección R1/R2 (docs/features/2026-09-28-ajustes-lista-espera.md 1.13): confirmar-envio no
+            // es reintentable. Con 409 el backend ya anuló la oferta (CUPO_NO_DISPONIBLE,
+            // PACIENTE_CON_OFERTA_ACTIVA) o era un duplicado (OFERTA_NO_DISPONIBLE, que es también lo que
+            // responde el backend viejo). No se reintenta ni se llama a marcar-fallo: solo se registra el
+            // cause. Runbook B9: solo ids internos, sin nombre ni teléfono.
+            const causeRaw = error?.response?.data?.cause;
+            const cause = typeof causeRaw === 'string' && causeRaw ? causeRaw : 'SIN_CAUSE';
+            console.warn(
+                `[confirmarEnvioOfertaCupo] 409 al confirmar envío de oferta (cause=${cause}) para cupo ` +
+                `${cupoLiberadoId}/lista_espera ${listaEsperaId}. No se reintenta ni se marca fallo.`
+            );
             return false;
         }
         console.error('Error confirmando envío de oferta de cupo:', error);
@@ -987,7 +1023,7 @@ export async function marcarFalloOfertaCupo(
             cupo_liberado_id: cupoLiberadoId,
             lista_espera_id: listaEsperaId,
             ...(motivo ? { motivo } : {})
-        });
+        }, { timeout: TIMEOUT_BACKEND_CASCADA_MS });
         return response.data?.code === 200;
     } catch (error) {
         console.error('Error marcando fallo de oferta de cupo:', error);
@@ -1023,7 +1059,7 @@ export async function responderOfertaCupo(
 export async function confirmarEscalamientoListaEspera(cupoLiberadoId: string): Promise<boolean> {
     try {
         const url = `${API_BACKEND_URL}/chatbot/listaespera/cascada/escalar/confirmar`;
-        const response = await axios.post(url, { cupo_liberado_id: cupoLiberadoId });
+        const response = await axios.post(url, { cupo_liberado_id: cupoLiberadoId }, { timeout: TIMEOUT_BACKEND_CASCADA_MS });
         return response.data?.code === 200;
     } catch (error) {
         console.error('Error confirmando escalamiento de lista de espera:', error);

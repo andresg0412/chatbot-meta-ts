@@ -61,7 +61,7 @@ async function procesarAccionOfertar(accion: AccionOfertar): Promise<void> {
     const descripcion =
         `cupo ${accion.cupo_liberado_id} -> lista_espera ${accion.lista_espera_id} (paciente ${accion.paciente_id}, ` +
         `tel ${telefonoLog}) para el ${accion.fecha_cita} ${formatearHoraHHMM(accion.hora_cita)} ` +
-        `(nivel de cascada ${accion.nivel_cascada_origen})`;
+        `(nivel de cascada ${accion.nivel_cascada_origen}, ventana ${accion.ventana_respuesta_segundos}s)`;
 
     if (!isCascadaEnabled()) {
         logObservacionUnaVez(
@@ -93,27 +93,45 @@ async function procesarAccionOfertar(accion: AccionOfertar): Promise<void> {
         return;
     }
 
+    // Ajuste 1 (ventana escalonada, docs/features/2026-09-28-ajustes-lista-espera.md 1.5.6-3): la
+    // ventana es variable (900/600/420 s por defecto) y va en {{5}} de la plantilla. Si no es un entero
+    // finito > 0 (backend viejo o dato corrupto) no se envía, para no mostrar "undefined minutos" al
+    // paciente; se marca fallo para que la cascada no quede bloqueada.
+    const ventanaSegundos = accion.ventana_respuesta_segundos;
+    if (typeof ventanaSegundos !== 'number' || !Number.isInteger(ventanaSegundos) || ventanaSegundos <= 0) {
+        console.warn(`[listaEsperaCascadaPoller] Oferta no enviada: ventana_respuesta_segundos inválida. ${descripcion}. Se marca fallo 'ventana_invalida'.`);
+        await marcarFalloOfertaCupo(accion.cupo_liberado_id, accion.lista_espera_id, 'ventana_invalida');
+        return;
+    }
+    const minutosVentana = Math.round(ventanaSegundos / 60);
+
     try {
         const resultado = await enviarPlantillaOfertaCupo(
             accion.nombre_paciente,
             telefonoDestino,
             accion.profesional,
             accion.fecha_cita,
-            accion.hora_cita
+            accion.hora_cita,
+            minutosVentana
         );
 
         if (resultado.exito) {
+            // Eco de la misma ventana (en segundos) cuyo equivalente en minutos se puso en {{5}}.
             const confirmado = await confirmarEnvioOfertaCupo(
                 accion.cupo_liberado_id,
                 accion.lista_espera_id,
-                resultado.mensajeWaId
+                resultado.mensajeWaId,
+                ventanaSegundos
             );
             if (!confirmado) {
+                // Corrección R1/R2 (docs/features/2026-09-28-ajustes-lista-espera.md 1.13): confirmar-envio
+                // no es reintentable. Ante un 409 el backend ya anuló la oferta (o era un duplicado); no se
+                // reintenta ni se llama a marcar-fallo, porque la plantilla ya salió. El `cause` lo
+                // registra confirmarEnvioOfertaCupo().
                 console.error(
                     `[listaEsperaCascadaPoller] La plantilla de oferta se envió pero confirmar-envio no se ` +
-                    `pudo confirmar para cupo ${accion.cupo_liberado_id}/lista_espera ${accion.lista_espera_id} ` +
-                    `(posible carrera con otro tick, backend caído, u OFERTA_NO_DISPONIBLE). Se reevaluará en ` +
-                    `el próximo tick.`
+                    `pudo confirmar para cupo ${accion.cupo_liberado_id}/lista_espera ${accion.lista_espera_id}. ` +
+                    `No se reintenta ni se marca fallo (ver cause en el log de confirmar-envio).`
                 );
             }
         } else {
@@ -129,16 +147,43 @@ async function procesarAccionOfertar(accion: AccionOfertar): Promise<void> {
     }
 }
 
+/**
+ * Etiquetas legibles para recepción de los motivos de la acción 'escalar' (Ajuste 1,
+ * docs/features/2026-09-28-ajustes-lista-espera.md 1.5.6-5). Sin mencionar especialidad (regla 9.1).
+ * Un motivo que no esté aquí se muestra con su código tal cual.
+ */
+export const ETIQUETAS_MOTIVO_ESCALAMIENTO: Readonly<Record<string, string>> = {
+    antelacion_critica:
+        'Faltan 2 horas o menos para el cupo; no se ofreció automáticamente. Gestionar por llamada.',
+    fuera_de_horario_antelacion_critica:
+        'Cupo liberado fuera del horario de contacto y al abrir el horario quedarían 2 horas o menos; no se ofreció automáticamente.',
+    fila_agotada: 'Ningún candidato de la lista de espera aceptó el cupo.',
+    sin_candidatos: 'No hay pacientes en lista de espera elegibles para este cupo.',
+    cascada_maxima: 'Se alcanzó el máximo de movimientos encadenados (3 niveles).',
+};
+
+const DOS_HORAS_MS = 2 * 60 * 60 * 1000;
+
+function describirMotivoEscalamiento(motivo: string): string {
+    const etiqueta = Object.prototype.hasOwnProperty.call(ETIQUETAS_MOTIVO_ESCALAMIENTO, motivo)
+        ? ETIQUETAS_MOTIVO_ESCALAMIENTO[motivo]
+        : undefined;
+    return etiqueta ? `${etiqueta} (${motivo})` : `${motivo}`;
+}
+
 export function construirMensajeEscalamiento(accion: AccionEscalar): string {
     const instante = instanteBogota(accion.fecha_cita, accion.hora_cita);
-    const vencido = instante !== null && instante <= Date.now();
+    const ahora = Date.now();
+    const vencido = instante !== null && instante <= ahora;
+    const urgente = instante !== null && !vencido && instante - ahora <= DOS_HORAS_MS;
     const fecha = formatearFechaLarga(accion.fecha_cita) || accion.fecha_cita;
     return (
+        (urgente ? '🚨 URGENTE: el cupo es en menos de 2 horas\n' : '') +
         (vencido ? 'ℹ️ (Informativo: la fecha y hora de este cupo ya pasaron)\n' : '') +
         '⚠️ Cupo de lista de espera sin asignar — requiere gestión manual de recepción\n' +
         `Profesional: ${accion.profesional}\n` +
         `Fecha y hora del cupo: ${fecha} ${formatearHoraHHMM(accion.hora_cita)}\n` +
-        `Motivo: ${accion.motivo}\n` +
+        `Motivo: ${describirMotivoEscalamiento(accion.motivo)}\n` +
         `Candidatos contactados: ${accion.candidatos_contactados}\n` +
         `Respuestas — Aceptaron: ${accion.resumen_respuestas?.aceptaron ?? 0}, ` +
         `Rechazaron: ${accion.resumen_respuestas?.rechazaron ?? 0}, ` +
@@ -247,6 +292,33 @@ async function runCascadaTick(sendRaw: SendRawMessage): Promise<void> {
 }
 
 /**
+ * Guarda de ejecución única (corrección R2, docs/features/2026-09-28-ajustes-lista-espera.md 1.13):
+ * nunca corren dos ticks en paralelo dentro del proceso. La comparten el `setInterval` y
+ * `triggerCascadaTickNow()`. Si llega una llamada mientras hay un tick en curso, se marca pendiente y se
+ * ejecuta UN tick más al terminar (varias llamadas en ese lapso se agrupan en un solo tick extra), para
+ * no perder el path rápido de "cupo liberado en menos de 30 s". PM2 corre en `fork` (un solo proceso),
+ * así que un flag de módulo basta.
+ */
+let tickEnCurso = false;
+let tickPendiente = false;
+
+async function ejecutarTickSerializado(sendRaw: SendRawMessage): Promise<void> {
+    if (tickEnCurso) {
+        tickPendiente = true;
+        return;
+    }
+    tickEnCurso = true;
+    try {
+        do {
+            tickPendiente = false;
+            await runCascadaTick(sendRaw);
+        } while (tickPendiente);
+    } finally {
+        tickEnCurso = false;
+    }
+}
+
+/**
  * Arranca el `setInterval` que sondea la cascada cada `LISTA_ESPERA_CASCADA_POLL_INTERVAL_MS` (default
  * 60000). Debe llamarse una sola vez, en el mismo bloque de `app.ts` donde ya se inicializa el resto
  * de sistemas proactivos (junto a `restoreActiveTimers()`).
@@ -267,7 +339,7 @@ export function startCascadaPoller(sendRaw: SendRawMessage): void {
     );
 
     setInterval(() => {
-        runCascadaTick(sendRaw).catch((error) =>
+        ejecutarTickSerializado(sendRaw).catch((error) =>
             console.error('[listaEsperaCascadaPoller] Error inesperado en tick programado:', error?.message ?? error)
         );
     }, intervalMs);
@@ -284,7 +356,7 @@ export function triggerCascadaTickNow(): void {
         console.error('[listaEsperaCascadaPoller] triggerCascadaTickNow() llamado antes de startCascadaPoller(); se ignora.');
         return;
     }
-    runCascadaTick(cachedSendRaw).catch((error) =>
+    ejecutarTickSerializado(cachedSendRaw).catch((error) =>
         console.error('[listaEsperaCascadaPoller] Error inesperado en tick inmediato (path rápido):', error?.message ?? error)
     );
 }
@@ -293,4 +365,23 @@ export function triggerCascadaTickNow(): void {
 export async function _runCascadaTickParaPruebas(sendRaw: SendRawMessage): Promise<void> {
     accionesObservadasLogueadas.clear();
     await runCascadaTick(sendRaw);
+}
+
+/** Solo para pruebas: ejecuta la guarda de ejecución única (mismo camino que setInterval/trigger). */
+export function _ejecutarTickSerializadoParaPruebas(sendRaw: SendRawMessage): Promise<void> {
+    return ejecutarTickSerializado(sendRaw);
+}
+
+/** Solo para pruebas: fija el `sendRaw` cacheado que usa `triggerCascadaTickNow()`, sin arrancar el setInterval. */
+export function _setSendRawParaPruebas(sendRaw: SendRawMessage | null): void {
+    cachedSendRaw = sendRaw;
+}
+
+/** Solo para pruebas: reinicia el estado del módulo (guarda, sendRaw cacheado, arranque y logs observados). */
+export function _resetPollerParaPruebas(): void {
+    tickEnCurso = false;
+    tickPendiente = false;
+    cachedSendRaw = null;
+    pollerStarted = false;
+    accionesObservadasLogueadas.clear();
 }
