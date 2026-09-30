@@ -18,7 +18,7 @@
 
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { responderRecordatorio, registrarActividadBot } from '../../../services/apiService';
-import type { ResultadoConfirmacion } from '../../../services/apiService';
+import type { ResultadoConfirmacion, FalloConfirmacion } from '../../../services/apiService';
 import { sanitizeString, isValidDocumentNumber } from '../../../utils/sanitize';
 import {
     construirRespuestaConfirmacion,
@@ -27,6 +27,7 @@ import {
     MENSAJE_ERROR_CONFIRMACION,
 } from '../../../utils/mensajesConfirmacion';
 import { KW_CONFIRMO_ASISTENCIA, OPCIONES_REGEX } from '../keywordsBotones';
+import { trackRespuestaCampana, trackRespuestaCampanaUnaVez, trackPaso, trackNoEntendido, trackIdentificacion, trackErrorBackend, trackFin, cerrarSesionTraza, asegurarSesionTraza } from '../../../utils/trazabilidad';
 
 const confirmoAsistenciaAccionFlow = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { state, flowDynamic, endFlow, gotoFlow }) => {
@@ -34,19 +35,41 @@ const confirmoAsistenciaAccionFlow = addKeyword(EVENTS.ACTION)
 
         if (!numeroDoc) {
             await state.update({ intentosDocRecordatorio: 0, reintentoDocRecordatorioEnCurso: false });
+            cerrarSesionTraza(ctx.from, 'completado');
             await flowDynamic('No pudimos identificar tu respuesta. Por favor intenta nuevamente.');
             return endFlow();
         }
 
         let resultado: ResultadoConfirmacion;
         let persistido: boolean | undefined;
+        let agendaId: string | undefined;
         try {
             const respuestaBackend = await responderRecordatorio(ctx.from, numeroDoc, 'confirma');
-            if (respuestaBackend.ok) persistido = respuestaBackend.data.persistido;
+            if (respuestaBackend.ok) {
+                persistido = respuestaBackend.data.persistido;
+                agendaId = respuestaBackend.data.agenda_id;
+            }
             resultado = resultadoConfirmacionDesdeRecordatorio(respuestaBackend);
         } catch (error) {
             console.error('Error respondiendo recordatorio (confirma):', (error as any)?.message ?? error);
             resultado = { ok: false, causa: 'ERROR' };
+        }
+
+        // Trazabilidad: identificación con el resultado del backend (un error técnico no dice nada del documento).
+        const causaFallo: string | null = resultado.ok ? null : (resultado as FalloConfirmacion).causa;
+        if (causaFallo === 'ERROR' || causaFallo === 'GLOBHO_ERROR') {
+            trackErrorBackend(ctx.from, 'recordatorio.confirmo', '/chatbot/recordatorios/responder', { siempre: true, cause: causaFallo });
+        } else {
+            const encontrado = causaFallo !== 'CITA_NOT_FOUND' && causaFallo !== 'DOCUMENTO_INVALIDO';
+            trackIdentificacion(ctx.from, numeroDoc, encontrado ? 'encontrado' : 'no_encontrado', 'recordatorio.confirmo');
+        }
+        if (resultado.ok) {
+            // Confirmada por el backend ('confirmada' o 'ya_confirmada').
+            trackFin(ctx.from, 'recordatorio', 'cita_confirmada', {
+                paso: 'recordatorio.confirmo',
+                agendaId,
+                metadata: { estado_resultado: resultado.estado },
+            });
         }
 
         const intentosPrevios = Number(state.getMyState()?.intentosDocRecordatorio) || 0;
@@ -72,16 +95,19 @@ const confirmoAsistenciaAccionFlow = addKeyword(EVENTS.ACTION)
             return gotoFlow(confirmoAsistenciaFlow);
         }
         await state.update({ intentosDocRecordatorio: 0, reintentoDocRecordatorioEnCurso: false });
+        cerrarSesionTraza(ctx.from, 'completado');
         return endFlow();
     });
 
 // Coincidencia exacta anclada (runbook B1): ver templates/flujos/keywordsBotones.ts.
 const confirmoAsistenciaFlow = addKeyword(KW_CONFIRMO_ASISTENCIA, OPCIONES_REGEX)
-    .addAction(async (_ctx, { state }) => {
+    .addAction(async (ctx, { state }) => {
         if (state.getMyState()?.reintentoDocRecordatorioEnCurso) {
             await state.update({ reintentoDocRecordatorioEnCurso: false });
         } else {
             await state.update({ intentosDocRecordatorio: 0 });
+            // Trazabilidad: respuesta esperada (tabla 11.2). campana null: el bot no sabe a qué recordatorio responde.
+            trackRespuestaCampana(ctx.from, null, 'confirmo', 'recordatorio.confirmo');
         }
     })
     .addAnswer(
@@ -90,10 +116,12 @@ const confirmoAsistenciaFlow = addKeyword(KW_CONFIRMO_ASISTENCIA, OPCIONES_REGEX
         async (ctx, { state, gotoFlow, flowDynamic }) => {
             const numeroDoc = sanitizeString(ctx.body, 20);
             if (!isValidDocumentNumber(numeroDoc)) {
+                trackNoEntendido(ctx.from, 'recordatorio.confirmo');
                 await flowDynamic('El número de documento ingresado no es válido. Intenta nuevamente.');
                 await state.update({ reintentoDocRecordatorioEnCurso: true });
                 return gotoFlow(confirmoAsistenciaFlow);
             }
+            trackPaso(ctx.from, 'recordatorio.confirmo', 'ok');
             await state.update({ numeroDocRecordatorio: numeroDoc });
             return gotoFlow(confirmoAsistenciaAccionFlow);
         }

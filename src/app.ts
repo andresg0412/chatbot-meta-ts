@@ -16,6 +16,8 @@ import { startCascadaPoller } from './utils/listaEsperaCascadaPoller';
 import { procesarNoticeProvider } from './utils/avisoAsesor';
 import { obtenerBloqueadosPorCrisis, quitarBloqueoPorCrisis } from './utils/crisisBlacklistStore';
 import { isCrisisProtocolEnabled } from './utils/listaEsperaFlags';
+import { iniciarTrazabilidad, trackEvento } from './utils/trazabilidad';
+import { crearListenerMensajeEntrante, crearMiddlewareEstadosMeta } from './utils/trazabilidadMeta';
 
 const PORT = process.env.PORT ?? 3008
 
@@ -50,6 +52,17 @@ const main = async () => {
         'message',
         createCrisisInterceptor(() => botInstance, sendRaw)
     );
+
+    // Trazabilidad (docs/features/2026-09-29-trazabilidad-usuarios.md, 4.3.4): `msg_entrante` por cada
+    // mensaje recibido. Se registra DESPUÉS del interceptor de crisis (así `en_blacklist` ya refleja un
+    // bloqueo por crisis de este mismo mensaje) y antes de createBot (corre antes que el flujo). Nunca
+    // guarda el texto del paciente (P7).
+    adapterProvider.on('message', crearListenerMensajeEntrante(() => botInstance));
+
+    // Trazabilidad: estados de entrega de Meta (`wa_estado`) leídos del POST /webhook sin tocar la
+    // respuesta del provider (P4). Middleware global de polka: corre antes del handler del provider y
+    // con el body ya parseado (bodyParser.json() se registra al construir el servidor).
+    adapterProvider.server.use(crearMiddlewareEstadosMeta());
 
     // Runbook B6: el provider convierte los webhooks de estado 'failed' de Meta en un evento 'notice'.
     // Si corresponde a un aviso reciente al asesor (crisis / escalamiento), se registra en chat_stats.
@@ -96,6 +109,10 @@ const main = async () => {
     setBotInstance(botForTimeout);
 
     console.log('🚀 Sistema de timeout proactivo inicializado');
+
+    // Trazabilidad: reenvía el spool de una ejecución anterior, arranca el flush por lotes y guarda la
+    // cola en el spool en SIGTERM/SIGINT. No hace nada con TRAZABILIDAD_V2_ENABLED != true.
+    iniciarTrazabilidad();
 
     // PASO 1: Limpiar sesiones muy antiguas ANTES de restaurar timers
     cleanupOldSessionsWithoutNotification();
@@ -149,6 +166,15 @@ const main = async () => {
             if (intent === 'remove') quitarBloqueoPorCrisis(number)
             if (intent === 'remove') bot.blacklist.remove(number)
             if (intent === 'add') bot.blacklist.add(number)
+            if (intent === 'add' || intent === 'remove') {
+                trackEvento({
+                    tipo_evento: 'control_blacklist',
+                    telefono: typeof number === 'string' ? number : null,
+                    sesion_id: null,
+                    resultado: intent,
+                    origen: 'sistema',
+                })
+            }
 
             res.writeHead(200, { 'Content-Type': 'application/json' })
             return res.end(JSON.stringify({ status: 'ok', number, intent }))

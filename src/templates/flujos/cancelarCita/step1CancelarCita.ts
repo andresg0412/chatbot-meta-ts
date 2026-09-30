@@ -2,6 +2,7 @@ import { addKeyword, EVENTS } from '@builderbot/bot';
 import { datosinicialesComunes } from '../common/datosInicialesComunes';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 import { registrarActividadBot } from '../../../services/apiService';
+import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion, flujoDesdeSeleccionMenu } from '../../../utils/trazabilidad';
 
 
 const step1CencelarCita = addKeyword(['280525004', '4', 'cancelar', 'Cancelo', 'Cancelar', 'cancelo'])
@@ -11,6 +12,7 @@ const step1CencelarCita = addKeyword(['280525004', '4', 'cancelar', 'Cancelo', '
         //    if (!sessionValid) {
         //        return endFlow();
         //    }
+        trackPaso(ctx.from, 'cancelar.s01_inicio');
         await registrarActividadBot('chat_flujo_cancelar_cita', ctx.from);
     })
     .addAnswer('Perfecto, te solicitaré algunos datos para poder cancelar tu cita. 😊🗓️', { capture: false })

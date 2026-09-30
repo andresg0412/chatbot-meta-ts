@@ -20,3 +20,6 @@ DOCUMENTACION_TECNICA.md
 CAMPANAS_README.md
 # Runbook B8: bloqueos del protocolo de crisis (runtime, escrito por el bot)
 src/utils/crisisBlacklistDB.json
+
+# Trazabilidad (docs/features/2026-09-29-trazabilidad-usuarios.md): spool de eventos pendientes (runtime, escrito por el bot)
+src/utils/trazabilidadSpool.jsonl

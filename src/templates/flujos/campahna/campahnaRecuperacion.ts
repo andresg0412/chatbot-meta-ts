@@ -17,6 +17,7 @@ import { extraerFechaDelComando } from '../../../utils/dateValidator';
 import { isNumberValid } from '../../../constants/killSwichConstants';
 import { esBotHabilitado } from '../../../services/citasService';
 import { registrarActividadBot } from '../../../services/apiService';
+import { iniciarEjecucionCampana, finalizarEjecucionCampana, trackRespuestaCampana, trackPaso, trackNoEntendido, trackIdentificacion, trackErrorBackend, cerrarSesionTraza } from '../../../utils/trazabilidad';
 
 /**
  * Función core que ejecuta la campaña de recuperación de pacientes sin asistencia.
@@ -28,6 +29,8 @@ export const ejecutarCampahnaRecuperacionCore = async (
   origen: 'whatsapp' | 'endpoint' = 'whatsapp'
 ) => {
   const fechaFormateada = new Date().toISOString().split('T')[0];
+  // Trazabilidad: campana_ejecucion{inicio|fin} y campana_ejecucion_id en cada wa_envio de la corrida.
+  const campanaEjecucionId = iniciarEjecucionCampana('recuperacion', origen);
 
   try {
     console.log(`🔄 Ejecutando campaña de recuperación sin asistencia (origen: ${origen})`);
@@ -36,6 +39,7 @@ export const ejecutarCampahnaRecuperacionCore = async (
 
     if (citasPendientes.length === 0) {
       console.log('ℹ️ No se encontraron pacientes para recuperar de hace 15 días');
+      finalizarEjecucionCampana('recuperacion', campanaEjecucionId, { total: 0, exitosos: 0, errores: 0, origen });
       return {
         success: true,
         fecha: fechaFormateada,
@@ -54,7 +58,7 @@ export const ejecutarCampahnaRecuperacionCore = async (
 
     for (const cita of citasPendientes) {
       try {
-        const response = await enviarPlantillaRecuperar(cita);
+        const response = await enviarPlantillaRecuperar(cita, campanaEjecucionId);
         const resultado = {
           paciente: cita.nombre_paciente,
           telefono: cita.telefono_paciente,
@@ -116,6 +120,7 @@ export const ejecutarCampahnaRecuperacionCore = async (
       origen
     });
 
+    finalizarEjecucionCampana('recuperacion', campanaEjecucionId, { total: citasPendientes.length, exitosos, errores, origen });
     return {
       success: true,
       fecha: fechaFormateada,
@@ -127,6 +132,7 @@ export const ejecutarCampahnaRecuperacionCore = async (
 
   } catch (error) {
     console.error('Error ejecutando campaña:', error);
+    finalizarEjecucionCampana('recuperacion', campanaEjecucionId, { total: 0, exitosos: 0, errores: 1, origen });
     return {
       success: false,
       error: 'Error interno al procesar la campaña',
@@ -184,11 +190,14 @@ const respuestaCampahnaEnOtroMomento = addKeyword(['En otro momento'])
   .addAction(async (ctx, ctxFn) => {
     const fechaFormateada = new Date().toISOString().split('T')[0];
     const telefono = ctx.from;
+    // Trazabilidad: respuesta esperada a la campaña (tabla 11.2) y cierre de la sesión como completada.
+    trackRespuestaCampana(telefono, 'recuperacion', 'otro_momento', 'campana.recuperacion_respuesta');
     await registrarActividadBot('recuperacion_sin_asistencia_otro_momento', telefono, {
       campahna: 'meta-usuarios-sin-asistencia-' + fechaFormateada,
       fecha_campahna: fechaFormateada,
     });
     await ctxFn.flowDynamic('Entendido, estaremos atentos a tu nueva disponibilidad.');
+    cerrarSesionTraza(telefono, 'completado');
     return ctxFn.endFlow();
   });
 

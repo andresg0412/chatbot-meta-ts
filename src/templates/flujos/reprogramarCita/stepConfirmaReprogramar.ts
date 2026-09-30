@@ -15,11 +15,12 @@ import { construirMensajeFechasDisponibles } from '../../../utils/construirMensa
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 import { closeUserSession } from '../../../utils/proactiveSessionManager';
 import { registrarActividadBot } from '../../../services/apiService';
+import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin } from '../../../utils/trazabilidad';
 
 
 const stepConfirmaReprogramar = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
-        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow, { paso: 'reprogramar.fechas' });
         if (!sessionValid) {
             return endFlow();
         }
@@ -49,6 +50,9 @@ const stepConfirmaReprogramar = addKeyword(EVENTS.ACTION)
                     tipo_consulta: tipoConsulta
                 });
                 const fechasOrdenadas = await consultarFechasCitasDisponibles(tipoConsulta, especialidad, profesional_id);
+                if (!fechasOrdenadas || fechasOrdenadas.length === 0) {
+                    trackErrorBackend(ctx.from, 'reprogramar.fechas', '/chatbot/fechas');
+                }
                 await state.update({ fechasOrdenadas, tipoConsultaPaciente: tipoConsulta, especialidadAgendarCita: especialidad, profesionalId: profesional_id });
                 const mostrarFechas = await fechasOrdenadas.slice(0, 3);
                 const mensaje = construirMensajeFechasDisponibles(mostrarFechas, fechasOrdenadas.length, 3, '*Fechas con citas disponibles*:');
@@ -57,6 +61,8 @@ const stepConfirmaReprogramar = addKeyword(EVENTS.ACTION)
                 return gotoFlow(stepSeleccionaFechaReprogramar);
             } catch (error) {
                 metricError(error, ctx.from);
+                trackPaso(ctx.from, 'reprogramar.fechas', 'error');
+                trackFin(ctx.from, 'reprogramar', 'error_backend', { paso: 'reprogramar.fechas' });
                 await flowDynamic('Ocurrió un error inesperado. Por favor, intenta más tarde.');
                 closeUserSession(ctx.from);
                 return endFlow();

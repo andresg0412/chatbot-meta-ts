@@ -62,3 +62,13 @@ export function instanteBogota(fecha: unknown, hora: unknown): number | null {
     const [h, min] = hhmm.split(':').map(Number);
     return Date.UTC(y, m - 1, d, h + 5, min);
 }
+
+/**
+ * Fecha 'YYYY-MM-DD' de hoy en hora de Colombia (UTC-5 fijo, misma convención que `instanteBogota`),
+ * sin depender de la zona horaria del proceso. Se usa en `metadata.date` de los eventos de
+ * estadística (antes era la fecha UTC: un evento después de las 19:00 de Bogotá quedaba con el día
+ * siguiente).
+ */
+export function fechaBogotaHoy(ahoraMs: number = Date.now()): string {
+    return new Date(ahoraMs - 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}

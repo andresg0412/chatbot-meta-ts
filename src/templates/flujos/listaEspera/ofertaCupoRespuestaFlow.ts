@@ -16,6 +16,7 @@ import { responderOfertaCupo, registrarActividadBot } from '../../../services/ap
 import { sanitizeString, isValidDocumentNumber } from '../../../utils/sanitize';
 import { KW_SI_LO_TOMO, KW_NO_PUEDO, OPCIONES_REGEX } from '../keywordsBotones';
 import { formatearFechaLarga, formatearHoraHHMM } from '../../../utils/fechaHora';
+import { trackRespuestaCampana, trackRespuestaCampanaUnaVez, trackPaso, trackNoEntendido, trackIdentificacion, trackErrorBackend, trackFin, cerrarSesionTraza, asegurarSesionTraza } from '../../../utils/trazabilidad';
 
 // Runbook B2: antes `new Date('YYYY-MM-DD')` (medianoche UTC) formateado en la zona local del proceso
 // mostraba el día anterior en America/Bogota. Ahora se formatea desde los componentes de la fecha.
@@ -35,11 +36,17 @@ const ofertaCupoAccionFlow = addKeyword(EVENTS.ACTION)
         const respuesta = state.getMyState().respuestaOfertaCupo as 'acepta' | 'rechaza' | undefined;
 
         if (!numeroDoc || !respuesta) {
+            cerrarSesionTraza(ctx.from, 'completado');
             await flowDynamic('No pudimos identificar tu respuesta. Por favor intenta nuevamente.');
             return endFlow();
         }
 
         const resultado = await responderOfertaCupo(numeroDoc, ctx.from, respuesta);
+        // Trazabilidad: la sesión de la respuesta a la oferta termina aquí en todos los casos.
+        cerrarSesionTraza(ctx.from, 'completado');
+        if (resultado.ok || resultado.code === 409) {
+            trackIdentificacion(ctx.from, numeroDoc, 'encontrado', 'lista_espera.oferta_respuesta');
+        }
 
         if (!resultado.ok) {
             if (resultado.code === 404) {
@@ -58,6 +65,7 @@ const ofertaCupoAccionFlow = addKeyword(EVENTS.ACTION)
                 await flowDynamic('Ese espacio ya fue tomado por otra persona, lo sentimos. Sigues en la lista de espera para el siguiente que se libere.');
                 return endFlow();
             }
+            trackErrorBackend(ctx.from, 'lista_espera.oferta_respuesta', '/chatbot/listaespera/cascada/respuesta', { siempre: true });
             await registrarActividadBot('chat_flujo_lista_espera', ctx.from, {
                 step: 'respuesta_oferta',
                 resultado: 'error',
@@ -78,6 +86,8 @@ const ofertaCupoAccionFlow = addKeyword(EVENTS.ACTION)
 
         // acepta
         const movimiento = resultado.data;
+        // Aceptar la oferta mueve la cita al cupo liberado: es una reprogramación.
+        trackFin(ctx.from, 'lista_espera', 'cita_reprogramada', { paso: 'lista_espera.oferta_respuesta', metadata: { origen_movimiento: 'oferta_cupo' } });
         await registrarActividadBot('chat_flujo_lista_espera', ctx.from, {
             step: 'respuesta_oferta',
             resultado: 'aceptada'
@@ -94,15 +104,22 @@ const ofertaCupoAccionFlow = addKeyword(EVENTS.ACTION)
 
 // Coincidencia exacta anclada (runbook B1): ver templates/flujos/keywordsBotones.ts.
 const ofertaCupoAceptaDocumentoFlow = addKeyword(KW_SI_LO_TOMO, OPCIONES_REGEX)
+    .addAction(async (ctx, { state }) => {
+        // Trazabilidad: respuesta esperada (tabla 11.2), una sola vez (no en el reintento del documento).
+        await trackRespuestaCampanaUnaVez(ctx.from, state, 'trazaReintentoOfertaAcepta', 'oferta_cupo', 'acepta_cupo', 'lista_espera.oferta_respuesta');
+    })
     .addAnswer(
         'Para confirmar que el espacio es para ti, por favor digita tu número de documento 🔢:',
         { capture: true },
         async (ctx, { state, gotoFlow, flowDynamic }) => {
             const numeroDoc = sanitizeString(ctx.body, 20);
             if (!isValidDocumentNumber(numeroDoc)) {
+                trackNoEntendido(ctx.from, 'lista_espera.oferta_respuesta');
                 await flowDynamic('El número de documento ingresado no es válido. Intenta nuevamente.');
+                await state.update({ trazaReintentoOfertaAcepta: true });
                 return gotoFlow(ofertaCupoAceptaDocumentoFlow);
             }
+            trackPaso(ctx.from, 'lista_espera.oferta_respuesta', 'ok');
             await state.update({ numeroDocOfertaCupo: numeroDoc, respuestaOfertaCupo: 'acepta' });
             return gotoFlow(ofertaCupoAccionFlow);
         }
@@ -111,15 +128,22 @@ const ofertaCupoAceptaDocumentoFlow = addKeyword(KW_SI_LO_TOMO, OPCIONES_REGEX)
 // Antes ['No puedo'] capturaba cualquier texto que contuviera "no puedo" (p. ej. "hoy no puedo ir").
 // Coincidencia exacta anclada (runbook B1): ver templates/flujos/keywordsBotones.ts.
 const ofertaCupoRechazaDocumentoFlow = addKeyword(KW_NO_PUEDO, OPCIONES_REGEX)
+    .addAction(async (ctx, { state }) => {
+        // Trazabilidad: respuesta esperada (tabla 11.2), una sola vez (no en el reintento del documento).
+        await trackRespuestaCampanaUnaVez(ctx.from, state, 'trazaReintentoOfertaRechaza', 'oferta_cupo', 'rechaza_cupo', 'lista_espera.oferta_respuesta');
+    })
     .addAnswer(
         'Entendido. Para registrar tu respuesta, por favor digita tu número de documento 🔢:',
         { capture: true },
         async (ctx, { state, gotoFlow, flowDynamic }) => {
             const numeroDoc = sanitizeString(ctx.body, 20);
             if (!isValidDocumentNumber(numeroDoc)) {
+                trackNoEntendido(ctx.from, 'lista_espera.oferta_respuesta');
                 await flowDynamic('El número de documento ingresado no es válido. Intenta nuevamente.');
+                await state.update({ trazaReintentoOfertaRechaza: true });
                 return gotoFlow(ofertaCupoRechazaDocumentoFlow);
             }
+            trackPaso(ctx.from, 'lista_espera.oferta_respuesta', 'ok');
             await state.update({ numeroDocOfertaCupo: numeroDoc, respuestaOfertaCupo: 'rechaza' });
             return gotoFlow(ofertaCupoAccionFlow);
         }

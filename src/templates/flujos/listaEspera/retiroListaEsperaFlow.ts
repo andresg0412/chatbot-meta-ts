@@ -21,6 +21,7 @@ import {
 import { sanitizeString, isValidDocumentNumber } from '../../../utils/sanitize';
 import { closeUserSession } from '../../../utils/proactiveSessionManager';
 import { KW_RETIRAR_LISTA_ESPERA, OPCIONES_REGEX } from '../keywordsBotones';
+import { trackRespuestaCampana, trackRespuestaCampanaUnaVez, trackPaso, trackNoEntendido, trackIdentificacion, trackErrorBackend, trackFin, cerrarSesionTraza, asegurarSesionTraza } from '../../../utils/trazabilidad';
 
 export const MENSAJE_RETIRO_EXITOSO =
     'Listo, te retiramos de la lista de espera y no te enviaremos más avisos de espacios disponibles. ' +
@@ -42,7 +43,11 @@ const retiroListaEsperaAccionFlow = addKeyword(EVENTS.ACTION)
         }
 
         const consulta = await consultarListaEsperaPorDocumento(numeroDoc);
+        if (consulta.ok) {
+            trackIdentificacion(ctx.from, numeroDoc, consulta.encontrado ? 'encontrado' : 'no_encontrado', 'lista_espera.retiro');
+        }
         if (!consulta.ok) {
+            trackErrorBackend(ctx.from, 'lista_espera.retiro', '/chatbot/listaespera', { siempre: true });
             await registrarActividadBot('chat_flujo_lista_espera', ctx.from, { step: 'retiro', resultado: 'error_consulta' });
             return endFlow(MENSAJE_RETIRO_ERROR);
         }
@@ -75,6 +80,12 @@ const retiroListaEsperaAccionFlow = addKeyword(EVENTS.ACTION)
 
 // Coincidencia exacta anclada (runbook B1/B5): ver templates/flujos/keywordsBotones.ts.
 const retiroListaEsperaFlow = addKeyword(KW_RETIRAR_LISTA_ESPERA, OPCIONES_REGEX)
+    .addAction(async (ctx) => {
+        // Trazabilidad: comando escrito por el paciente (no es respuesta a una campaña). Abre sesión
+        // 'keyword' si no hay una activa (solo con TRAZABILIDAD_V2_ENABLED; este flujo no valida sesión).
+        asegurarSesionTraza(ctx.from, 'keyword');
+        trackPaso(ctx.from, 'lista_espera.retiro');
+    })
     .addAnswer(
         'Para retirarte de la lista de espera, por favor digita tu número de documento 🔢:',
         { capture: true },
@@ -83,13 +94,15 @@ const retiroListaEsperaFlow = addKeyword(KW_RETIRAR_LISTA_ESPERA, OPCIONES_REGEX
             if (/^(salir|exit)$/i.test(texto.trim())) {
                 // "Salir" tiene forma de documento válido (5 letras); se trata igual que exitFlow (que no
                 // alcanza a responder porque este callback de captura corre primero y termina el flujo).
-                closeUserSession(ctx.from);
+                closeUserSession(ctx.from, 'salir');
                 return endFlow('Gracias por usar nuestro servicio. ¡Hasta luego! 👋');
             }
             if (!isValidDocumentNumber(texto)) {
+                trackNoEntendido(ctx.from, 'lista_espera.retiro');
                 await flowDynamic('El número de documento ingresado no es válido. Intenta nuevamente.');
                 return gotoFlow(retiroListaEsperaFlow);
             }
+            trackPaso(ctx.from, 'lista_espera.retiro', 'ok');
             await state.update({ numeroDocRetiroListaEspera: texto });
             return gotoFlow(retiroListaEsperaAccionFlow);
         }

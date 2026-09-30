@@ -7,6 +7,16 @@ import { AccionCascada } from '../interfaces/ICascadaListaEspera';
 import { isRecordatoriosBotonesEnabled as flagRecordatoriosBotones, esTelefonoPiloto } from '../utils/listaEsperaFlags';
 import { formatearFechaLarga, formatearHoraHHMM } from '../utils/fechaHora';
 import { enmascararTelefono } from '../utils/telefono';
+import { fechaBogotaHoy } from '../utils/fechaHora';
+import {
+    isTrazabilidadV2Enabled,
+    trackEventoLegado,
+    trackEnvioWhatsApp,
+    registrarFalloBackend,
+    CampanaTraza,
+    EventoEntrada,
+    ResultadoEnvioMeta,
+} from '../utils/trazabilidad';
 
 export const API_BACKEND_URL = process.env.API_BACKEND_URL;
 
@@ -32,6 +42,63 @@ function usarVarianteConBotones(telefonoPaciente: unknown): boolean {
     return isRecordatoriosBotonesEnabled() && esTelefonoPiloto(telefonoPaciente);
 }
 
+// ---------------------------------------------------------------------------
+// Trazabilidad de envíos salientes (proyecto-ips/docs/features/2026-09-29-trazabilidad-usuarios.md,
+// 4.3.4 y 11.2): las funciones de envío devuelven `{ exito, mensajeWaId?, errorCode?, errorTitulo? }`
+// y emiten `wa_envio` (solo con TRAZABILIDAD_V2_ENABLED=true).
+// ---------------------------------------------------------------------------
+
+/** Resultado de envío a partir de la respuesta 200 de Graph API (exito solo si message_status='accepted'). */
+export function resultadoEnvioDesdeRespuesta(data: any): ResultadoEnvioMeta {
+    const mensaje = Array.isArray(data?.messages) ? data.messages[0] : undefined;
+    const mensajeWaId = typeof mensaje?.id === 'string' ? mensaje.id : undefined;
+    if (mensaje?.message_status === 'accepted') {
+        return { exito: true, ...(mensajeWaId ? { mensajeWaId } : {}) };
+    }
+    const estado = typeof mensaje?.message_status === 'string' ? mensaje.message_status : null;
+    return {
+        exito: false,
+        ...(mensajeWaId ? { mensajeWaId } : {}),
+        errorCode: estado ? `status_${estado}`.slice(0, 20) : 'sin_messages',
+        errorTitulo: estado ? `message_status=${estado}` : 'respuesta de Meta sin messages',
+    };
+}
+
+/** Resultado de envío a partir de un error de axios contra Graph API (sin datos personales). */
+export function resultadoEnvioDesdeError(error: any): ResultadoEnvioMeta {
+    const resumen = resumirErrorMeta(error);
+    const code = resumen.code !== null && resumen.code !== undefined
+        ? String(resumen.code)
+        : resumen.http_status !== null ? `http_${resumen.http_status}` : undefined;
+    return {
+        exito: false,
+        ...(code ? { errorCode: code.slice(0, 20) } : {}),
+        errorTitulo: resumen.mensaje.slice(0, 100),
+    };
+}
+
+/** Emite `wa_envio` para una plantilla de campaña y devuelve el mismo resultado. */
+function trazarEnvioPlantilla(
+    cita: { telefono_paciente?: string; cita_id?: string } | null | undefined,
+    campana: CampanaTraza,
+    plantilla: string | undefined,
+    campanaEjecucionId: string | undefined,
+    resultado: ResultadoEnvioMeta
+): ResultadoEnvioMeta {
+    trackEnvioWhatsApp({
+        telefono: cita?.telefono_paciente ?? null,
+        campana,
+        campanaEjecucionId,
+        plantilla: plantilla ?? null,
+        tipoEnvio: 'plantilla',
+        resultado,
+        // `cita_id` de las campañas es agenda.agenda_id (id interno), no el id de Globho: va en el
+        // campo `agenda_id` del evento y no en cita_id_externa (ver trackEnvioWhatsApp).
+        agendaId: cita?.cita_id ?? null,
+    });
+    return resultado;
+}
+
 export async function consultarCitasPaciente(documento: string, especialidad: string): Promise<IPaciente[] | null> {
     try {
         const especialidadParse = especialidad === 'Psicologia' ? 'Psicología' : especialidad === 'NeuroPsicologia' ? 'Neuropsicología' : especialidad === 'Psiquiatria' ? 'Psiquiatría' : especialidad;
@@ -40,6 +107,7 @@ export async function consultarCitasPaciente(documento: string, especialidad: st
         console.log('Response from consultarCitasPaciente:', response.data);
         return response.data.data || null;
     } catch (error) {
+        registrarFalloBackend('/chatbot/citaspaciente', error);
         console.error('Error consultando paciente:', error);
         return null;
     }
@@ -52,6 +120,7 @@ export async function consultarCitasProximasPaciente(numeroDoc: string) {
             `${API_BACKEND_URL}/chatbot/citaspaciente?documento=${numeroDoc}&proximas=true`);
         return response.data.data || [];
     } catch (error) {
+        registrarFalloBackend('/chatbot/citaspaciente', error);
         console.error('Error consultando citas por pacienteId:', error);
         return null;
     }
@@ -101,6 +170,7 @@ export async function crearPacienteDataBase(datosPaciente: any) {
         const response = await axios.post(url, datosPaciente);
         return response.data.data || null;
     } catch (error) {
+        registrarFalloBackend('/chatbot/crearpaciente', error);
         console.error('Error creando paciente:', error);
         return null;
     }
@@ -143,6 +213,7 @@ export async function consultarFechasCitasDisponibles(tipoConsulta: string, espe
         const response = await axios.get(url);
         return response.data.data.fechasOrdenadas || [];
     } catch (error) {
+        registrarFalloBackend('/chatbot/fechas', error);
         console.error('Error consultando fechas de citas disponibles:', error);
         return [];
     }
@@ -161,6 +232,7 @@ export async function consultarCitasFecha(fecha: string, tipoConsulta: string, e
         const response = await axios.get(url);
         return response.data.data.citasDisponibles || [];
     } catch (error) {
+        registrarFalloBackend('/chatbot/horas', error);
         console.error('Error consultando citas por fecha:', error);
         return [];
     }
@@ -172,6 +244,7 @@ export async function consultarPacientePorDocumento(documento: string): Promise<
         const response = await axios.get(url);
         return response.data.data[0] || null;
     } catch (error) {
+        registrarFalloBackend('/chatbot/paciente', error);
         console.error('Error consultando paciente por documento:', error);
         return null;
     }
@@ -184,6 +257,7 @@ export async function reagendarCita(data: IReagendarCita): Promise<IAgendaRespon
         metricCita('reagendada');
         return response.data.data || null;
     } catch (error) {
+        registrarFalloBackend('/chatbot/reagendar', error);
         console.error('Error reprogramando cita:', error);
         return null;
     }
@@ -196,6 +270,7 @@ export async function crearCita(data: ICrearCita): Promise<IAgendaResponse | nul
         metricCita('agendada');
         return response.data.code === 201 ? response.data.data : null;
     } catch (error) {
+        registrarFalloBackend('/chatbot/agendar', error);
         console.error('Error creando cita:', error);
         return null;
     }
@@ -208,6 +283,7 @@ export async function cancelarCita(citaId: string): Promise<string | null> {
         metricCita('cancelada');
         return response.data.code === 200 ? 'ok' : null;
     } catch (error) {
+        registrarFalloBackend('/chatbot/cancelarcita', error);
         console.error('Error cancelando cita:', error);
         return null;
     }
@@ -246,7 +322,10 @@ export async function obtenerCitasConfirmadas(fecha: string): Promise<AgendaPend
     }
 }
 
-export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse | AgendaProgramadaResponse): Promise<{ exito: boolean }> {
+export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse | AgendaProgramadaResponse, campanaEjecucionId?: string): Promise<ResultadoEnvioMeta> {
+    let plantillaUsada: string | undefined;
+    const trazar = (resultado: ResultadoEnvioMeta) =>
+        trazarEnvioPlantilla(cita, 'execute', plantillaUsada, campanaEjecucionId, resultado);
     try {
         // Formatear la fecha, aparece en formato YYYY-MM-ddTHH:mm:ss.SSSZ convertir en formato '31 de julio de 2025'
         const fechaCita = new Date(cita.fecha_cita);
@@ -260,6 +339,7 @@ export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse 
         const administradora = cita.administradora ? cita.administradora : 'PARTICULAR';
         const usarBotones = usarVarianteConBotones(cita.telefono_paciente);
         const nombrePlantilla = usarBotones ? process.env.NOMBRE_PLANTILLA_META_BOTONES : process.env.NOMBRE_PLANTILLA_META;
+        plantillaUsada = nombrePlantilla;
         console.log('Enviando plantilla URL:', url);
         console.log('Administradora:', administradora);
         const body = {
@@ -300,7 +380,8 @@ export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse 
         } else {
             console.error('Error al enviar plantilla:', response.data);
         }
-        if (response.data.messages[0].message_status === 'accepted') {
+        const resultadoEnvio = resultadoEnvioDesdeRespuesta(response.data);
+        if (resultadoEnvio.exito) {
             console.log(`Plantilla enviada exitosamente a ${cita.nombre_paciente} (${cita.telefono_paciente})`);
             if (usarBotones) {
                 // Fire-and-forget (15.6): un fallo de registro nunca debe afectar el envío ya exitoso.
@@ -308,16 +389,18 @@ export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse 
                     console.error('Error registrando envío de recordatorio (fire-and-forget):', error)
                 );
             }
-            return { exito: true };
         }
-        return { exito: false };
+        return trazar(resultadoEnvio);
     } catch (error) {
         console.error('Error enviando plantilla:', error);
-        return { exito: false };
+        return trazar(resultadoEnvioDesdeError(error));
     }
 }
 
-export async function enviarPlantillaRecordatorio24h(cita: AgendaProgramadaResponse): Promise<{ exito: boolean }> {
+export async function enviarPlantillaRecordatorio24h(cita: AgendaProgramadaResponse, campanaEjecucionId?: string): Promise<ResultadoEnvioMeta> {
+    let plantillaUsada: string | undefined;
+    const trazar = (resultado: ResultadoEnvioMeta) =>
+        trazarEnvioPlantilla(cita, 'execute', plantillaUsada, campanaEjecucionId, resultado);
     try {
         // Formatear la fecha, aparece en formato YYYY-MM-ddTHH:mm:ss.SSSZ convertir en formato '31 de julio de 2025'
         const fechaCita = new Date(cita.fecha_cita);
@@ -331,6 +414,7 @@ export async function enviarPlantillaRecordatorio24h(cita: AgendaProgramadaRespo
         const administradora = cita.administradora ? cita.administradora : 'PARTICULAR';
         const usarBotones = usarVarianteConBotones(cita.telefono_paciente);
         const nombrePlantilla = usarBotones ? process.env.NOMBRE_PLANTILLA_META_CONFIRMADO_24H_BOTONES : process.env.NOMBRE_PLANTILLA_META_CONFIRMADO_24H;
+        plantillaUsada = nombrePlantilla;
         const body = {
             "messaging_product": "whatsapp",
             "to": `${cita.telefono_paciente}`,
@@ -365,7 +449,8 @@ export async function enviarPlantillaRecordatorio24h(cita: AgendaProgramadaRespo
         } else {
             console.error('Error al enviar plantilla:', response.data);
         }
-        if (response.data.messages[0].message_status === 'accepted') {
+        const resultadoEnvio = resultadoEnvioDesdeRespuesta(response.data);
+        if (resultadoEnvio.exito) {
             console.log(`Plantilla enviada exitosamente a ${cita.nombre_paciente} (${cita.telefono_paciente})`);
             if (usarBotones) {
                 // Fire-and-forget (15.6): un fallo de registro nunca debe afectar el envío ya exitoso.
@@ -373,16 +458,18 @@ export async function enviarPlantillaRecordatorio24h(cita: AgendaProgramadaRespo
                     console.error('Error registrando envío de recordatorio (fire-and-forget):', error)
                 );
             }
-            return { exito: true };
         }
-        return { exito: false };
+        return trazar(resultadoEnvio);
     } catch (error) {
         console.error('Error enviando plantilla:', error);
-        return { exito: false };
+        return trazar(resultadoEnvioDesdeError(error));
     }
 }
 
-export async function enviarPlantillaDiaria(cita: AgendaPendienteResponse): Promise<{ exito: boolean }> {
+export async function enviarPlantillaDiaria(cita: AgendaPendienteResponse, campanaEjecucionId?: string): Promise<ResultadoEnvioMeta> {
+    let plantillaUsada: string | undefined;
+    const trazar = (resultado: ResultadoEnvioMeta) =>
+        trazarEnvioPlantilla(cita, 'daily', plantillaUsada, campanaEjecucionId, resultado);
     try {
         // Formatear la fecha, aparece en formato YYYY-MM-ddTHH:mm:ss.SSSZ convertir en formato '31 de julio de 2025'
         const fechaCita = new Date(cita.fecha_cita);
@@ -395,6 +482,7 @@ export async function enviarPlantillaDiaria(cita: AgendaPendienteResponse): Prom
         const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
         const usarBotones = usarVarianteConBotones(cita.telefono_paciente);
         const nombrePlantilla = usarBotones ? process.env.NOMBRE_PLANTILLA_META_DIARIA_BOTONES : process.env.NOMBRE_PLANTILLA_META_DIARIA;
+        plantillaUsada = nombrePlantilla;
         console.log('Enviando plantilla URL:', url);
         const body = {
             "messaging_product": "whatsapp",
@@ -431,7 +519,8 @@ export async function enviarPlantillaDiaria(cita: AgendaPendienteResponse): Prom
         } else {
             console.error('Error al enviar plantilla:', response.data);
         }
-        if (response.data.messages[0].message_status === 'accepted') {
+        const resultadoEnvio = resultadoEnvioDesdeRespuesta(response.data);
+        if (resultadoEnvio.exito) {
             console.log(`Plantilla enviada exitosamente a ${cita.nombre_paciente} (${cita.telefono_paciente})`);
             if (usarBotones) {
                 // Fire-and-forget (15.6): un fallo de registro nunca debe afectar el envío ya exitoso.
@@ -439,16 +528,18 @@ export async function enviarPlantillaDiaria(cita: AgendaPendienteResponse): Prom
                     console.error('Error registrando envío de recordatorio (fire-and-forget):', error)
                 );
             }
-            return { exito: true };
         }
-        return { exito: false };
+        return trazar(resultadoEnvio);
     } catch (error) {
         console.error('Error enviando plantilla:', error);
-        return { exito: false };
+        return trazar(resultadoEnvioDesdeError(error));
     }
 }
 
-export async function enviarPlantillaRecordatorio(cita: AgendaPendienteResponse): Promise<{ exito: boolean }> {
+export async function enviarPlantillaRecordatorio(cita: AgendaPendienteResponse, campanaEjecucionId?: string): Promise<ResultadoEnvioMeta> {
+    let plantillaUsada: string | undefined;
+    const trazar = (resultado: ResultadoEnvioMeta) =>
+        trazarEnvioPlantilla(cita, 'reminder', plantillaUsada, campanaEjecucionId, resultado);
     try {
         // Formatear la fecha, aparece en formato YYYY-MM-ddTHH:mm:ss.SSSZ convertir en formato '31 de julio de 2025'
         const fechaCita = new Date(cita.fecha_cita);
@@ -462,6 +553,7 @@ export async function enviarPlantillaRecordatorio(cita: AgendaPendienteResponse)
         const administradora = cita.administradora ? cita.administradora : 'PARTICULAR';
         const usarBotones = usarVarianteConBotones(cita.telefono_paciente);
         const nombrePlantilla = usarBotones ? process.env.NOMBRE_PLANTILLA_RECORDATORIO_META_BOTONES : process.env.NOMBRE_PLANTILLA_RECORDATORIO_META;
+        plantillaUsada = nombrePlantilla;
         console.log('Enviando plantilla URL:', url);
         console.log('Administradora:', administradora);
         const body = {
@@ -502,7 +594,8 @@ export async function enviarPlantillaRecordatorio(cita: AgendaPendienteResponse)
         } else {
             console.error('Error al enviar plantilla:', response.data);
         }
-        if (response.data.messages[0].message_status === 'accepted') {
+        const resultadoEnvio = resultadoEnvioDesdeRespuesta(response.data);
+        if (resultadoEnvio.exito) {
             console.log(`Plantilla enviada exitosamente a ${cita.nombre_paciente} (${cita.telefono_paciente})`);
             if (usarBotones) {
                 // Fire-and-forget (15.6): un fallo de registro nunca debe afectar el envío ya exitoso.
@@ -510,12 +603,11 @@ export async function enviarPlantillaRecordatorio(cita: AgendaPendienteResponse)
                     console.error('Error registrando envío de recordatorio (fire-and-forget):', error)
                 );
             }
-            return { exito: true };
         }
-        return { exito: false };
+        return trazar(resultadoEnvio);
     } catch (error) {
         console.error('Error enviando plantilla:', error);
-        return { exito: false };
+        return trazar(resultadoEnvioDesdeError(error));
     }
 }
 
@@ -617,6 +709,7 @@ export async function confirmarCitaCampahna(celular: string, numeroDoc: string):
         if (especialidad) resultado.especialidad = especialidad;
         return resultado;
     } catch (error) {
+        registrarFalloBackend('/chatbot/confirmarcitameta', error);
         const fallo = mapearErrorConfirmacion(error);
         console.error(`Error confirmando cita (causa: ${fallo.causa}):`, (error as any)?.message ?? error);
         return fallo;
@@ -624,42 +717,60 @@ export async function confirmarCitaCampahna(celular: string, numeroDoc: string):
 }
 
 /**
- * Registra un evento de actividad en el backend para generar estadísticas
- * @param tipoEvento - Tipo de evento que se está registrando (ej: 'chat_inicio', 'cita_agendada', etc.)
+ * Registra un evento de actividad (estadística legada de `chat_stats`).
+ *
+ * Trazabilidad (proyecto-ips/docs/features/2026-09-29-trazabilidad-usuarios.md, 4.3.1 y 11.2):
+ * - Ya NO bloquea el flujo: devuelve `true` enseguida (antes cada `await` podía hacer esperar al
+ *   paciente hasta 10 s si el backend estaba lento). El resultado real del envío ya no se reporta.
+ * - Con `TRAZABILIDAD_V2_ENABLED=true` el evento va por la cola de `utils/trazabilidad.ts`
+ *   (`POST /stats/batch`) con el MISMO `tipo_evento` y la MISMA metadata (las vistas de la 028 siguen
+ *   funcionando), más `sesion_id` (de la sesión activa) y los campos V2 de `extra` si se conocen.
+ * - Apagado (default): `POST /stats` uno por uno, como siempre, pero sin esperar (fire-and-forget).
+ * - `metadata.date` es ahora la fecha de hoy en hora de Bogotá (antes era la fecha UTC).
+ *
+ * @param tipoEvento - Tipo de evento legado (ej: 'chat_inicio', 'campahna_envio', ...)
  * @param idUsuario - Número de teléfono o identificador del usuario
- * @param metadata - Objeto con información adicional del evento (fecha, campaña, etc.)
- * @returns Promise<boolean> - true si se registró exitosamente, false en caso contrario
+ * @param metadata - Información adicional del evento (fecha, campaña, etc.)
+ * @param extra - Campos V2 opcionales (sesion_id, flujo, paso...). Solo se usan con la cola V2.
+ * @returns Promise<boolean> - siempre true (no bloquea ni propaga errores)
  */
 export async function registrarActividadBot(
     tipoEvento: string,
     idUsuario: string,
-    metadata: Record<string, any> = {}
+    metadata: Record<string, any> = {},
+    extra?: Omit<EventoEntrada, 'tipo_evento' | 'telefono' | 'metadata'>
 ): Promise<boolean> {
     try {
-        const url = `${API_BACKEND_URL}/stats`;
-
-        const body = {
-            tipo_evento: tipoEvento,
-            id_usuario: idUsuario,
-            metadata: {
-                date: new Date().toISOString().split('T')[0],
-                ...metadata
-            }
+        const metadataCompleta = {
+            date: fechaBogotaHoy(),
+            ...metadata
         };
 
-        const response = await axios.post(url, body, { timeout: 10000 });
-
-        if (response.status >= 200 && response.status < 300) {
+        if (isTrazabilidadV2Enabled()) {
+            trackEventoLegado(tipoEvento, idUsuario, metadataCompleta, extra);
             return true;
         }
 
-        console.warn(`Respuesta inesperada al registrar actividad: ${response.status}`);
-        return false;
+        const url = `${API_BACKEND_URL}/stats`;
+        const body = {
+            tipo_evento: tipoEvento,
+            id_usuario: idUsuario,
+            metadata: metadataCompleta
+        };
 
+        axios.post(url, body, { timeout: 10000 })
+            .then((response) => {
+                if (!(response?.status >= 200 && response?.status < 300)) {
+                    console.warn(`Respuesta inesperada al registrar actividad: ${response?.status}`);
+                }
+            })
+            .catch((error) => {
+                console.error('Error registrando actividad del bot:', (error as any)?.message ?? error);
+            });
     } catch (error) {
-        console.error('Error registrando actividad del bot:', error);
-        return false;
+        console.error('Error registrando actividad del bot:', (error as any)?.message ?? error);
     }
+    return true;
 }
 
 export async function obtenerCitasCanceladasAbandonadas(): Promise<AgendaPendienteResponse[] | []> {
@@ -673,7 +784,10 @@ export async function obtenerCitasCanceladasAbandonadas(): Promise<AgendaPendien
     }
 }
 
-export async function enviarPlantillaRecuperar(cita: AgendaPendienteResponse): Promise<{ exito: boolean }> {
+export async function enviarPlantillaRecuperar(cita: AgendaPendienteResponse, campanaEjecucionId?: string): Promise<ResultadoEnvioMeta> {
+    let plantillaUsada: string | undefined;
+    const trazar = (resultado: ResultadoEnvioMeta) =>
+        trazarEnvioPlantilla(cita, 'recuperacion', plantillaUsada, campanaEjecucionId, resultado);
     try {
         // Formatear la fecha, aparece en formato YYYY-MM-ddTHH:mm:ss.SSSZ convertir en formato '31 de julio de 2025'
 
@@ -685,6 +799,7 @@ export async function enviarPlantillaRecuperar(cita: AgendaPendienteResponse): P
             year: 'numeric'
         });
 
+        plantillaUsada = process.env.NOMBRE_PLANTILLA_META_CANCELADOS;
         const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
         const body = {
             "messaging_product": "whatsapp",
@@ -719,14 +834,14 @@ export async function enviarPlantillaRecuperar(cita: AgendaPendienteResponse): P
         } else {
             console.error('Error al enviar plantilla:', response.data);
         }
-        if (response.data.messages[0].message_status === 'accepted') {
+        const resultadoEnvio = resultadoEnvioDesdeRespuesta(response.data);
+        if (resultadoEnvio.exito) {
             console.log(`Plantilla enviada exitosamente a ${cita.nombre_paciente} (${cita.telefono_paciente})`);
-            return { exito: true };
         }
-        return { exito: false };
+        return trazar(resultadoEnvio);
     } catch (error) {
         console.error('Error enviando plantilla:', error);
-        return { exito: false };
+        return trazar(resultadoEnvioDesdeError(error));
     }
 }
 
@@ -761,6 +876,7 @@ export async function inscribirListaEspera(data: IInscribirListaEspera): Promise
         const response = await axios.post(url, data);
         return response.data?.data ?? null;
     } catch (error) {
+        registrarFalloBackend('/chatbot/listaespera/inscribir', error);
         console.error('Error inscribiendo en lista de espera:', error);
         return null;
     }
@@ -776,6 +892,7 @@ export async function retirarListaEspera(params: {
         const response = await axios.post(url, params);
         return response.data?.code === 200;
     } catch (error) {
+        registrarFalloBackend('/chatbot/listaespera/retirar', error);
         console.error('Error retirando de lista de espera:', error);
         return false;
     }
@@ -792,7 +909,10 @@ export async function obtenerCitasUsuariosConAsistencia(): Promise<AgendaPendien
     }
 }
 
-export async function enviarPlantillaUsuariosConAsistencia(cita: AgendaPendienteResponse): Promise<{ exito: boolean }> {
+export async function enviarPlantillaUsuariosConAsistencia(cita: AgendaPendienteResponse, campanaEjecucionId?: string): Promise<ResultadoEnvioMeta> {
+    let plantillaUsada: string | undefined;
+    const trazar = (resultado: ResultadoEnvioMeta) =>
+        trazarEnvioPlantilla(cita, 'conasistencia', plantillaUsada, campanaEjecucionId, resultado);
     try {
         // Formatear la fecha, aparece en formato YYYY-MM-ddTHH:mm:ss.SSSZ convertir en formato '31 de julio de 2025'
 
@@ -804,6 +924,7 @@ export async function enviarPlantillaUsuariosConAsistencia(cita: AgendaPendiente
             year: 'numeric'
         });
 
+        plantillaUsada = process.env.NOMBRE_PLANTILLA_META_ASISTIDOS;
         const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
         const body = {
             "messaging_product": "whatsapp",
@@ -838,14 +959,14 @@ export async function enviarPlantillaUsuariosConAsistencia(cita: AgendaPendiente
         } else {
             console.error('Error al enviar plantilla:', response.data);
         }
-        if (response.data.messages[0].message_status === 'accepted') {
+        const resultadoEnvio = resultadoEnvioDesdeRespuesta(response.data);
+        if (resultadoEnvio.exito) {
             console.log(`Plantilla enviada exitosamente a ${cita.nombre_paciente} (${cita.telefono_paciente})`);
-            return { exito: true };
         }
-        return { exito: false };
+        return trazar(resultadoEnvio);
     } catch (error) {
         console.error('Error enviando plantilla:', error);
-        return { exito: false };
+        return trazar(resultadoEnvioDesdeError(error));
     }
 }
 
@@ -907,7 +1028,17 @@ export async function enviarPlantillaOfertaCupo(
     fechaCita: string,
     horaCita: string,
     minutosVentana: number
-): Promise<{ exito: boolean; mensajeWaId?: string }> {
+): Promise<ResultadoEnvioMeta> {
+    const trazar = (resultado: ResultadoEnvioMeta): ResultadoEnvioMeta => {
+        trackEnvioWhatsApp({
+            telefono: telefonoPaciente,
+            campana: 'oferta_cupo',
+            plantilla: process.env.NOMBRE_PLANTILLA_OFERTA_CUPO ?? null,
+            tipoEnvio: 'plantilla',
+            resultado,
+        });
+        return resultado;
+    };
     try {
         // Runbook B2/B9: fecha 'YYYY-MM-DD' formateada sin depender de la zona horaria del proceso
         // (antes `new Date('YYYY-MM-DD')` + formato local mostraba el día anterior en America/Bogota),
@@ -957,17 +1088,17 @@ export async function enviarPlantillaOfertaCupo(
         } else {
             console.error('Error al enviar plantilla de oferta de cupo (sin messages en la respuesta de Meta).');
         }
-        if (response.data.messages?.[0]?.message_status === 'accepted') {
+        const resultadoEnvio = resultadoEnvioDesdeRespuesta(response.data);
+        if (resultadoEnvio.exito) {
             // Runbook B9: sin nombre ni teléfono completo en logs.
             console.log(`Plantilla de oferta de cupo enviada exitosamente a ${enmascararTelefono(telefonoPaciente)}`);
-            return { exito: true, mensajeWaId: response.data.messages[0]?.id };
         }
-        return { exito: false };
+        return trazar(resultadoEnvio);
     } catch (error: any) {
         // Runbook B9: no se imprime el objeto de error completo (su config.data lleva el cuerpo del
         // mensaje con nombre y teléfono del paciente); solo estado HTTP y error de Meta.
         console.error('Error enviando plantilla de oferta de cupo:', resumirErrorMeta(error));
-        return { exito: false };
+        return trazar(resultadoEnvioDesdeError(error));
     }
 }
 
@@ -1048,6 +1179,7 @@ export async function responderOfertaCupo(
         const response = await axios.post(url, { documento, celular, respuesta });
         return { ok: true, code: response.data?.code ?? response.status, data: response.data?.data };
     } catch (error: any) {
+        registrarFalloBackend('/chatbot/listaespera/cascada/respuesta', error);
         if (error?.response) {
             return { ok: false, code: error.response.status, data: error.response.data };
         }
@@ -1077,9 +1209,11 @@ export type TipoRecordatorio = '48h' | '24h' | '2h';
 
 /**
  * Registra que un recordatorio (con botones) fue enviado para una cita, para poder correlacionar
- * después la respuesta del paciente. `citaId` es `agenda_id_externa` (el mismo `cita_id` que ya trae
- * `AgendaPendienteResponse`/`AgendaProgramadaResponse`), no el `agenda_id` interno (bug 6.8, sigue sin
- * corregirse — el endpoint lo resuelve server-side). Se llama en modo fire-and-forget desde las 4
+ * después la respuesta del paciente. `citaId` es el `cita_id` que traen `AgendaPendienteResponse`/
+ * `AgendaProgramadaResponse`, y en los endpoints de campañas (`citaspendientes`, `citasconfirmadas`,
+ * `citasprogramadas`) el backend lo llena con `agenda.agenda_id`, el id INTERNO VARCHAR(8). No es el id
+ * de Globho (`agenda_id_externa`). Verificado en proyecto-ips/backend/src/dao/agenda.dao.ts
+ * (`agenda_id as cita_id`). Se llama en modo fire-and-forget desde las 4
  * funciones de envío de plantillas cuando `RECORDATORIOS_BOTONES_ENABLED === 'true'` — nunca debe
  * hacer fallar el envío del recordatorio en sí.
  */
@@ -1126,6 +1260,7 @@ export async function responderRecordatorio(
         }
         return { ok: true, data };
     } catch (error) {
+        registrarFalloBackend('/chatbot/recordatorios/responder', error);
         const fallo = mapearErrorConfirmacion(error);
         console.error(`Error respondiendo recordatorio (causa: ${fallo.causa}):`, (error as any)?.message ?? error);
         return fallo;
@@ -1166,6 +1301,10 @@ export async function enviarMensajeTextoMeta(
     to: string,
     texto: string
 ): Promise<{ exito: boolean; mensajeWaId?: string; error?: ReturnType<typeof resumirErrorMeta> }> {
+    // Trazabilidad: hoy esta función solo la usan los avisos al asesor humano (utils/avisoAsesor.ts),
+    // por eso la campaña es 'aviso_asesor'. El texto del aviso nunca va en el evento.
+    const trazar = (resultado: ResultadoEnvioMeta) =>
+        trackEnvioWhatsApp({ telefono: to, campana: 'aviso_asesor', tipoEnvio: 'texto', resultado });
     try {
         const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
         const body = {
@@ -1184,10 +1323,13 @@ export async function enviarMensajeTextoMeta(
         });
         const mensajeWaId = response.data?.messages?.[0]?.id;
         if (mensajeWaId) {
+            trazar({ exito: true, mensajeWaId });
             return { exito: true, mensajeWaId };
         }
+        trazar({ exito: false, errorCode: 'sin_messages', errorTitulo: 'respuesta de Meta sin messages' });
         return { exito: false, error: { http_status: response.status ?? null, code: null, mensaje: 'respuesta_sin_messages' } };
     } catch (error) {
+        trazar(resultadoEnvioDesdeError(error));
         return { exito: false, error: resumirErrorMeta(error) };
     }
 }
@@ -1207,6 +1349,7 @@ export async function consultarListaEsperaPorDocumento(
         const inscripciones = Array.isArray(response.data?.data) ? response.data.data : [];
         return { ok: true, encontrado: true, inscripciones };
     } catch (error: any) {
+        registrarFalloBackend('/chatbot/listaespera', error);
         const status = error?.response?.status;
         if (status === 400 || status === 404) {
             return { ok: true, encontrado: false, inscripciones: [] };

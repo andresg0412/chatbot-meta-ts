@@ -2,6 +2,7 @@ import { addKeyword, EVENTS } from '@builderbot/bot';
 import { closeUserSession } from '../../../../utils/proactiveSessionManager';
 import { registrarActividadBot, inscribirListaEspera } from '../../../../services/apiService';
 import { TEXTO_COMANDO_RETIRO_LISTA_ESPERA } from '../../keywordsBotones';
+import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion } from '../../../../utils/trazabilidad';
 
 /**
  * Texto exacto de consentimiento mostrado al paciente — se envía tal cual al backend en
@@ -30,18 +31,21 @@ const stepListaEsperaOptIn = addKeyword(EVENTS.ACTION)
         },
         async (ctx, { state, flowDynamic, endFlow }) => {
             if (ctx.body === 'Salir' || ctx.body === 'salir') {
-                closeUserSession(ctx.from);
+                trackPaso(ctx.from, 'agendar.lista_espera_optin', 'ok', { metadata: { acepta: false } });
+                closeUserSession(ctx.from, 'salir');
                 await flowDynamic('Listo, no te inscribimos en la lista de espera. Tu cita agendada sigue firme. ¡Gracias por confiar en nosotros! 😊');
                 return endFlow();
             }
 
             if (ctx.body !== 'Sí, avísame') {
+                trackPaso(ctx.from, 'agendar.lista_espera_optin', 'ok', { metadata: { acepta: false } });
                 closeUserSession(ctx.from);
                 await registrarActividadBot('chat_flujo_lista_espera', ctx.from, { step: 'rechazada' });
                 await flowDynamic('Entendido, no te inscribiremos en la lista de espera. ¡Gracias por confiar en nosotros! 😊');
                 return endFlow();
             }
 
+            trackPaso(ctx.from, 'agendar.lista_espera_optin', 'ok', { metadata: { acepta: true } });
             const pacienteId = state.getMyState().pacienteId;
             const nuevaCita = state.getMyState().citaSeleccionadaHora;
             const especialidadCita = state.getMyState().especialidadAgendarCita;
@@ -68,6 +72,7 @@ const stepListaEsperaOptIn = addKeyword(EVENTS.ACTION)
             });
 
             if (!inscripcion || !inscripcion.lista_espera_id) {
+                trackErrorBackend(ctx.from, 'agendar.lista_espera_optin', '/chatbot/listaespera/inscribir', { siempre: true });
                 closeUserSession(ctx.from);
                 await flowDynamic('No pudimos inscribirte en la lista de espera en este momento, pero tu cita agendada sigue firme. 😊');
                 return endFlow();

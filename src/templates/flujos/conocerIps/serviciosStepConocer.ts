@@ -1,9 +1,12 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { join, resolve } from 'path';
 import { volverMenuPrincipal } from '../common';
+import { trackPaso, trackFin } from '../../../utils/trazabilidad';
 
 const serviciosStepConocer = addKeyword(['280525011', 'Servicios', 'servicios'])
     .addAction(async (ctx, ctxFn) => {
+        trackPaso(ctx.from, 'conocer_ips.servicios');
+        trackFin(ctx.from, 'conocer_ips', 'informativo', { paso: 'conocer_ips.servicios' });
         const pathLocal = resolve(__dirname, '../../../../assets/nuestros_servicios_ips.pdf');
         await ctxFn.flowDynamic([
             {

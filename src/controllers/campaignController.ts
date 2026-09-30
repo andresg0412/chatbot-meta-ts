@@ -4,12 +4,15 @@ import {
     registrarActividadBot
 } from '../services/apiService';
 import { AgendaPendienteResponse } from '../interfaces/IReagendarCita';
+import { iniciarEjecucionCampana, finalizarEjecucionCampana } from '../utils/trazabilidad';
 
 /**
  * Ejecuta la campaña diaria para la fecha actual.
  * Este endpoint es llamado por un cron job.
  */
 export const executeDailyCampaign = async (req, res) => {
+    // Trazabilidad: campana_ejecucion{inicio|fin} y campana_ejecucion_id en cada wa_envio de la corrida.
+    const campanaEjecucionId = iniciarEjecucionCampana('daily', 'cron');
     try {
         // Obtener fecha actual en formato DD/MM/YYYY
         // Nota: Asegurarse de que ser servidor tenga la zona horaria correcta o ajustar manualmente
@@ -60,6 +63,7 @@ export const executeDailyCampaign = async (req, res) => {
 
         if (citasFiltradas.length === 0) {
             console.log(`ℹ️ No se encontraron citas pendientes para la fecha ${fechaFormateada}`);
+            finalizarEjecucionCampana('daily', campanaEjecucionId, { total: 0, exitosos: 0, errores: 0, origen: 'cron' });
             res.writeHead(200, { 'Content-Type': 'application/json' });
             return res.end(JSON.stringify({
                 message: 'No existen citas pendientes para hoy',
@@ -77,7 +81,7 @@ export const executeDailyCampaign = async (req, res) => {
         // Procesar citas
         for (const cita of citasFiltradas) {
             try {
-                const response = await enviarPlantillaDiaria(cita);
+                const response = await enviarPlantillaDiaria(cita, campanaEjecucionId);
                 const resultado = {
                     paciente: cita.nombre_paciente,
                     telefono: cita.telefono_paciente,
@@ -141,6 +145,8 @@ export const executeDailyCampaign = async (req, res) => {
             total_procesados: citasFiltradas.length
         });
 
+        finalizarEjecucionCampana('daily', campanaEjecucionId, { total: citasFiltradas.length, exitosos, errores, origen: 'cron' });
+
         const resumen = {
             fecha: fechaFormateada,
             total_procesados: citasFiltradas.length,
@@ -154,6 +160,7 @@ export const executeDailyCampaign = async (req, res) => {
 
     } catch (error) {
         console.error('Error crítico ejecutando campaña diaria:', error);
+        finalizarEjecucionCampana('daily', campanaEjecucionId, { total: 0, exitosos: 0, errores: 1, origen: 'cron' });
         res.writeHead(500, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ error: 'Error interno ejecutando campaña', detalle: String(error) }));
     }

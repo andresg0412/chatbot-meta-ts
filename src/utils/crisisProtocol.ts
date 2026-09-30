@@ -24,6 +24,7 @@ import { isCrisisProtocolEnabled } from './listaEsperaFlags';
 import { registrarBloqueoPorCrisis } from './crisisBlacklistStore';
 import { enviarAvisoAsesor } from './avisoAsesor';
 import { enmascararTelefono } from './telefono';
+import { cerrarSesionTraza } from './trazabilidad';
 
 /**
  * Palabras/frases que sugieren ideación suicida, autolesión o crisis aguda.
@@ -97,6 +98,9 @@ export function createCrisisInterceptor(getBot: () => CrisisCapableBot | undefin
         console.error('[crisisProtocol] No hay instancia de bot disponible todavía; no se pudo bloquear el flujo automático para', from);
       }
       // --- Fin del tramo síncrono ---
+
+      // Trazabilidad: la sesión termina por crisis (`sesion_fin{crisis}`; solo con TRAZABILIDAD_V2_ENABLED).
+      cerrarSesionTraza(from, 'crisis');
 
       // Runbook B8: persistir el bloqueo para que sobreviva a un `pm2 restart` (se restaura al
       // arrancar en app.ts). Se hace después del tramo síncrono; si falla solo se loguea.

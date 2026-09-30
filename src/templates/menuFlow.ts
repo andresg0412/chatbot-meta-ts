@@ -2,7 +2,7 @@ import { createBot, createProvider, createFlow, addKeyword, utils, EVENTS } from
 import { checkSessionTimeout } from '../utils/proactiveSessionTimeout';
 const menuFlow = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
-        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow, { paso: 'menu.principal' });
         if (!sessionValid) {
             return endFlow();
         }

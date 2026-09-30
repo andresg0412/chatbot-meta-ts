@@ -1,6 +1,7 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { closeUserSession } from '../../../utils/proactiveSessionManager';
 import { registrarActividadBot } from '../../../services/apiService';
+import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion, flujoDesdeSeleccionMenu } from '../../../utils/trazabilidad';
 
 const mesajeSalida = addKeyword([EVENTS.ACTION, 'salir', 'Salir'])
     .addAnswer(
@@ -9,8 +10,9 @@ const mesajeSalida = addKeyword([EVENTS.ACTION, 'salir', 'Salir'])
             capture: false,
         },
         async (ctx, { endFlow }) => {
+            trackPaso(ctx.from, 'comun.salida');
             await registrarActividadBot('chat_finalizado_salir', ctx.from);
-            closeUserSession(ctx.from);
+            closeUserSession(ctx.from, 'salir');
             return endFlow();
         }
     );

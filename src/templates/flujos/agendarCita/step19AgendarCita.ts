@@ -7,6 +7,7 @@ import { closeUserSession } from '../../../utils/proactiveSessionManager';
 import { registrarActividadBot } from '../../../services/apiService';
 import { stepListaEsperaOptIn } from './listaEspera/stepListaEsperaOptIn';
 import { isListaEsperaOptinEnabled, esTelefonoPiloto } from '../../../utils/listaEsperaFlags';
+import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion } from '../../../utils/trazabilidad';
 
 
 function generarAgendaIdAleatorio() {
@@ -21,6 +22,7 @@ function generarAgendaIdAleatorio() {
 const step19AgendarCita = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { state, flowDynamic, gotoFlow, endFlow }) => {
         try {
+            trackPaso(ctx.from, 'agendar.s19_crear_cita');
             const nuevaCita = state.getMyState().citaSeleccionadaHora;
             const pacienteId = state.getMyState().pacienteId;
             const especialidadCita = state.getMyState().especialidadAgendarCita;
@@ -64,11 +66,16 @@ const step19AgendarCita = addKeyword(EVENTS.ACTION)
             };
             const response = await crearCita(bodyNueva);
             if (!response) {
+                trackErrorBackend(ctx.from, 'agendar.s19_crear_cita', '/chatbot/agendar', { siempre: true });
+                trackFin(ctx.from, 'agendar', 'error_backend', { paso: 'agendar.s19_crear_cita' });
                 closeUserSession(ctx.from);
                 await flowDynamic('Error al agendar la cita. Por favor, intenta nuevamente.');
                 return endFlow();
             }
             metricFlujoFinalizado('agendar');
+            // El `agenda_id`/id de Globho de la cita nueva no llega en la respuesta (bug de
+            // mapRowToAgendaResponse, MEMORY.md sección 11): el flujo_fin va sin cita_id_externa.
+            trackFin(ctx.from, 'agendar', 'cita_creada', { paso: 'agendar.s19_crear_cita' });
             await registrarActividadBot('chat_flujo_agendar', ctx.from, {
                 step: 'confirmar_cita',
                 cita: 'creada_globho'
@@ -85,12 +92,15 @@ const step19AgendarCita = addKeyword(EVENTS.ACTION)
             // LISTA_ESPERA_TELEFONOS_PILOTO (o esa lista está vacía). Si no, el flujo termina igual que
             // antes de la Fase 1 (cerrar sesión + endFlow, sin más mensajes).
             if (isListaEsperaOptinEnabled() && esTelefonoPiloto(ctx.from)) {
+                trackPaso(ctx.from, 'agendar.lista_espera_optin');
                 return gotoFlow(stepListaEsperaOptIn);
             }
             closeUserSession(ctx.from);
             return endFlow();
         } catch (e) {
             metricError(e, ctx.from);
+            trackPaso(ctx.from, 'agendar.s19_crear_cita', 'error');
+            trackFin(ctx.from, 'agendar', 'error_backend', { paso: 'agendar.s19_crear_cita' });
             closeUserSession(ctx.from);
             await flowDynamic('Ocurrió un error inesperado al reprogramar la cita.');
             return endFlow();
