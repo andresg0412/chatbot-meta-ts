@@ -2,9 +2,11 @@ import { addKeyword, EVENTS } from '@builderbot/bot';
 import { sanitizeString } from '../../../utils/sanitize';
 import { step15AgendarCita } from './step15AgendarCita';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
+import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion } from '../../../utils/trazabilidad';
 
 const step14AgendarCita2 = addKeyword(['agindarcita_tipo_cd', 'agindarcita_tipo_cex', 'agindarcita_tipo_tid', 'agindarcita_tipo_rcv', 'agindarcita_tipo_ps', 'agindarcita_tipo_ot'])
     .addAction(async (ctx, { state, gotoFlow }) => {
+        trackPaso(ctx.from, 'agendar.s14_tipo_documento', 'ok');
         const tipoDocRaw = ctx.listResponse ? ctx.listResponse.title : ctx.body;
         const tipoDoc = sanitizeString(tipoDocRaw, 30);
         await state.update({ tipoDoc, esperaTipoDoc: false });
@@ -13,7 +15,7 @@ const step14AgendarCita2 = addKeyword(['agindarcita_tipo_cd', 'agindarcita_tipo_
 
 const step14AgendarCita = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
-        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow, { paso: 'agendar.s14_tipo_documento' });
         if (!sessionValid) {
             return endFlow();
         }

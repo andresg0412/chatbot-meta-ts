@@ -3,11 +3,12 @@ import { step19AgendarCita } from './step19AgendarCita';
 import { volverMenuPrincipal } from '../common';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 import { registrarActividadBot } from '../../../services/apiService';
+import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion } from '../../../utils/trazabilidad';
 
 
 const step18AgendarCita2 = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
-        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow, { paso: 'agendar.s18_confirmacion' });
         if (!sessionValid) {
             return endFlow();
         }
@@ -23,6 +24,7 @@ const step18AgendarCita2 = addKeyword(EVENTS.ACTION)
         },
         async (ctx, ctxFn) => {
             if (ctx.body === 'Si') {
+                trackPaso(ctx.from, 'agendar.s18_confirmacion', 'ok');
                 await registrarActividadBot('chat_flujo_agendar', ctx.from, {
                     step: 'confirmar_cita',
                     cita: 'creada'
@@ -30,6 +32,7 @@ const step18AgendarCita2 = addKeyword(EVENTS.ACTION)
                 return ctxFn.gotoFlow(step19AgendarCita);
             }
             if (ctx.body === 'No') {
+                trackPaso(ctx.from, 'agendar.s18_confirmacion', 'ok', { metadata: { confirma: false } });
                 await registrarActividadBot('chat_flujo_agendar', ctx.from, {
                     step: 'confirmar_cita',
                     cita: 'no_confirma_agenda'
@@ -37,6 +40,7 @@ const step18AgendarCita2 = addKeyword(EVENTS.ACTION)
                 await ctxFn.flowDynamic('Recuerda que puedes agendar tu cita cuando lo requieras.');
                 return ctxFn.gotoFlow(volverMenuPrincipal);
             }
+            trackNoEntendido(ctx.from, 'agendar.s18_confirmacion');
         }
     );
 

@@ -17,6 +17,7 @@ import { extraerFechaDelComando } from '../../../utils/dateValidator';
 import { isNumberValid } from '../../../constants/killSwichConstants';
 import { esBotHabilitado } from '../../../services/citasService';
 import { registrarActividadBot } from '../../../services/apiService';
+import { iniciarEjecucionCampana, finalizarEjecucionCampana, trackRespuestaCampana, trackPaso, trackNoEntendido, trackIdentificacion, trackErrorBackend, cerrarSesionTraza } from '../../../utils/trazabilidad';
 
 /**
  * Función core que ejecuta la campaña de usuarios con asistencia.
@@ -28,6 +29,8 @@ export const ejecutarCampahnaConAsistenciaCore = async (
   origen: 'whatsapp' | 'endpoint' = 'whatsapp'
 ) => {
   const fechaFormateada = new Date().toISOString().split('T')[0];
+  // Trazabilidad: campana_ejecucion{inicio|fin} y campana_ejecucion_id en cada wa_envio de la corrida.
+  const campanaEjecucionId = iniciarEjecucionCampana('conasistencia', origen);
 
   try {
     console.log(`🔄 Ejecutando campaña de usuarios con asistencia (origen: ${origen})`);
@@ -36,6 +39,7 @@ export const ejecutarCampahnaConAsistenciaCore = async (
 
     if (citasPendientes.length === 0) {
       console.log('ℹ️ No se encontraron pacientes con asistencia para procesar');
+      finalizarEjecucionCampana('conasistencia', campanaEjecucionId, { total: 0, exitosos: 0, errores: 0, origen });
       return {
         success: true,
         fecha: fechaFormateada,
@@ -54,7 +58,7 @@ export const ejecutarCampahnaConAsistenciaCore = async (
 
     for (const cita of citasPendientes) {
       try {
-        const response = await enviarPlantillaUsuariosConAsistencia(cita);
+        const response = await enviarPlantillaUsuariosConAsistencia(cita, campanaEjecucionId);
         const resultado = {
           paciente: cita.nombre_paciente,
           telefono: cita.telefono_paciente,
@@ -116,6 +120,7 @@ export const ejecutarCampahnaConAsistenciaCore = async (
       origen
     });
 
+    finalizarEjecucionCampana('conasistencia', campanaEjecucionId, { total: citasPendientes.length, exitosos, errores, origen });
     return {
       success: true,
       fecha: fechaFormateada,
@@ -127,6 +132,7 @@ export const ejecutarCampahnaConAsistenciaCore = async (
 
   } catch (error) {
     console.error('Error ejecutando campaña:', error);
+    finalizarEjecucionCampana('conasistencia', campanaEjecucionId, { total: 0, exitosos: 0, errores: 1, origen });
     return {
       success: false,
       error: 'Error interno al procesar la campaña',
@@ -184,11 +190,14 @@ const respuestaCampahnaFinalizado = addKeyword(['Ya finalicé mi proceso'])
   .addAction(async (ctx, ctxFn) => {
     const fechaFormateada = new Date().toISOString().split('T')[0];
     const telefono = ctx.from;
+    // Trazabilidad: respuesta esperada a la campaña (tabla 11.2) y cierre de la sesión como completada.
+    trackRespuestaCampana(telefono, 'conasistencia', 'finalizo', 'campana.conasistencia_respuesta');
     await registrarActividadBot('recuperacion_con_asistencia_finalizo_proceso', telefono, {
       campahna: 'meta-usuarios-con-asistencia-' + fechaFormateada,
       fecha_campahna: fechaFormateada,
     });
     await ctxFn.flowDynamic('Entendido, estaremos atentos a tu nueva solicitud..');
+    cerrarSesionTraza(telefono, 'completado');
     return ctxFn.endFlow();
   });
 

@@ -2,10 +2,11 @@ import { addKeyword, EVENTS } from '@builderbot/bot';
 import { preguntarConfirmarBotones } from './seleccionaCitaReprogramar';
 import { construirMensajeHorasDisponibles } from '../../../utils/construirMensajeSalida';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
+import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin } from '../../../utils/trazabilidad';
 
 const stepHoraSeleccionada = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
-        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow, { paso: 'reprogramar.selecciona_hora' });
         if (!sessionValid) {
             return endFlow();
         }
@@ -17,11 +18,13 @@ const stepHoraSeleccionada = addKeyword(EVENTS.ACTION)
                 const { citasFechaSeleccionada, pasoSeleccionHora } = state.getMyState();
                 const seleccionHoraAgendar = ctx.body ? parseInt(ctx.body, 10) : 0;
                 if (isNaN(seleccionHoraAgendar)) {
+                    trackNoEntendido(ctx.from, 'reprogramar.selecciona_hora');
                     await flowDynamic('Por favor, ingresa un número válido.');
                     return gotoFlow(stepHoraSeleccionada);
                 }
                 const mostrarHoras = citasFechaSeleccionada.slice(pasoSeleccionHora.inicio, pasoSeleccionHora.fin);
                 if (seleccionHoraAgendar < 1 || seleccionHoraAgendar > mostrarHoras.length + 1 || (seleccionHoraAgendar === mostrarHoras.length + 1 && citasFechaSeleccionada.length <= pasoSeleccionHora.fin)) {
+                    trackNoEntendido(ctx.from, 'reprogramar.selecciona_hora');
                     await flowDynamic('Opción inválida. Por favor, selecciona una opción válida.');
                     return gotoFlow(stepHoraSeleccionada);
                 }
@@ -35,12 +38,14 @@ const stepHoraSeleccionada = addKeyword(EVENTS.ACTION)
                     return gotoFlow(stepHoraSeleccionada);
                 }
                 const citaSeleccionadaHora = mostrarHoras[seleccionHoraAgendar - 1];
+                trackPaso(ctx.from, 'reprogramar.selecciona_hora', 'ok');
                 await state.update({ citaSeleccionadaHora });
                 await flowDynamic(`Has seleccionado la siguiente cita:\n*Fecha*: ${citaSeleccionadaHora.fechacita} \n*Hora*: ${citaSeleccionadaHora.horacita} \n*Profesional*: ${citaSeleccionadaHora.profesional} \n*Especialidad*: ${citaSeleccionadaHora.especialidad} \n*Lugar*: ${citaSeleccionadaHora.lugar}.`);
                 return gotoFlow(preguntarConfirmarBotones);
 
             } catch (error) {
                 console.error('Error en stepHoraSeleccionada:', error);
+                trackPaso(ctx.from, 'reprogramar.selecciona_hora', 'error');
                 await flowDynamic('Ocurrió un error inesperado. Por favor, intenta nuevamente.');
                 return gotoFlow(stepHoraSeleccionada);
             }

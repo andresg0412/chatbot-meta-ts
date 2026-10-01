@@ -2,13 +2,18 @@ import { addKeyword, EVENTS } from '@builderbot/bot';
 import { datosinicialesComunes4 } from './datosinicialesComunes4';
 import { sanitizeString, isValidDocumentNumber } from '../../../utils/sanitize';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
+import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion, flujoDesdeSeleccionMenu } from '../../../utils/trazabilidad';
 
 const datosinicialesComunes3 = addKeyword(EVENTS.ACTION)
+    .addAction(async (ctx, { state }) => {
+        trackPaso(ctx.from, 'comun.c03_documento', 'mostrado', { flujo: flujoDesdeSeleccionMenu(state.getMyState()?.flujoSeleccionadoMenu) });
+    })
     .addAnswer('Ahora, por favor digita tu número de documento 🔢:',
         { capture: true },
         async (ctx, { state, gotoFlow, flowDynamic }) => {
             const numeroDoc = sanitizeString(ctx.body, 20);
             if (!isValidDocumentNumber(numeroDoc)) {
+                trackNoEntendido(ctx.from, 'comun.c03_documento', 1, { flujo: flujoDesdeSeleccionMenu(state.getMyState()?.flujoSeleccionadoMenu) });
                 await flowDynamic('El número de documento ingresado no es válido. Intenta nuevamente.');
                 return gotoFlow(datosinicialesComunes3);
             }

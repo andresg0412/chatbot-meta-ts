@@ -106,10 +106,44 @@ import {
     step21AgendarCita,
     step22AgendarCita,
     step23AgendarCita,
+    // LISTA DE ESPERA (Fase 1)
+    stepListaEsperaOptIn,
 } from './flujos/agendarCita'
+import {
+    // LISTA DE ESPERA (Fase 2) — respuesta a la cascada de ofertas de cupo
+    ofertaCupoAceptaDocumentoFlow,
+    ofertaCupoRechazaDocumentoFlow,
+    ofertaCupoAccionFlow,
+    // LISTA DE ESPERA — retiro voluntario por WhatsApp (runbook B5)
+    retiroListaEsperaFlow,
+    retiroListaEsperaAccionFlow,
+} from './flujos/listaEspera'
+import {
+    // RECORDATORIOS (Fase 3) — captura de respuesta en recordatorios con botones
+    confirmoAsistenciaFlow,
+    confirmoAsistenciaAccionFlow,
+    necesitoCancelarFlow,
+    necesitoCancelarAccionFlow,
+    noPodreAsistirFlow,
+    noPodreAsistirAccionFlow,
+} from './flujos/recordatorios'
 
-export default createFlow([
+// ORDEN IMPORTANTE (runbook B1, proyecto-ips/docs/features/2026-09-26-lista-espera-runbook-produccion.md):
+// @builderbot asigna cada mensaje al PRIMER flujo de esta lista cuya keyword coincida, y las keywords
+// sin `{ regex: true }` coinciden por subcadena sin distinguir mayúsculas. Los flujos de botón nuevos
+// usan regex ancladas (coincidencia exacta, ver templates/flujos/keywordsBotones.ts) y van al inicio
+// para ganarle a los flujos viejos ('Confirmo', 'cancelar', 'salir'...) solo cuando el texto es
+// exactamente el del botón. Cualquier otro texto sigue yendo al mismo flujo de antes.
+// Cubierto por src/templates/__tests__/keywordRouting.test.ts.
+export const flujosRegistrados = [
     killSwitchFlow,
+    // Coincidencia exacta (regex anclada) — deben ir antes de exitFlow y de los flujos viejos.
+    retiroListaEsperaFlow,
+    confirmoAsistenciaFlow,
+    necesitoCancelarFlow,
+    noPodreAsistirFlow,
+    ofertaCupoAceptaDocumentoFlow,
+    ofertaCupoRechazaDocumentoFlow,
     welcomeFlow,
     exitFlow,
     ejecutarPlantillaDiariaFlow,
@@ -183,6 +217,12 @@ export default createFlow([
     step21AgendarCita,
     step22AgendarCita,
     step23AgendarCita,
+    stepListaEsperaOptIn,
+    ofertaCupoAccionFlow,
+    retiroListaEsperaAccionFlow,
+    confirmoAsistenciaAccionFlow,
+    necesitoCancelarAccionFlow,
+    noPodreAsistirAccionFlow,
     step5Reprogramar,
     step6Reprogramar,
     step7Reprogramar,
@@ -204,4 +244,6 @@ export default createFlow([
     stepConfirmaCancelarCita,
     pasoAgenteFlow,
     pqrsFlow,
-]);
+];
+
+export default createFlow(flujosRegistrados);

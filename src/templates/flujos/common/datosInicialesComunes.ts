@@ -1,9 +1,11 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { datosinicialesComunes2 } from './datosinicialesComunes2';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
+import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion, flujoDesdeSeleccionMenu } from '../../../utils/trazabilidad';
 
 const datosinicialesComunes = addKeyword(EVENTS.ACTION)
-    .addAction(async (ctx, { provider }) => {
+    .addAction(async (ctx, { provider, state }) => {
+        trackPaso(ctx.from, 'comun.c01_tipo_documento', 'mostrado', { flujo: flujoDesdeSeleccionMenu(state.getMyState()?.flujoSeleccionadoMenu) });
         const list = {
             header: { type: 'text', text: 'Tipo de documento' },
             body: { text: 'Selecciona tu tipo de documento:' },

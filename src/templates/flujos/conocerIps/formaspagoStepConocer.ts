@@ -1,9 +1,12 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { resolve } from 'path';
 import { volverMenuPrincipal } from '../common';
+import { trackPaso, trackFin } from '../../../utils/trazabilidad';
 
 const formaspagoStepConocer = addKeyword(['280525014', 'Formas de pago', 'formaspago', 'FORMAS DE PAGO'])
     .addAction(async (ctx, ctxFn) => {
+        trackPaso(ctx.from, 'conocer_ips.formas_pago');
+        trackFin(ctx.from, 'conocer_ips', 'informativo', { paso: 'conocer_ips.formas_pago' });
         const pathLocal = resolve(__dirname, '../../../../assets/formas_pago.png');
         await ctxFn.flowDynamic([
             {

@@ -1,9 +1,10 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { checkSessionTimeout } from '../../../../utils/proactiveSessionTimeout';
+import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion } from '../../../../utils/trazabilidad';
 
 const step5AgendarCitaControl = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
-        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow, { paso: 'agendar.ct05_tipo_documento' });
         if (!sessionValid) {
             return endFlow();
         }

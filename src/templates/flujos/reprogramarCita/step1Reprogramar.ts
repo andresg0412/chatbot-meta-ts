@@ -2,11 +2,12 @@ import { addKeyword, EVENTS } from '@builderbot/bot';
 import { datosinicialesComunes } from '../common/datosInicialesComunes';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 import { registrarActividadBot } from '../../../services/apiService';
+import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin } from '../../../utils/trazabilidad';
 
 
 const step1Reprogramar = addKeyword(['280525003', '3', 'reprogramar cita', 'reprogramar', 'Reprogramar'])
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
-        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow, { paso: 'reprogramar.s01_inicio' });
         if (!sessionValid) {
             return endFlow();
         }

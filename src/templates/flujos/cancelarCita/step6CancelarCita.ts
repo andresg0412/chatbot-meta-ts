@@ -3,6 +3,7 @@ import { step7CancelarCita } from './step7CancelarCita';
 import { step5CancelarCita } from './step5CancelarCita';
 import { sanitizeString } from '../../../utils/sanitize';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
+import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion, flujoDesdeSeleccionMenu } from '../../../utils/trazabilidad';
 
 const step6CancelarCita = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { state, flowDynamic, gotoFlow }) => {
@@ -10,11 +11,13 @@ const step6CancelarCita = addKeyword(EVENTS.ACTION)
         const numeroCita = parseInt(sanitizeString(numeroCitaRaw, 3), 10) || 0;
         const { citasProgramadas } = state.getMyState();
         if (!citasProgramadas || !citasProgramadas[numeroCita - 1]) {
+            trackNoEntendido(ctx.from, 'cancelar.s06_selecciona_cita');
             await flowDynamic('Número de cita inválido. Por favor, intenta nuevamente.');
             await state.update({ esperaSeleccionCita: true });
             return gotoFlow(step5CancelarCita);
         }
         const citaSeleccionadaCancelar = citasProgramadas[numeroCita - 1];
+        trackPaso(ctx.from, 'cancelar.s06_selecciona_cita', 'ok');
         await state.update({ citaSeleccionadaCancelar });
         return gotoFlow(step7CancelarCita);
     });

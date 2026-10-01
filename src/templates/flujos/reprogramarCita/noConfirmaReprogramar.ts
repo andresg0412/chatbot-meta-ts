@@ -1,10 +1,12 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { menuFlow } from '../../menuFlow';
 import { volverMenuPrincipal } from '../common/volverMenuPrincipal';
+import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin } from '../../../utils/trazabilidad';
 
 
 const noConfirmaReprogramar = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { state, flowDynamic, gotoFlow }) => {
+        trackPaso(ctx.from, 'reprogramar.no_confirma');
         const { tipoDoc, numeroDoc } = state.getMyState();
         const { citasProgramadas } = state.getMyState();
         if (!citasProgramadas || citasProgramadas.length === 0) {

@@ -6,11 +6,13 @@ import { step4AgendarCitaControl } from './step4AgendarCitaControl';
 import { IPaciente } from '../../../../interfaces/IPacienteIn';
 import { closeUserSession } from '../../../../utils/proactiveSessionManager';
 import { registrarActividadBot } from '../../../../services/apiService';
+import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion } from '../../../../utils/trazabilidad';
 
 
 const step7AgendarCitaControl = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { state, gotoFlow, flowDynamic, endFlow }) => {
         try {
+            trackPaso(ctx.from, 'agendar.ct07_citas_previas');
             const numeroDocumento = await state.getMyState().numeroDocumentoPaciente;
             const especialidad = await state.getMyState().especialidadAgendarCita;
             await registrarActividadBot('chat_flujo_agendar', ctx.from, {
@@ -19,10 +21,13 @@ const step7AgendarCitaControl = addKeyword(EVENTS.ACTION)
             });
             const consultaDatos: IPaciente[] = await consultarCitasPorPacEsp(numeroDocumento, especialidad);
             if (!consultaDatos || consultaDatos.length === 0) {
+                trackErrorBackend(ctx.from, 'agendar.ct07_citas_previas', '/chatbot/citaspaciente');
+                trackIdentificacion(ctx.from, numeroDocumento, 'no_encontrado', 'agendar.ct06_documento');
                 await flowDynamic('No se encontraron citas anteriores relacionadas con el documento ingresado y la especialidad seleccionada. Por favor, verifica los datos e intenta nuevamente.');
                 return gotoFlow(step6AgendarCitaControl);
             }
             if (Array.isArray(consultaDatos) && consultaDatos.length > 0) {
+                trackIdentificacion(ctx.from, numeroDocumento, 'encontrado', 'agendar.ct06_documento');
                 await state.update({
                     pacienteId: consultaDatos[0].pacientes_id,
                     numeroContactoPaciente: consultaDatos[0].numero_contacto,
@@ -39,6 +44,8 @@ const step7AgendarCitaControl = addKeyword(EVENTS.ACTION)
             }
         } catch (error) {
             console.error('Error en step7AgendarCitaControl:', error);
+            trackPaso(ctx.from, 'agendar.ct07_citas_previas', 'error');
+            trackFin(ctx.from, 'agendar', 'error_backend', { paso: 'agendar.ct07_citas_previas' });
             closeUserSession(ctx.from);
             await flowDynamic('Ocurrió un error al procesar tu solicitud. Por favor, inténtalo de nuevo más tarde.');
             return endFlow();

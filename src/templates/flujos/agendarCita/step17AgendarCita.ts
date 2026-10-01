@@ -5,6 +5,7 @@ import { crearPaciente } from '../../../utils/consultarCitasPorDocumento';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 import { closeUserSession } from '../../../utils/proactiveSessionManager';
 import { registrarActividadBot } from '../../../services/apiService';
+import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion } from '../../../utils/trazabilidad';
 
 
 function generarAgendaIdAleatorio() {
@@ -81,10 +82,14 @@ const step17AgendarCita7 = addKeyword(EVENTS.ACTION)
         try {
             const paciente_id = await crearPaciente(datosPaciente);
             await state.update({ pacienteId: paciente_id });
+            trackIdentificacion(ctx.from, numeroDocumento, 'nuevo', 'agendar.s17_formulario_paciente');
+            trackPaso(ctx.from, 'agendar.s17_formulario_paciente', 'ok');
             await registrarActividadBot('chat_flujo_agendar', ctx.from, {
                 step: 'paciente_creado'
             });
         } catch (error) {
+            trackErrorBackend(ctx.from, 'agendar.s17_formulario_paciente', '/chatbot/crearpaciente', { siempre: true });
+            trackFin(ctx.from, 'agendar', 'error_backend', { paso: 'agendar.s17_formulario_paciente' });
             closeUserSession(ctx.from);
             await flowDynamic('Lo siento, ocurrió un error al crear tu perfil. Por favor, inténtalo más tarde.');
             return endFlow();
@@ -107,6 +112,7 @@ const step17AgendarCita6 = addKeyword(EVENTS.ACTION)
             const correoElectronico = sanitizeString(ctx.body, 50);
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             if (!emailRegex.test(correoElectronico)) {
+                trackNoEntendido(ctx.from, 'agendar.s17_formulario_paciente', 1, { contexto: 'correo' });
                 await flowDynamic('El correo electrónico ingresado no es válido. Intenta nuevamente.');
                 return gotoFlow(step17AgendarCita3);
             }
@@ -129,6 +135,7 @@ const step17AgendarCita5 = addKeyword(EVENTS.ACTION)
             const fechaNacimiento = ctx.body.trim();
             const fechaRegex = /^(0[1-9]|[12][0-9]|3[01])\/(0[1-9]|1[0-2])\/\d{4}$/;
             if (!fechaRegex.test(fechaNacimiento)) {
+                trackNoEntendido(ctx.from, 'agendar.s17_formulario_paciente', 1, { contexto: 'fecha_nacimiento' });
                 await flowDynamic('La fecha de nacimiento ingresada no es válida. Intenta nuevamente.');
                 return gotoFlow(step17AgendarCita2);
             }
@@ -152,6 +159,7 @@ const step17AgendarCita4 = addKeyword(EVENTS.ACTION)
         async (ctx, { state, gotoFlow, flowDynamic }) => {
             const apellidoPaciente2 = sanitizeString(ctx.body, 30);
             if (apellidoPaciente2.length < 3) {
+                trackNoEntendido(ctx.from, 'agendar.s17_formulario_paciente', 1, { contexto: 'apellido' });
                 await flowDynamic('El apellido ingresado no es válido. Intenta nuevamente.');
                 return gotoFlow(step17AgendarCita);
             }
@@ -173,6 +181,7 @@ const step17AgendarCita3 = addKeyword(EVENTS.ACTION)
         async (ctx, { state, gotoFlow, flowDynamic }) => {
             const apellidoPaciente1 = sanitizeString(ctx.body, 30);
             if (apellidoPaciente1.length < 3) {
+                trackNoEntendido(ctx.from, 'agendar.s17_formulario_paciente', 1, { contexto: 'apellido' });
                 await flowDynamic('El apellido ingresado no es válido. Intenta nuevamente.');
                 return gotoFlow(step17AgendarCita);
             }
@@ -194,6 +203,7 @@ const step17AgendarCita2 = addKeyword(EVENTS.ACTION)
         async (ctx, { state, gotoFlow, flowDynamic }) => {
             const nombrePaciente2 = sanitizeString(ctx.body, 30);
             if (nombrePaciente2.length < 3) {
+                trackNoEntendido(ctx.from, 'agendar.s17_formulario_paciente', 1, { contexto: 'nombre' });
                 await flowDynamic('El nombre ingresado no es válido. Intenta nuevamente.');
                 return gotoFlow(step17AgendarCita);
             }
@@ -205,7 +215,7 @@ const step17AgendarCita2 = addKeyword(EVENTS.ACTION)
 
 const step17AgendarCita = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
-        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow, { paso: 'agendar.s17_formulario_paciente' });
         if (!sessionValid) {
             return endFlow();
         }
@@ -219,6 +229,7 @@ const step17AgendarCita = addKeyword(EVENTS.ACTION)
         async (ctx, { state, gotoFlow, flowDynamic }) => {
             const nombrePaciente1 = sanitizeString(ctx.body, 30);
             if (nombrePaciente1.length < 3) {
+                trackNoEntendido(ctx.from, 'agendar.s17_formulario_paciente', 1, { contexto: 'nombre' });
                 await flowDynamic('El nombre ingresado no es válido. Intenta nuevamente.');
                 return gotoFlow(step17AgendarCita);
             }

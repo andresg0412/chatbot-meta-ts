@@ -2,11 +2,12 @@ import { addKeyword, EVENTS } from '@builderbot/bot';
 import { step13AgendarCitaConvenio, step13AgendarCitaParticular } from './step13AgendarCita';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 import { registrarActividadBot } from '../../../services/apiService';
+import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion } from '../../../utils/trazabilidad';
 
 
 const step12AgendarCita = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
-        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow, { paso: 'agendar.s12_particular_convenio' });
         if (!sessionValid) {
             return endFlow();
         }
@@ -22,6 +23,7 @@ const step12AgendarCita = addKeyword(EVENTS.ACTION)
         },
         async (ctx, ctxFn) => {
             if (ctx.body === 'Particular') {
+                trackPaso(ctx.from, 'agendar.s12_particular_convenio', 'ok');
                 await ctxFn.state.update({ tipoUsuarioAtencion: 'Particular' });
                 await registrarActividadBot('chat_flujo_agendar', ctx.from, {
                     step: 'tipo_paciente',
@@ -30,6 +32,7 @@ const step12AgendarCita = addKeyword(EVENTS.ACTION)
                 return ctxFn.gotoFlow(step13AgendarCitaParticular)
             }
             if (ctx.body === 'Convenio') {
+                trackPaso(ctx.from, 'agendar.s12_particular_convenio', 'ok');
                 await ctxFn.state.update({ tipoUsuarioAtencion: 'Convenio' });
                 await registrarActividadBot('chat_flujo_agendar', ctx.from, {
                     step: 'tipo_paciente',
@@ -37,6 +40,7 @@ const step12AgendarCita = addKeyword(EVENTS.ACTION)
                 });
                 return ctxFn.gotoFlow(step13AgendarCitaConvenio)
             }
+            trackNoEntendido(ctx.from, 'agendar.s12_particular_convenio');
         }
     );
 

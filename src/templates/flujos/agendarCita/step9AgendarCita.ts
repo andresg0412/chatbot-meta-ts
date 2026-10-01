@@ -3,10 +3,11 @@ import { step10AgendarCita } from './step10AgendarCita';
 import { consultarCitasFecha } from '../../../services/apiService';
 import { construirMensajeFechasDisponibles, construirMensajeHorasDisponibles } from '../../../utils/construirMensajeSalida';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
+import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion } from '../../../utils/trazabilidad';
 
 const step9AgendarCita = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
-        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow, { paso: 'agendar.s09_selecciona_fecha' });
         if (!sessionValid) {
             return endFlow();
         }
@@ -18,11 +19,13 @@ const step9AgendarCita = addKeyword(EVENTS.ACTION)
                 const { fechasOrdenadas, pasoSeleccionFecha } = state.getMyState();
                 const seleccion = ctx.body ? parseInt(ctx.body, 10) : 0;
                 if (isNaN(seleccion)) {
+                    trackNoEntendido(ctx.from, 'agendar.s09_selecciona_fecha');
                     await flowDynamic('Por favor, ingresa un número válido.');
                     return gotoFlow(step9AgendarCita);
                 }
                 const mostrarFechas = fechasOrdenadas.slice(pasoSeleccionFecha.inicio, pasoSeleccionFecha.fin);
                 if (seleccion < 1 || seleccion > mostrarFechas.length + 1 || (seleccion === mostrarFechas.length + 1 && fechasOrdenadas.length <= pasoSeleccionFecha.fin)) {
+                    trackNoEntendido(ctx.from, 'agendar.s09_selecciona_fecha');
                     await flowDynamic('Opción inválida. Por favor, selecciona una opción válida.');
                     return gotoFlow(step9AgendarCita);
                 }
@@ -36,6 +39,7 @@ const step9AgendarCita = addKeyword(EVENTS.ACTION)
                     return gotoFlow(step9AgendarCita);
                 }
                 const fechaSeleccionadaAgendar = mostrarFechas[seleccion - 1];
+                trackPaso(ctx.from, 'agendar.s09_selecciona_fecha', 'ok');
                 const myState = await state.getMyState();
                 const tipoConsulta = myState.tipoConsultaPaciente; // 'Primera vez' o 'Control'
                 const especialidad = myState.especialidadAgendarCita;
@@ -51,6 +55,9 @@ const step9AgendarCita = addKeyword(EVENTS.ACTION)
                 else {
                     citasFechaSeleccionada = await consultarCitasFecha(fechaSeleccionadaAgendar, tipoConsulta, especialidad);
                 }
+                if (!citasFechaSeleccionada || citasFechaSeleccionada.length === 0) {
+                    trackErrorBackend(ctx.from, 'agendar.s09_selecciona_fecha', '/chatbot/horas');
+                }
                 const mostrarHoras = citasFechaSeleccionada.slice(0, 5);
                 const mensaje = construirMensajeHorasDisponibles(mostrarHoras, citasFechaSeleccionada.length, 5, `Horas disponibles para el *${fechaSeleccionadaAgendar}*:`)
                 await flowDynamic(mensaje);
@@ -58,6 +65,7 @@ const step9AgendarCita = addKeyword(EVENTS.ACTION)
                 return gotoFlow(step10AgendarCita);
             } catch (error) {
                 console.error('Error en step9AgendarCita:', error);
+                trackPaso(ctx.from, 'agendar.s09_selecciona_fecha', 'error');
                 await flowDynamic('Ocurrió un error al procesar tu solicitud. Por favor, inténtalo de nuevo más tarde.');
                 return gotoFlow(step9AgendarCita);
             }

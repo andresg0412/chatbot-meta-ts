@@ -5,6 +5,7 @@ import { step18AgendarCita } from './step18AgendarCita';
 import { CONVENIOS_SERVICIOS, ID_CONVENIOS_SERVICIOS } from '../../../constants/conveniosConstants';
 //import { obtenerConvenios } from '../../../services/apiService';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
+import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion } from '../../../utils/trazabilidad';
 
 const step13AgendarCitaParticular = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { provider, state, gotoFlow }) => {
@@ -29,6 +30,7 @@ const step13AgendarCitaConvenio2 = addKeyword(['conv_poliza_sura', 'conv_poliza_
         const nombreConvenio = CONVENIOS_SERVICIOS[convenioSeleccionado];
         const idConvenio = ID_CONVENIOS_SERVICIOS[convenioSeleccionado];
         if (!nombreConvenio) {
+            trackNoEntendido(ctx.from, 'agendar.s13_convenio');
             await flowDynamic('El convenio no es válido. Por favor, selecciona un convenio válido.');
             return gotoFlow(step13AgendarCitaConvenio);
         }
@@ -38,6 +40,7 @@ const step13AgendarCitaConvenio2 = addKeyword(['conv_poliza_sura', 'conv_poliza_
             await flowDynamic('No se encontraron convenios para esta especialidad. Por favor, selecciona un convenio válido.');
             return gotoFlow(step13AgendarCitaConvenio);
         }*/
+        trackPaso(ctx.from, 'agendar.s13_convenio', 'ok');
         await state.update({
             convenioSeleccionado,
             nombreServicioConvenio: nombreConvenio,
@@ -59,7 +62,7 @@ const step13AgendarCitaConvenio2 = addKeyword(['conv_poliza_sura', 'conv_poliza_
 
 const step13AgendarCitaConvenio = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
-        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow, { paso: 'agendar.s13_convenio' });
         if (!sessionValid) {
             return endFlow();
         }

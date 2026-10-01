@@ -9,6 +9,7 @@ import { esNumeroAutorizado } from '../../../constants/authConstants';
 import { extraerFechaDelComando } from '../../../utils/dateValidator';
 import { isNumberValid } from '../../../constants/killSwichConstants';
 import { esBotHabilitado } from '../../../services/citasService';
+import { iniciarEjecucionCampana, finalizarEjecucionCampana, trackRespuestaCampana, trackPaso, trackNoEntendido, trackIdentificacion, trackErrorBackend, cerrarSesionTraza } from '../../../utils/trazabilidad';
 
 /**
  * Función core que ejecuta la campaña de recordatorio para una fecha específica.
@@ -21,6 +22,8 @@ export const ejecutarCampahnaRecordatorioPorFecha = async (
     fechaFormateada: string,
     origen: 'whatsapp' | 'endpoint' = 'whatsapp'
 ) => {
+    // Trazabilidad: campana_ejecucion{inicio|fin} y campana_ejecucion_id en cada wa_envio de la corrida.
+    const campanaEjecucionId = iniciarEjecucionCampana('reminder', origen);
     try {
         console.log(`🔄 Ejecutando campaña de recordatorio para fecha: ${fechaFormateada} (origen: ${origen})`);
 
@@ -29,6 +32,7 @@ export const ejecutarCampahnaRecordatorioPorFecha = async (
 
         if (citasPendientes.length === 0) {
             console.log(`ℹ️ No se encontraron citas pendientes para la fecha ${fechaFormateada}`);
+            finalizarEjecucionCampana('reminder', campanaEjecucionId, { total: 0, exitosos: 0, errores: 0, origen });
             return {
                 success: true,
                 fecha: fechaFormateada,
@@ -48,7 +52,7 @@ export const ejecutarCampahnaRecordatorioPorFecha = async (
 
         for (const cita of citasPendientes) {
             try {
-                const response = await enviarPlantillaRecordatorio(cita);
+                const response = await enviarPlantillaRecordatorio(cita, campanaEjecucionId);
                 const resultado = {
                     paciente: cita.nombre_paciente,
                     telefono: cita.telefono_paciente,
@@ -115,6 +119,7 @@ export const ejecutarCampahnaRecordatorioPorFecha = async (
             origen
         });
 
+        finalizarEjecucionCampana('reminder', campanaEjecucionId, { total: citasPendientes.length, exitosos, errores, origen });
         return {
             success: true,
             fecha: fechaFormateada,
@@ -126,6 +131,7 @@ export const ejecutarCampahnaRecordatorioPorFecha = async (
 
     } catch (error) {
         console.error('Error ejecutando campaña recordatorio:', error);
+        finalizarEjecucionCampana('reminder', campanaEjecucionId, { total: 0, exitosos: 0, errores: 1, origen });
         return {
             success: false,
             error: 'Error interno al procesar la campaña',
