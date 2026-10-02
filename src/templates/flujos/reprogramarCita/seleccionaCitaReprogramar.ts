@@ -9,7 +9,7 @@ import { CONVENIOS_SERVICIOS, ID_CONVENIOS_SERVICIOS } from '../../../constants/
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 import { closeUserSession } from '../../../utils/proactiveSessionManager';
 import { registrarActividadBot } from '../../../services/apiService';
-import { triggerCascadaTickNow } from '../../../utils/listaEsperaCascadaPoller';
+import { programarTickCascadaRetrasado } from '../../../utils/listaEsperaCascadaPoller';
 import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin } from '../../../utils/trazabilidad';
 
 
@@ -79,16 +79,6 @@ const confirmarReprogramarCita = addKeyword(EVENTS.ACTION)
                 return endFlow();
             }
 
-            // Path rápido de la cascada de lista de espera (Fase 2): la franja anterior también
-            // queda libre al reprogramar (ver docs/features/2026-09-07-lista-espera-inteligente.md,
-            // sección 13.4-e). Fire-and-forget, no bloquea la respuesta al paciente ni puede romper
-            // el flujo de reprogramación si falla.
-            try {
-                triggerCascadaTickNow();
-            } catch (cascadaError) {
-                console.error('[confirmarReprogramarCita] Error disparando triggerCascadaTickNow():', cascadaError);
-            }
-
             metricFlujoFinalizado('reagendar');
             // cita_id_externa = la cita ANTERIOR (la nueva no trae su id en la respuesta, MEMORY.md sección 11).
             trackFin(ctx.from, 'reprogramar', 'cita_reprogramada', { paso: 'reprogramar.confirma_reprogramar', citaIdExterna: citaAnterior.agenda_id_externa });
@@ -98,6 +88,11 @@ const confirmarReprogramarCita = addKeyword(EVENTS.ACTION)
             });
 
             await flowDynamic('Tu cita se ha agendado con éxito. 📅👍');
+            // Path rápido de la cascada de lista de espera: la franja anterior también queda libre al
+            // reprogramar (docs/features/2026-09-07-lista-espera-inteligente.md, 13.4-e). Se dispara
+            // DESPUÉS de confirmar al paciente y con retraso (LISTA_ESPERA_RETRASO_OFERTA_SEG + margen)
+            // para que la oferta no se cruce con esta confirmación. Fire-and-forget, nunca lanza.
+            programarTickCascadaRetrasado();
             await state.update({ citaReprogramada: true });
             return gotoFlow(revisarPagoConsulta);
         } catch (e) {

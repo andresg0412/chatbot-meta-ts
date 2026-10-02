@@ -2,6 +2,7 @@ import {
     consultarPacientePorDocumento,
     consultarCitasProximasPaciente,
     crearPacienteDataBase,
+    ResultadoCrearPaciente,
 } from '../services/apiService';
 import { esEstadoCitaGestionable } from '../constants/estadosCita';
 
@@ -26,10 +27,10 @@ export async function consultarPaciente(numeroDoc: string) {
     };
 }
 
-export async function crearPaciente(datosPaciente: any) {
-    const pacienteCreado = await crearPacienteDataBase(datosPaciente);
-    if (!pacienteCreado) {
-        throw new Error('Error al crear el paciente');
-    }
-    return pacienteCreado.pacientes_id || null;
+/**
+ * Alta de paciente nuevo. Nunca lanza: devuelve el resultado con detalle (ver `ResultadoCrearPaciente`).
+ * Un documento ya registrado (200 con `ya_existia: true`) cuenta como éxito con el `pacientes_id` existente.
+ */
+export async function crearPaciente(datosPaciente: any): Promise<ResultadoCrearPaciente> {
+    return crearPacienteDataBase(datosPaciente);
 }
