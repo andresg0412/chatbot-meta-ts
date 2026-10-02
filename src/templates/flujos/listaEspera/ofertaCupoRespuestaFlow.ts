@@ -16,6 +16,7 @@ import { responderOfertaCupo, registrarActividadBot } from '../../../services/ap
 import { sanitizeString, isValidDocumentNumber } from '../../../utils/sanitize';
 import { KW_SI_LO_TOMO, KW_NO_PUEDO, OPCIONES_REGEX } from '../keywordsBotones';
 import { formatearFechaLarga, formatearHoraHHMM } from '../../../utils/fechaHora';
+import { CAUSE_GLOBHO_ERROR, esErrorGlobhoMovimiento, mensajeErrorGlobhoMovimiento } from '../../../utils/mensajesMovimientoCita';
 import { trackRespuestaCampana, trackRespuestaCampanaUnaVez, trackPaso, trackNoEntendido, trackIdentificacion, trackErrorBackend, trackFin, cerrarSesionTraza, asegurarSesionTraza } from '../../../utils/trazabilidad';
 
 // Runbook B2: antes `new Date('YYYY-MM-DD')` (medianoche UTC) formateado en la zona local del proceso
@@ -63,6 +64,22 @@ const ofertaCupoAccionFlow = addKeyword(EVENTS.ACTION)
                     resultado: 'cupo_ya_asignado'
                 });
                 await flowDynamic('Ese espacio ya fue tomado por otra persona, lo sentimos. Sigues en la lista de espera para el siguiente que se libere.');
+                return endFlow();
+            }
+            if (esErrorGlobhoMovimiento(resultado.code, resultado.cause)) {
+                const citaAnteriorRestaurada = resultado.citaAnteriorRestaurada === true;
+                trackErrorBackend(ctx.from, 'lista_espera.oferta_respuesta', '/chatbot/listaespera/cascada/respuesta', {
+                    siempre: true,
+                    cause: CAUSE_GLOBHO_ERROR,
+                    httpStatus: 502,
+                });
+                await registrarActividadBot('chat_flujo_lista_espera', ctx.from, {
+                    step: 'respuesta_oferta',
+                    resultado: 'error_globho',
+                    code: 502,
+                    cita_anterior_restaurada: citaAnteriorRestaurada
+                });
+                await flowDynamic(mensajeErrorGlobhoMovimiento(citaAnteriorRestaurada));
                 return endFlow();
             }
             trackErrorBackend(ctx.from, 'lista_espera.oferta_respuesta', '/chatbot/listaespera/cascada/respuesta', { siempre: true });

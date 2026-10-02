@@ -285,16 +285,37 @@ export async function consultarPacientePorDocumento(documento: string): Promise<
     }
 }
 
-export async function reagendarCita(data: IReagendarCita): Promise<IAgendaResponse | null> {
+/**
+ * Resultado de `reagendarCita`. `GLOBHO_ERROR` es el 502 del contrato (Globho falló al mover la cita);
+ * `citaAnteriorRestaurada` es `true` solo si el backend lo dice explícitamente. `ERROR` cubre todo lo
+ * demás (incluido un 200 sin `data`, que antes también se trataba como fallo).
+ */
+export type ResultadoReagendarCita =
+    | { ok: true; cita: IAgendaResponse }
+    | { ok: false; error: 'GLOBHO_ERROR'; code: 502; citaAnteriorRestaurada: boolean }
+    | { ok: false; error: 'ERROR'; code?: number };
+
+export async function reagendarCita(data: IReagendarCita): Promise<ResultadoReagendarCita> {
     try {
         const url = `${API_BACKEND_URL}/chatbot/reagendar`;
         const response = await axios.post(url, data);
         metricCita('reagendada');
-        return response.data.data || null;
-    } catch (error) {
+        const cita = response.data.data || null;
+        return cita ? { ok: true, cita } : { ok: false, error: 'ERROR', code: response.status };
+    } catch (error: any) {
         registrarFalloBackend('/chatbot/reagendar', error);
         console.error('Error reprogramando cita:', error);
-        return null;
+        const status = error?.response?.status;
+        const body = error?.response?.data;
+        if (status === 502 && body?.cause === 'GLOBHO_ERROR') {
+            return {
+                ok: false,
+                error: 'GLOBHO_ERROR',
+                code: 502,
+                citaAnteriorRestaurada: body?.data?.cita_anterior_restaurada === true,
+            };
+        }
+        return typeof status === 'number' ? { ok: false, error: 'ERROR', code: status } : { ok: false, error: 'ERROR' };
     }
 }
 
@@ -1202,13 +1223,17 @@ export async function marcarFalloOfertaCupo(
  * código de estado (no solo boolean) porque 404/409 requieren mensajes distintos al paciente:
  * - 404 SIN_OFERTA_ACTIVA: ya no tiene ninguna oferta pendiente.
  * - 409 CUPO_YA_ASIGNADO: alguien más aceptó primero.
+ * - 502 GLOBHO_ERROR: Globho falló al mover la cita; `citaAnteriorRestaurada` dice si la cita actual
+ *   quedó como estaba (`true`) o hay que corregirla a mano (`false`).
  * - 200: `data.registrado` (rechaza) o `data.movimiento/nueva_fecha_cita/...` (acepta).
+ * En error HTTP, `data` sigue siendo el body completo (compatibilidad); `cause` y
+ * `citaAnteriorRestaurada` se dan ya extraídos.
  */
 export async function responderOfertaCupo(
     documento: string,
     celular: string,
     respuesta: 'acepta' | 'rechaza'
-): Promise<{ ok: boolean; code?: number; data?: any }> {
+): Promise<{ ok: boolean; code?: number; data?: any; cause?: string; citaAnteriorRestaurada?: boolean }> {
     try {
         const url = `${API_BACKEND_URL}/chatbot/listaespera/cascada/respuesta`;
         const response = await axios.post(url, { documento, celular, respuesta });
@@ -1216,7 +1241,15 @@ export async function responderOfertaCupo(
     } catch (error: any) {
         registrarFalloBackend('/chatbot/listaespera/cascada/respuesta', error);
         if (error?.response) {
-            return { ok: false, code: error.response.status, data: error.response.data };
+            const body = error.response.data;
+            const cause = typeof body?.cause === 'string' ? body.cause : undefined;
+            const resultado: { ok: boolean; code?: number; data?: any; cause?: string; citaAnteriorRestaurada?: boolean } =
+                { ok: false, code: error.response.status, data: body };
+            if (cause) resultado.cause = cause;
+            if (error.response.status === 502 && cause === 'GLOBHO_ERROR') {
+                resultado.citaAnteriorRestaurada = body?.data?.cita_anterior_restaurada === true;
+            }
+            return resultado;
         }
         console.error('Error respondiendo oferta de cupo:', error);
         return { ok: false };
