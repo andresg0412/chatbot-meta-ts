@@ -361,6 +361,48 @@ export function triggerCascadaTickNow(): void {
     );
 }
 
+/**
+ * Retraso del path rápido (docs 2026-10-01-revision-pruebas-reales.md, B1/B5-2). Si el tick sale en el
+ * mismo instante que la confirmación de cancelar/reprogramar, la plantilla de oferta (que va directo a
+ * Graph, fuera de la cola del flujo) llega mezclada con "Tu cita ha sido cancelada" y el menú.
+ *
+ * `LISTA_ESPERA_RETRASO_OFERTA_SEG` (default 20) es la MISMA variable que usa el backend para no
+ * ofertar cupos detectados hace menos de ese tiempo (así tampoco los oferta el poller de 60 s). El bot
+ * espera ese tiempo más `MARGEN_RETRASO_OFERTA_MS`, para que el tick llegue cuando el backend ya
+ * permite ofertar el cupo. Un valor inválido o negativo usa el default; 0 deja solo el margen.
+ */
+export const DEFAULT_RETRASO_OFERTA_SEG = 20;
+export const MARGEN_RETRASO_OFERTA_MS = 5000;
+
+export function obtenerRetrasoTickRapidoMs(): number {
+    const raw = process.env.LISTA_ESPERA_RETRASO_OFERTA_SEG;
+    const valor = raw !== undefined && raw.trim() !== '' ? Number(raw) : NaN;
+    const segundos = Number.isFinite(valor) && valor >= 0 ? valor : DEFAULT_RETRASO_OFERTA_SEG;
+    return Math.round(segundos * 1000) + MARGEN_RETRASO_OFERTA_MS;
+}
+
+/**
+ * Programa el path rápido con retraso. Llamar DESPUÉS de enviar al paciente la confirmación de que su
+ * cita se canceló/reprogramó. Fire-and-forget: nunca lanza. Si el proceso se reinicia antes de que
+ * venza el timer, no se pierde nada: el poller de 60 s hace el mismo tick.
+ */
+export function programarTickCascadaRetrasado(): void {
+    try {
+        const retrasoMs = obtenerRetrasoTickRapidoMs();
+        const timer = setTimeout(() => {
+            try {
+                triggerCascadaTickNow();
+            } catch (error: any) {
+                console.error('[listaEsperaCascadaPoller] Error en tick rápido retrasado:', error?.message ?? error);
+            }
+        }, retrasoMs);
+        // No mantener vivo el proceso solo por este timer.
+        (timer as any)?.unref?.();
+    } catch (error: any) {
+        console.error('[listaEsperaCascadaPoller] Error programando el tick rápido retrasado:', error?.message ?? error);
+    }
+}
+
 /** Solo para pruebas: ejecuta un tick con el `sendRaw` dado, limpiando antes el registro de logs observados. */
 export async function _runCascadaTickParaPruebas(sendRaw: SendRawMessage): Promise<void> {
     accionesObservadasLogueadas.clear();

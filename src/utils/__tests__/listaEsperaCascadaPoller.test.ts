@@ -19,6 +19,10 @@ import {
     _ejecutarTickSerializadoParaPruebas,
     construirMensajeEscalamiento,
     triggerCascadaTickNow,
+    obtenerRetrasoTickRapidoMs,
+    programarTickCascadaRetrasado,
+    DEFAULT_RETRASO_OFERTA_SEG,
+    MARGEN_RETRASO_OFERTA_MS,
 } from '../listaEsperaCascadaPoller';
 import { AccionCascada, AccionEscalar } from '../../interfaces/ICascadaListaEspera';
 
@@ -395,6 +399,57 @@ describe('guarda de ejecución única (corrección R2, 1.13)', () => {
     it('triggerCascadaTickNow sin sendRaw cacheado no ejecuta ni lanza', () => {
         _setSendRawParaPruebas(null);
         expect(() => triggerCascadaTickNow()).not.toThrow();
+        expect(mockedApi.tickCascadaListaEspera).not.toHaveBeenCalled();
+    });
+});
+
+describe('tick rápido retrasado tras confirmar cancelar/reprogramar (revisión 2026-10-01, B1/B5-2)', () => {
+    afterEach(() => {
+        jest.useRealTimers();
+        _resetPollerParaPruebas();
+    });
+
+    it('default: 20 s + margen de 5 s', () => {
+        delete process.env.LISTA_ESPERA_RETRASO_OFERTA_SEG;
+        expect(DEFAULT_RETRASO_OFERTA_SEG).toBe(20);
+        expect(MARGEN_RETRASO_OFERTA_MS).toBe(5000);
+        expect(obtenerRetrasoTickRapidoMs()).toBe(25000);
+    });
+
+    it.each([
+        ['30', 35000],
+        ['0', 5000],
+        ['7.5', 12500],
+        ['', 25000],
+        ['  ', 25000],
+        ['abc', 25000],
+        ['-3', 25000],
+    ])('LISTA_ESPERA_RETRASO_OFERTA_SEG=%p → %d ms', (valor, esperado) => {
+        process.env.LISTA_ESPERA_RETRASO_OFERTA_SEG = valor;
+        expect(obtenerRetrasoTickRapidoMs()).toBe(esperado);
+    });
+
+    it('no hace el tick antes del retraso y sí al cumplirse', async () => {
+        jest.useFakeTimers();
+        delete process.env.LISTA_ESPERA_RETRASO_OFERTA_SEG;
+        mockedApi.tickCascadaListaEspera.mockResolvedValue([]);
+        _setSendRawParaPruebas(sendRaw);
+
+        programarTickCascadaRetrasado();
+        expect(mockedApi.tickCascadaListaEspera).not.toHaveBeenCalled();
+
+        jest.advanceTimersByTime(24999);
+        expect(mockedApi.tickCascadaListaEspera).not.toHaveBeenCalled();
+
+        jest.advanceTimersByTime(1);
+        expect(mockedApi.tickCascadaListaEspera).toHaveBeenCalledTimes(1);
+    });
+
+    it('sin sendRaw cacheado (poller no arrancado) no lanza al vencer el timer', () => {
+        jest.useFakeTimers();
+        _setSendRawParaPruebas(null);
+        expect(() => programarTickCascadaRetrasado()).not.toThrow();
+        expect(() => jest.advanceTimersByTime(60000)).not.toThrow();
         expect(mockedApi.tickCascadaListaEspera).not.toHaveBeenCalled();
     });
 });

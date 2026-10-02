@@ -164,15 +164,49 @@ export async function consultarCitasPacienteEspecialidad(pacienteId: string, esp
     }
 }
 
-export async function crearPacienteDataBase(datosPaciente: any) {
+/** Causa de un alta de paciente fallida. Las dos primeras vienen del backend en un 400. */
+export type CausaFalloCrearPaciente = 'VALIDATION_ERROR' | 'FECHA_NACIMIENTO_INVALIDA' | 'ERROR';
+
+/**
+ * Resultado de `POST /chatbot/crearpaciente`:
+ * - `ok` true ⇒ `pacienteId` lleno. `yaExistia` true si el backend respondió 200 con `ya_existia: true`
+ *   (el documento ya estaba registrado: alta idempotente, se usa el paciente existente).
+ * - `ok` false ⇒ `causa`: 400 con `cause` 'VALIDATION_ERROR' / 'FECHA_NACIMIENTO_INVALIDA' (datos
+ *   rechazados, reintentar igual no sirve) o 'ERROR' (red, 5xx o respuesta sin `pacientes_id`).
+ */
+export interface ResultadoCrearPaciente {
+    ok: boolean;
+    pacienteId: string | null;
+    yaExistia: boolean;
+    causa?: CausaFalloCrearPaciente;
+}
+
+/** Alta de paciente. Nunca lanza. */
+export async function crearPacienteDataBase(datosPaciente: any): Promise<ResultadoCrearPaciente> {
     try {
         const url = `${API_BACKEND_URL}/chatbot/crearpaciente`;
         const response = await axios.post(url, datosPaciente);
-        return response.data.data || null;
+        const data = response?.data?.data;
+        const pacienteId = typeof data?.pacientes_id === 'string' && data.pacientes_id ? data.pacientes_id : null;
+        if (!pacienteId) {
+            console.error(`Error creando paciente: respuesta ${response?.status} sin pacientes_id.`);
+            return { ok: false, pacienteId: null, yaExistia: false, causa: 'ERROR' };
+        }
+        return { ok: true, pacienteId, yaExistia: data?.ya_existia === true };
     } catch (error) {
         registrarFalloBackend('/chatbot/crearpaciente', error);
-        console.error('Error creando paciente:', error);
-        return null;
+        const status = (error as any)?.response?.status;
+        const cause = (error as any)?.response?.data?.cause;
+        // Solo status, cause y mensaje del backend (campo + regla de AJV, sin el valor); nunca la URL.
+        console.error(
+            `Error creando paciente (status ${status ?? 'sin respuesta'}, cause ${cause ?? '-'}):`,
+            (error as any)?.response?.data?.message ?? (error as any)?.message ?? error
+        );
+        if (status === 400) {
+            const causa: CausaFalloCrearPaciente = cause === 'FECHA_NACIMIENTO_INVALIDA' ? 'FECHA_NACIMIENTO_INVALIDA' : 'VALIDATION_ERROR';
+            return { ok: false, pacienteId: null, yaExistia: false, causa };
+        }
+        return { ok: false, pacienteId: null, yaExistia: false, causa: 'ERROR' };
     }
 }
 

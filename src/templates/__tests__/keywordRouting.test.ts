@@ -30,7 +30,8 @@ import {
 } from '../flujos/campahna';
 import { step1CencelarCita } from '../flujos/cancelarCita';
 import { step1Reprogramar } from '../flujos/reprogramarCita';
-import { step1AgendarCita } from '../flujos/agendarCita';
+import { step1AgendarCita, step14AgendarCita2 } from '../flujos/agendarCita';
+import { IDS_TIPO_DOCUMENTO, IDS_TIPO_DOCUMENTO_RETIRADOS } from '../../utils/datosPacienteNuevo';
 import { pasoAgenteFlow } from '../flujos/pasoAgente';
 import { pqrsFlow } from '../flujos/pasoAgente/enviarpqrs';
 import { ofertaCupoAceptaDocumentoFlow, ofertaCupoRechazaDocumentoFlow, retiroListaEsperaFlow } from '../flujos/listaEspera';
@@ -51,6 +52,7 @@ const nombres = new Map<string, string>([
     [keyRef(step1CencelarCita), 'step1CencelarCita'],
     [keyRef(step1Reprogramar), 'step1Reprogramar'],
     [keyRef(step1AgendarCita), 'step1AgendarCita'],
+    [keyRef(step14AgendarCita2), 'step14AgendarCita2'],
     [keyRef(pasoAgenteFlow), 'pasoAgenteFlow'],
     [keyRef(pqrsFlow), 'pqrsFlow'],
     [keyRef(ofertaCupoAceptaDocumentoFlow), 'ofertaCupoAceptaDocumentoFlow'],
@@ -174,11 +176,28 @@ describe('Enrutamiento de keywords con el algoritmo real de @builderbot (runbook
             'Servicios', 'Convenios', 'Tarifas', 'Formas de pago', 'Ubicación', 'Horarios', 'Canales de atención',
             'Sí, avísame', 'No, gracias', 'Acepto', 'No acepto', 'hola', 'buenas tardes', 'hoy no puedo ir',
             'no puedo', 'si lo tomo', 'No podré', 'podré asistir', '1234567890', 'doc_cc', 'control_tipo_cedula',
-            'psicologia_adulto', 'conv_poliza_sura', 'agindarcita_tipo_cd', 'recordatorio', 'ejecutar',
+            'psicologia_adulto', 'conv_poliza_sura', 'agindarcita_tipo_cd', 'agindarcita_tipo_pt', 'agindarcita_tipo_ot', 'recordatorio', 'ejecutar',
             'sinasistencia', 'conasistencia', DISABLE_KEY,
         ];
         it.each(corpus)('"%s"', (texto) => {
             expect(refDestino(registroReal, texto)).toBe(refDestino(registroSinNuevos, texto));
+        });
+    });
+
+    // Registro de paciente nuevo (revisión 2026-10-01, A3): los ids de la lista de tipo de documento
+    // deben llegar a step14AgendarCita2. La grafía "agindarcita" es necesaria: con "agendarcita" el
+    // keyword 'agendar' de step1AgendarCita se queda con la respuesta y reinicia el flujo.
+    describe('ids de la lista de tipo de documento (step14)', () => {
+        // Incluye el nuevo `agindarcita_tipo_pt` (PT) y el retirado `agindarcita_tipo_ot` (listas viejas:
+        // debe llegar a step14 para que vuelva a mostrar la lista, no a otro flujo por subcadena).
+        it.each([...IDS_TIPO_DOCUMENTO, ...IDS_TIPO_DOCUMENTO_RETIRADOS])('"%s" → step14AgendarCita2', (id) => {
+            expect(destino(id)).toBe('step14AgendarCita2');
+        });
+        it('el id de PT está en la lista vigente', () => {
+            expect(IDS_TIPO_DOCUMENTO).toContain('agindarcita_tipo_pt');
+        });
+        it.each(['agendarcita_tipo_cd', 'agendarcita_tipo_pt'])('"%s" (grafía "agendar") NO llega a step14AgendarCita2', (id) => {
+            expect(destino(id)).not.toBe('step14AgendarCita2');
         });
     });
 

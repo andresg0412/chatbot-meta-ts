@@ -5,7 +5,7 @@ import { metricFlujoFinalizado, metricCita, metricError } from '../../../utils/m
 import { cancelarCita } from '../../../services/apiService';
 import { closeUserSession } from '../../../utils/proactiveSessionManager';
 import { registrarActividadBot } from '../../../services/apiService';
-import { triggerCascadaTickNow } from '../../../utils/listaEsperaCascadaPoller';
+import { programarTickCascadaRetrasado } from '../../../utils/listaEsperaCascadaPoller';
 import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion, flujoDesdeSeleccionMenu } from '../../../utils/trazabilidad';
 
 
@@ -30,19 +30,16 @@ const stepConfirmaCancelarCita = addKeyword(EVENTS.ACTION)
                 await flowDynamic('No pudimos cancelar tu cita en este momento. Por favor, intenta nuevamente más tarde o comunícate con un asesor.');
                 return gotoFlow(volverMenuPrincipal);
             }
-            // Path rápido de la cascada de lista de espera (Fase 2): fire-and-forget, no bloquea
-            // la respuesta al paciente ni puede romper el flujo de cancelación si falla.
-            try {
-                triggerCascadaTickNow();
-            } catch (cascadaError) {
-                console.error('[stepConfirmaCancelarCita] Error disparando triggerCascadaTickNow():', cascadaError);
-            }
             metricFlujoFinalizado('cancelar');
             trackFin(ctx.from, 'cancelar', 'cita_cancelada', { paso: 'cancelar.confirma_cancelar', citaIdExterna: citaSeleccionadaCancelar.agenda_id_externa });
             await registrarActividadBot('chat_flujo_cancelar_cita', ctx.from, {
                 step: 'cita_cancelada'
             });
             await flowDynamic('Tu cita ha sido cancelada exitosamente. Quedo atenta a tu nueva disponibilidad.');
+            // Path rápido de la cascada de lista de espera: DESPUÉS de confirmar al paciente y con
+            // retraso (LISTA_ESPERA_RETRASO_OFERTA_SEG + margen), para que la oferta del cupo no se
+            // cruce con esta confirmación ni con el menú. Fire-and-forget, nunca lanza.
+            programarTickCascadaRetrasado();
         } catch (e) {
             metricError(e, ctx.from);
             trackPaso(ctx.from, 'cancelar.confirma_cancelar', 'error');
