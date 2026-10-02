@@ -7,6 +7,7 @@ import { AccionCascada } from '../interfaces/ICascadaListaEspera';
 import { isRecordatoriosBotonesEnabled as flagRecordatoriosBotones, esTelefonoPiloto } from '../utils/listaEsperaFlags';
 import { formatearFechaLarga, formatearHoraHHMM } from '../utils/fechaHora';
 import { enmascararTelefono } from '../utils/telefono';
+import { limpiarParametroPlantilla } from '../utils/parametroPlantilla';
 import { fechaBogotaHoy } from '../utils/fechaHora';
 import {
     isTrazabilidadV2Enabled,
@@ -389,13 +390,13 @@ export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse 
                     {
                         "type": "body",
                         "parameters": [
-                            { "type": "text", "text": `${cita.nombre_paciente}` },
-                            { "type": "text", "text": `${cita.especialidad}` },
-                            { "type": "text", "text": `${usarBotones ? formatearFechaLarga(cita.fecha_cita) : fechaFormateada}` },
-                            { "type": "text", "text": `${usarBotones ? formatearHoraHHMM(cita.hora_cita) : cita.hora_cita}` },
-                            { "type": "text", "text": `${cita.profesional}` },
-                            { "type": "text", "text": `${cita.tipo_cita === 1 ? 'Presencial' : 'Virtual'}` },
-                            { "type": "text", "text": `${administradora}` }
+                            { "type": "text", "text": limpiarParametroPlantilla(cita.nombre_paciente) },
+                            { "type": "text", "text": limpiarParametroPlantilla(cita.especialidad) },
+                            { "type": "text", "text": limpiarParametroPlantilla(usarBotones ? formatearFechaLarga(cita.fecha_cita) : fechaFormateada) },
+                            { "type": "text", "text": limpiarParametroPlantilla(usarBotones ? formatearHoraHHMM(cita.hora_cita) : cita.hora_cita) },
+                            { "type": "text", "text": limpiarParametroPlantilla(cita.profesional) },
+                            { "type": "text", "text": limpiarParametroPlantilla(cita.tipo_cita === 1 ? 'Presencial' : 'Virtual') },
+                            { "type": "text", "text": limpiarParametroPlantilla(administradora) }
                         ]
                     }
                 ]
@@ -462,9 +463,9 @@ export async function enviarPlantillaRecordatorio24h(cita: AgendaProgramadaRespo
                     {
                         "type": "body",
                         "parameters": [
-                            { "type": "text", "text": `${cita.nombre_paciente}` },
-                            { "type": "text", "text": `${usarBotones ? formatearFechaLarga(cita.fecha_cita) : fechaFormateada}` },
-                            { "type": "text", "text": `${usarBotones ? formatearHoraHHMM(cita.hora_cita) : cita.hora_cita}` }
+                            { "type": "text", "text": limpiarParametroPlantilla(cita.nombre_paciente) },
+                            { "type": "text", "text": limpiarParametroPlantilla(usarBotones ? formatearFechaLarga(cita.fecha_cita) : fechaFormateada) },
+                            { "type": "text", "text": limpiarParametroPlantilla(usarBotones ? formatearHoraHHMM(cita.hora_cita) : cita.hora_cita) }
                         ]
                     }
                 ]
@@ -531,10 +532,10 @@ export async function enviarPlantillaDiaria(cita: AgendaPendienteResponse, campa
                     {
                         "type": "body",
                         "parameters": [
-                            { "type": "text", "text": `${cita.nombre_paciente}` },
-                            { "type": "text", "text": `${cita.especialidad}` },
-                            { "type": "text", "text": `${cita.tipo_cita === 1 ? 'Presencial' : 'Virtual'}` },
-                            { "type": "text", "text": `${usarBotones ? formatearHoraHHMM(cita.hora_cita) : cita.hora_cita}` }
+                            { "type": "text", "text": limpiarParametroPlantilla(cita.nombre_paciente) },
+                            { "type": "text", "text": limpiarParametroPlantilla(cita.especialidad) },
+                            { "type": "text", "text": limpiarParametroPlantilla(cita.tipo_cita === 1 ? 'Presencial' : 'Virtual') },
+                            { "type": "text", "text": limpiarParametroPlantilla(usarBotones ? formatearHoraHHMM(cita.hora_cita) : cita.hora_cita) }
                         ]
                     }
                 ]
@@ -603,13 +604,13 @@ export async function enviarPlantillaRecordatorio(cita: AgendaPendienteResponse,
                     {
                         "type": "body",
                         "parameters": [
-                            { "type": "text", "text": `${cita.nombre_paciente}` },
-                            { "type": "text", "text": `${cita.especialidad}` },
-                            { "type": "text", "text": `${usarBotones ? formatearFechaLarga(cita.fecha_cita) : fechaFormateada}` },
-                            { "type": "text", "text": `${usarBotones ? formatearHoraHHMM(cita.hora_cita) : cita.hora_cita}` },
-                            { "type": "text", "text": `${cita.profesional}` },
-                            { "type": "text", "text": `${cita.tipo_cita === 1 ? 'Presencial' : 'Virtual'}` },
-                            { "type": "text", "text": `${administradora}` }
+                            { "type": "text", "text": limpiarParametroPlantilla(cita.nombre_paciente) },
+                            { "type": "text", "text": limpiarParametroPlantilla(cita.especialidad) },
+                            { "type": "text", "text": limpiarParametroPlantilla(usarBotones ? formatearFechaLarga(cita.fecha_cita) : fechaFormateada) },
+                            { "type": "text", "text": limpiarParametroPlantilla(usarBotones ? formatearHoraHHMM(cita.hora_cita) : cita.hora_cita) },
+                            { "type": "text", "text": limpiarParametroPlantilla(cita.profesional) },
+                            { "type": "text", "text": limpiarParametroPlantilla(cita.tipo_cita === 1 ? 'Presencial' : 'Virtual') },
+                            { "type": "text", "text": limpiarParametroPlantilla(administradora) }
                         ]
                     }
                 ]
@@ -848,8 +849,8 @@ export async function enviarPlantillaRecuperar(cita: AgendaPendienteResponse, ca
                     {
                         "type": "body",
                         "parameters": [
-                            { "type": "text", "text": `${cita.nombre_paciente}` },
-                            { "type": "text", "text": `${fechaFormateada}` },
+                            { "type": "text", "text": limpiarParametroPlantilla(cita.nombre_paciente) },
+                            { "type": "text", "text": limpiarParametroPlantilla(fechaFormateada) },
                         ]
                     }
                 ]
@@ -973,8 +974,8 @@ export async function enviarPlantillaUsuariosConAsistencia(cita: AgendaPendiente
                     {
                         "type": "body",
                         "parameters": [
-                            { "type": "text", "text": `${cita.nombre_paciente}` },
-                            { "type": "text", "text": `${fechaFormateada}` },
+                            { "type": "text", "text": limpiarParametroPlantilla(cita.nombre_paciente) },
+                            { "type": "text", "text": limpiarParametroPlantilla(fechaFormateada) },
                         ]
                     }
                 ]
@@ -1095,10 +1096,10 @@ export async function enviarPlantillaOfertaCupo(
                     {
                         "type": "body",
                         "parameters": [
-                            { "type": "text", "text": `${nombrePaciente}` },
-                            { "type": "text", "text": `${profesional}` },
-                            { "type": "text", "text": `${fechaFormateada}` },
-                            { "type": "text", "text": `${horaFormateada}` },
+                            { "type": "text", "text": limpiarParametroPlantilla(nombrePaciente) },
+                            { "type": "text", "text": limpiarParametroPlantilla(profesional) },
+                            { "type": "text", "text": limpiarParametroPlantilla(fechaFormateada) },
+                            { "type": "text", "text": limpiarParametroPlantilla(horaFormateada) },
                             { "type": "text", "text": String(minutosVentana) }
                         ]
                     }
