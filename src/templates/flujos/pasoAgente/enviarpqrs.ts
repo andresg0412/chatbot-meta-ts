@@ -3,6 +3,7 @@ import { isWorkingHours } from '../../../utils';
 import { menuFlow } from '../../menuFlow';
 import { metricFlujoFinalizado, metricError } from '../../../utils/metrics';
 import { closeUserSession } from '../../../utils/proactiveSessionManager';
+import { abrirOSostenerSesion } from '../../../utils/proactiveSessionTimeout';
 import { registrarActividadBot } from '../../../services/apiService';
 import { trackPaso, trackFin } from '../../../utils/trazabilidad';
 
@@ -12,6 +13,9 @@ const NUMERO_ASESOR = process.env.NUMERO_ASESOR_HUMANO || '573158070460';
 const pqrsFlow = addKeyword(['280525006', 'PQRS', 'pqrs', '6', 'peticiones', 'quejas', 'reclamos', 'solicitudes'])
     .addAction(async (ctx, ctxFn) => {
         try {
+            // T-04: entrada por keyword sin welcomeFlow. Fuera de horario se vuelve al menú, que antes
+            // terminaba en silencio sin sesión. Se abre (o renueva) antes de guardar claves.
+            abrirOSostenerSesion(ctx.from);
             await ctxFn.state.update({ flujoSeleccionadoMenu: 'pqrs' });
             trackPaso(ctx.from, 'pqrs.envio');
             if (isWorkingHours()) {

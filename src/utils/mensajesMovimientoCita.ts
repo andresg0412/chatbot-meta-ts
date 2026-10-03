@@ -8,6 +8,8 @@
 //
 // Privacidad (regla transversal): ningún mensaje menciona la especialidad ni el tipo de servicio.
 
+import { formatearFechaLarga, formatearHoraHHMM } from './fechaHora';
+
 export const CAUSE_GLOBHO_ERROR = 'GLOBHO_ERROR';
 
 export const MENSAJE_MOVIMIENTO_CITA_RESTAURADA =
@@ -36,4 +38,37 @@ export function mensajeErrorGlobhoMovimiento(citaAnteriorRestaurada?: boolean | 
     return citaAnteriorRestaurada === true
         ? MENSAJE_MOVIMIENTO_CITA_RESTAURADA
         : mensajeMovimientoCitaNoRestaurada();
+}
+
+// ---------------------------------------------------------------------------
+// T-01 (informe QA, sección 10 "TB-03"): 502 `POSTGRES_DESPUES_DE_GLOBHO`. La cita SÍ quedó movida en
+// Globho, pero no quedó registrada en nuestro sistema. No se invita a reintentar (un segundo intento
+// movería otra vez una cita que ya se movió): se deriva al asesor. Contrato:
+// `{ code:502, cause:'POSTGRES_DESPUES_DE_GLOBHO', data:{ cita_creada_en_globho:true,
+//    cita_anterior_restaurada:false, [solo cascada: nueva_fecha_cita 'YYYY-MM-DD', nueva_hora_cita 'HH:mm:ss'] } }`.
+// ---------------------------------------------------------------------------
+
+export const CAUSE_POSTGRES_DESPUES_DE_GLOBHO = 'POSTGRES_DESPUES_DE_GLOBHO';
+
+/** `true` si la respuesta del backend es el 502 "Globho movió la cita y falló Postgres" del contrato. */
+export function esErrorPostgresTrasGlobho(code?: number, cause?: string | null): boolean {
+    return code === 502 && cause === CAUSE_POSTGRES_DESPUES_DE_GLOBHO;
+}
+
+/**
+ * Texto para el 502 POSTGRES_DESPUES_DE_GLOBHO. `fecha` 'YYYY-MM-DD' y `hora` 'HH:mm[:ss]' (se formatean
+ * como fecha larga y HH:mm); si faltan, se omiten. Nunca invita a reintentar.
+ */
+export function mensajeCitaMovidaPendienteVerificacion(fecha?: unknown, hora?: unknown): string {
+    const fechaLarga = formatearFechaLarga(fecha);
+    const horaHHMM = formatearHoraHHMM(hora);
+    const partes: string[] = [];
+    if (fechaLarga) partes.push(`📅 ${fechaLarga}`);
+    if (horaHHMM) partes.push(`🕐 ${horaHHMM}`);
+    const horario = partes.length > 0 ? ` (${partes.join(' ')})` : '';
+    return (
+        `Tu cita sí quedó movida al nuevo horario${horario}, pero necesitamos verificarla en nuestro sistema. ` +
+        'Un asesor la revisará; si quieres, comunícate con él:\n' +
+        `👉 https://wa.me/${numeroAsesorHumano()}`
+    );
 }

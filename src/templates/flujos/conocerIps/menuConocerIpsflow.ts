@@ -1,14 +1,13 @@
 import { createBot, createProvider, createFlow, addKeyword, utils, EVENTS } from '@builderbot/bot';
-import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
+import { abrirOSostenerSesion } from '../../../utils/proactiveSessionTimeout';
 import { registrarActividadBot } from '../../../services/apiService';
 import { trackPaso, trackFin } from '../../../utils/trazabilidad';
 
 const menuConocerIpsFlow = addKeyword('280525001')
-    .addAction(async (ctx, { flowDynamic, endFlow }) => {
-        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow, { paso: 'conocer_ips.menu' });
-        if (!sessionValid) {
-            return endFlow();
-        }
+    .addAction(async (ctx) => {
+        // T-04: se puede tocar la opción de una lista vieja sin sesión activa; antes terminaba en silencio.
+        // Es informativo: se abre (o renueva) la sesión y se sigue.
+        abrirOSostenerSesion(ctx.from, { paso: 'conocer_ips.menu' });
         await registrarActividadBot('chat_flujo_conocer_ips', ctx.from);
     })
     .addAnswer(

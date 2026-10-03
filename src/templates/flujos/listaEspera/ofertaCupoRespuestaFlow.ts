@@ -16,7 +16,15 @@ import { responderOfertaCupo, registrarActividadBot } from '../../../services/ap
 import { sanitizeString, isValidDocumentNumber } from '../../../utils/sanitize';
 import { KW_SI_LO_TOMO, KW_NO_PUEDO, OPCIONES_REGEX } from '../keywordsBotones';
 import { formatearFechaLarga, formatearHoraHHMM } from '../../../utils/fechaHora';
-import { CAUSE_GLOBHO_ERROR, esErrorGlobhoMovimiento, mensajeErrorGlobhoMovimiento } from '../../../utils/mensajesMovimientoCita';
+import {
+    CAUSE_GLOBHO_ERROR,
+    CAUSE_POSTGRES_DESPUES_DE_GLOBHO,
+    esErrorGlobhoMovimiento,
+    esErrorPostgresTrasGlobho,
+    mensajeErrorGlobhoMovimiento,
+    mensajeCitaMovidaPendienteVerificacion,
+} from '../../../utils/mensajesMovimientoCita';
+import { closeUserSession } from '../../../utils/proactiveSessionManager';
 import { trackRespuestaCampana, trackRespuestaCampanaUnaVez, trackPaso, trackNoEntendido, trackIdentificacion, trackErrorBackend, trackFin, cerrarSesionTraza, asegurarSesionTraza } from '../../../utils/trazabilidad';
 
 // Runbook B2: antes `new Date('YYYY-MM-DD')` (medianoche UTC) formateado en la zona local del proceso
@@ -80,6 +88,29 @@ const ofertaCupoAccionFlow = addKeyword(EVENTS.ACTION)
                     cita_anterior_restaurada: citaAnteriorRestaurada
                 });
                 await flowDynamic(mensajeErrorGlobhoMovimiento(citaAnteriorRestaurada));
+                return endFlow();
+            }
+            if (esErrorPostgresTrasGlobho(resultado.code, resultado.cause)) {
+                // T-01: la cita SÍ quedó movida en Globho al cupo ofrecido, pero no quedó registrada en
+                // Postgres. El backend ya dejó la oferta aceptada y el cupo asignado: reintentar no tiene
+                // sentido. Se muestra el nuevo horario (viene en `data`) y se deriva al asesor.
+                trackErrorBackend(ctx.from, 'lista_espera.oferta_respuesta', '/chatbot/listaespera/cascada/respuesta', {
+                    siempre: true,
+                    cause: CAUSE_POSTGRES_DESPUES_DE_GLOBHO,
+                    httpStatus: 502,
+                });
+                trackFin(ctx.from, 'lista_espera', 'revision_manual', {
+                    paso: 'lista_espera.oferta_respuesta',
+                    metadata: { origen_movimiento: 'oferta_cupo', cause: CAUSE_POSTGRES_DESPUES_DE_GLOBHO, cita_creada_en_globho: true },
+                });
+                await registrarActividadBot('chat_flujo_lista_espera', ctx.from, {
+                    step: 'respuesta_oferta',
+                    resultado: 'postgres_despues_de_globho',
+                    code: 502,
+                    cita_creada_en_globho: true
+                });
+                await flowDynamic(mensajeCitaMovidaPendienteVerificacion(resultado.nuevaFechaCita, resultado.nuevaHoraCita));
+                closeUserSession(ctx.from, 'completado');
                 return endFlow();
             }
             trackErrorBackend(ctx.from, 'lista_espera.oferta_respuesta', '/chatbot/listaespera/cascada/respuesta', { siempre: true });

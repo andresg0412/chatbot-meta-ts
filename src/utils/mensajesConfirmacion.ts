@@ -120,7 +120,13 @@ function respuestaFallo(resultado: FalloConfirmacion, frase: string, intentosPre
 
 /** Adapta la respuesta de `responderRecordatorio(..., 'confirma')` al mismo resultado del camino A. */
 export function resultadoConfirmacionDesdeRecordatorio(resp: ResultadoRespuestaRecordatorio): ResultadoConfirmacion {
-    if (resp.ok === false) return resp;
+    if (resp.ok === false) {
+        // Los 409 del contrato TB-05 no existen en el camino A: para estos mensajes equivalen a "no hay
+        // una cita que confirmar".
+        if (resp.causa === 'CITA_AMBIGUA' || resp.causa === 'CITA_NO_VALIDA') return { ok: false, causa: 'CITA_NOT_FOUND' };
+        if (resp.causa === 'RESPUESTA_EN_PROCESO') return { ok: false, causa: 'ERROR' };
+        return resp as FalloConfirmacion;
+    }
     const { estado_resultado, fecha_cita, hora_cita } = resp.data;
     const resultado: ResultadoConfirmacion = {
         ok: true,

@@ -6,6 +6,7 @@ jest.mock('axios', () => ({ __esModule: true, default: { post: jest.fn(), get: j
 jest.mock('../../utils/proactiveSessionManager', () => ({
     setBotInstance: jest.fn(),
     updateUserActivity: jest.fn(),
+    renovarActividadSesion: jest.fn(() => 'activa'),
     isSessionExpired: jest.fn(() => false),
     closeUserSession: jest.fn(),
     getRemainingSessionTime: jest.fn(() => 60 * 60 * 1000),
@@ -14,12 +15,20 @@ jest.mock('../../utils/proactiveSessionManager', () => ({
     cleanupOldSessionsWithoutNotification: jest.fn(),
     getActiveSessionsCount: jest.fn(() => 0),
 }));
+jest.mock('../../utils/listaEsperaCascadaPoller', () => ({
+    ...jest.requireActual('../../utils/listaEsperaCascadaPoller'),
+    programarTickCascadaRetrasado: jest.fn(),
+}));
 jest.mock('../../services/apiService', () => {
     const real = jest.requireActual('../../services/apiService');
     return {
         ...real,
         registrarActividadBot: jest.fn(async () => true),
         responderRecordatorio: jest.fn(async () => ({ ok: true, data: { accion: 'no_asistira', agenda_id: 'AG000001', persistido: true } })),
+        consultarCitasRecordatorio: jest.fn(async () => ({ ok: true, origen: 'recordatorio', citas: [{
+            cita_id: 'AG000001', agenda_id_externa: 5206177, fecha_cita: '2026-10-10', hora_cita: '07:50',
+            profesional: 'Ana Pérez', tipo_recordatorio: '24h', estado_agenda: 'Pendiente',
+        }] })),
         responderOfertaCupo: jest.fn(async () => ({ ok: true, code: 200, data: { registrado: true } })),
         confirmarCitaCampahna: jest.fn(async () => ({ ok: true, estado: 'confirmada' })),
     };
@@ -95,7 +104,7 @@ beforeEach(() => {
 });
 
 it('"Necesito cancelar" + documento inválido + documento válido → UNA campana_respuesta (campana null, cancelar), sin texto del paciente', async () => {
-    const from = await conversar(['Necesito cancelar', 'me siento mal', '1234567890']);
+    const from = await conversar(['Necesito cancelar', 'me siento mal', '1234567890', 'Sí, cancelar']);
     const respuestas = eventosDe(from, 'campana_respuesta');
     expect(respuestas).toHaveLength(1);
     expect(respuestas[0]).toEqual(expect.objectContaining({ resultado: 'cancelar', flujo: 'recordatorio', paso: 'recordatorio.necesito_cancelar' }));
@@ -136,13 +145,17 @@ it('"Confirmar" con ya_confirmada → flujo_fin cita_confirmada; con CITA_CANCEL
 
 it('"Confirmo asistencia" confirmada → flujo_fin recordatorio cita_confirmada con agenda_id; CITA_NOT_FOUND → no', async () => {
     mockedApi.responderRecordatorio
-        .mockResolvedValueOnce({ ok: true, data: { accion: 'confirma', agenda_id: 'AG000002', persistido: true, estado_resultado: 'confirmada' } })
-        .mockResolvedValueOnce({ ok: false, causa: 'CITA_NOT_FOUND' })
-        .mockResolvedValueOnce({ ok: false, causa: 'CITA_NOT_FOUND' });
+        .mockResolvedValueOnce({ ok: true, data: { accion: 'confirma', agenda_id: 'AG000002', persistido: true, estado_resultado: 'confirmada' } });
+    const sinCitas = { ok: true as const, origen: 'citas_activas' as const, citas: [] as any[] };
+    mockedApi.consultarCitasRecordatorio
+        .mockResolvedValueOnce({ ok: true, origen: 'recordatorio', citas: [{ cita_id: 'AG000002' } as any] })
+        .mockResolvedValueOnce(sinCitas)
+        .mockResolvedValueOnce(sinCitas);
     const ok = await conversar(['Confirmo asistencia', '1234567890']);
     const noEncontrada = await conversar(['Confirmo asistencia', '1234567890', '1234567891']);
     expect(eventosDe(ok, 'flujo_fin')[0]).toEqual(expect.objectContaining({ flujo: 'recordatorio', resultado: 'cita_confirmada', agenda_id: 'AG000002', paso: 'recordatorio.confirmo' }));
     expect(eventosDe(noEncontrada, 'flujo_fin')).toHaveLength(0);
+    expect(mockedApi.responderRecordatorio).toHaveBeenCalledTimes(1);
 });
 
 it('"Confirmar" (24h) → campana execute', async () => {

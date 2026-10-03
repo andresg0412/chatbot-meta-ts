@@ -1,10 +1,14 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
+import { abrirOSostenerSesion } from '../../../utils/proactiveSessionTimeout';
 import { resolve } from 'path';
 import { volverMenuPrincipal } from '../common';
 import { trackPaso, trackFin } from '../../../utils/trazabilidad';
 
 const conveniosStepConocer = addKeyword(['280525012', 'Convenios', 'convenios', 'CONVENIOS'])
     .addAction(async (ctx, ctxFn) => {
+        // T-04: entrada por keyword sin welcomeFlow: abrir (o renovar) la sesión para que el
+        // "¿Que deseas hacer?" del final (volverMenuPrincipal) no termine en silencio.
+        abrirOSostenerSesion(ctx.from);
         trackPaso(ctx.from, 'conocer_ips.convenios');
         trackFin(ctx.from, 'conocer_ips', 'informativo', { paso: 'conocer_ips.convenios' });
         // Usar resolve para obtener una ruta absoluta a la imagen en la carpeta assets

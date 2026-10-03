@@ -8,8 +8,10 @@ describe('catálogo de pasos de trazabilidad', () => {
         expect(new Set(ids).size).toBe(ids.length);
     });
 
-    it('tiene los 67 pasos de la tabla 11.3', () => {
-        expect(CATALOGO_PASOS).toHaveLength(67);
+    // 67 de la tabla 11.3 + 2 de TB-05/TBOT-03 (recordatorio.selecciona_cita y recordatorio.confirma_cancelar),
+    // pendientes de sembrar en `catalogo_pasos` del backend.
+    it('tiene los 69 pasos (67 de la tabla 11.3 + 2 de TB-05/TBOT-03)', () => {
+        expect(CATALOGO_PASOS).toHaveLength(69);
     });
 
     it('cada id tiene la forma <prefijo>.<nombre> y cabe en VARCHAR(60); flujo en VARCHAR(30)', () => {

@@ -4,7 +4,8 @@ import {
   updateUserActivity,
   closeUserSession,
   expirarSesionPorInactividad,
-  getRemainingSessionTime
+  getRemainingSessionTime,
+  renovarActividadSesion,
 } from './proactiveSessionManager';
 import { trackPaso, ResultadoPaso } from './trazabilidad';
 import type { PasoId } from '../constants/pasosTrazabilidad';
@@ -15,6 +16,25 @@ export interface TrazaPaso {
   /** Flujo en curso; si se omite se usa el del catálogo (o el de la sesión para los pasos `comun.*`). */
   flujo?: string;
   resultado?: ResultadoPaso;
+}
+
+/**
+ * Mensaje cuando un paso termina porque la sesión ya no está activa (T-04 del informe QA). Antes ese
+ * final era silencioso. Sin la palabra "sesión" (regla de privacidad: no usar términos de servicio).
+ */
+export const MENSAJE_CONVERSACION_VENCIDA =
+  'Tu conversación anterior terminó por inactividad. Escribe *hola* para empezar de nuevo. 😊';
+
+/**
+ * Punto de entrada por keyword sin pasar por welcomeFlow (T-04): abre la sesión si no hay una activa (o
+ * la que había ya venció) y si no, la renueva. Nunca termina el flujo. Llamarla ANTES de guardar claves en
+ * el state (si la sesión había vencido, el cierre limpia el state).
+ */
+export function abrirOSostenerSesion(userId: string, traza?: TrazaPaso): void {
+  renovarActividadSesion(userId, 'keyword');
+  if (traza) {
+    trackPaso(userId, traza.paso, traza.resultado ?? 'mostrado', traza.flujo ? { flujo: traza.flujo } : undefined);
+  }
 }
 
 /**
@@ -46,12 +66,15 @@ export async function checkSessionTimeout(
 
     // Para compatibilidad con el sistema anterior, enviar mensaje si se proporciona flowDynamic
     // (aunque normalmente el mensaje ya se envió proactivamente)
-    //if (flowDynamic) {
-    //  await flowDynamic(
-    //    '⏰ Tu sesión ha expirado por inactividad.\n\n' +
-    //    'Para continuar, escribe *"hola"* para iniciar una nueva conversación.'
-    //  );
-    //}
+    // T-04: el paso que llama termina con endFlow(); antes lo hacía en silencio. Es la respuesta a un
+    // mensaje del paciente (dentro de la ventana de 24 h), no un mensaje proactivo.
+    if (flowDynamic) {
+      try {
+        await flowDynamic(MENSAJE_CONVERSACION_VENCIDA);
+      } catch {
+        // si no se pudo enviar, el paso termina igual
+      }
+    }
 
     return false; // Sesión expirada
   }

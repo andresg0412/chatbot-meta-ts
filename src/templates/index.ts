@@ -126,6 +126,10 @@ import {
     necesitoCancelarAccionFlow,
     noPodreAsistirFlow,
     noPodreAsistirAccionFlow,
+    // TB-05 / TBOT-03: elegir la cita y confirmar antes de cancelar
+    seleccionCitaRecordatorioFlow,
+    confirmacionCancelarRecordatorioFlow,
+    botonesConfirmarCancelacionFlow,
 } from './flujos/recordatorios'
 import { isRecordatoriosBotonesEnabled } from '../utils/listaEsperaFlags';
 
@@ -143,6 +147,8 @@ const flujosRegistradosCompletos = [
     confirmoAsistenciaFlow,
     necesitoCancelarFlow,
     noPodreAsistirFlow,
+    // "Sí, cancelar" / "No, mantener" fuera de su captura: antes de step1CencelarCita ('cancelar').
+    botonesConfirmarCancelacionFlow,
     ofertaCupoAceptaDocumentoFlow,
     ofertaCupoRechazaDocumentoFlow,
     welcomeFlow,
@@ -224,6 +230,8 @@ const flujosRegistradosCompletos = [
     confirmoAsistenciaAccionFlow,
     necesitoCancelarAccionFlow,
     noPodreAsistirAccionFlow,
+    seleccionCitaRecordatorioFlow,
+    confirmacionCancelarRecordatorioFlow,
     step5Reprogramar,
     step6Reprogramar,
     step7Reprogramar,
@@ -253,7 +261,12 @@ const flujosRegistradosCompletos = [
 // frase a mano cancelaba la cita más próxima sin confirmación; ahora sigue yendo a los flujos de
 // siempre (p. ej. "Necesito cancelar" → cancelar cita guiado). Se evalúa al arrancar: cambiar el flag
 // exige `pm2 restart bot-meta --update-env`, igual que el resto de interruptores.
-const FLUJOS_BOTONES_RECORDATORIO = [confirmoAsistenciaFlow, necesitoCancelarFlow, noPodreAsistirFlow];
+export const FLUJOS_BOTONES_RECORDATORIO = [
+    confirmoAsistenciaFlow,
+    necesitoCancelarFlow,
+    noPodreAsistirFlow,
+    botonesConfirmarCancelacionFlow,
+];
 
 export function construirFlujosRegistrados(recordatoriosBotones: boolean = isRecordatoriosBotonesEnabled()) {
     return recordatoriosBotones

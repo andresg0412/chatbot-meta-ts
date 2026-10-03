@@ -132,3 +132,57 @@ describe('responderOfertaCupo', () => {
         expect(await responderOfertaCupo('d', 'c', 'acepta')).toMatchObject({ ok: false, code: 409, cause: 'CUPO_YA_ASIGNADO' });
     });
 });
+
+// T-01 (informe QA, sección 10 "TB-03"): 502 POSTGRES_DESPUES_DE_GLOBHO, la cita SÍ quedó movida en Globho.
+function body502Postgres(data: Record<string, unknown> = { cita_creada_en_globho: true, cita_anterior_restaurada: false }) {
+    return {
+        isError: true,
+        cause: 'POSTGRES_DESPUES_DE_GLOBHO',
+        message: 'La cita se movió en Globho pero no se registró en el sistema',
+        code: 502,
+        timestamp: '2026-10-03T15:00:00.000Z',
+        data,
+    };
+}
+
+describe('POSTGRES_DESPUES_DE_GLOBHO', () => {
+    it('reagendarCita: lo distingue de GLOBHO_ERROR y de ERROR (sin horario: el contrato de reagendar no lo trae)', async () => {
+        post.mockRejectedValueOnce(errorHttp(502, body502Postgres()));
+        expect(await reagendarCita(BODY_REAGENDAR)).toEqual({ ok: false, error: 'POSTGRES_DESPUES_DE_GLOBHO', code: 502 });
+        expect(metricCita).not.toHaveBeenCalled();
+    });
+
+    it('reagendarCita: si el backend manda nueva_fecha_cita/nueva_hora_cita, se devuelven', async () => {
+        post.mockRejectedValueOnce(errorHttp(502, body502Postgres({
+            cita_creada_en_globho: true, cita_anterior_restaurada: false, nueva_fecha_cita: '2026-10-10', nueva_hora_cita: '07:00:00',
+        })));
+        expect(await reagendarCita(BODY_REAGENDAR)).toEqual({
+            ok: false, error: 'POSTGRES_DESPUES_DE_GLOBHO', code: 502, nuevaFechaCita: '2026-10-10', nuevaHoraCita: '07:00:00',
+        });
+    });
+
+    it('reagendarCita: la misma cause con otro status no se reconoce (contrato: 502)', async () => {
+        post.mockRejectedValueOnce(errorHttp(500, body502Postgres()));
+        expect(await reagendarCita(BODY_REAGENDAR)).toEqual({ ok: false, error: 'ERROR', code: 500 });
+    });
+
+    it('responderOfertaCupo: extrae cause y el nuevo horario, conserva el body y no marca citaAnteriorRestaurada', async () => {
+        const body = body502Postgres({
+            cita_creada_en_globho: true, cita_anterior_restaurada: false, nueva_fecha_cita: '2026-10-10', nueva_hora_cita: '07:00:00',
+        });
+        post.mockRejectedValueOnce(errorHttp(502, body));
+        const r = await responderOfertaCupo('d', 'c', 'acepta');
+        expect(r).toEqual({
+            ok: false, code: 502, data: body, cause: 'POSTGRES_DESPUES_DE_GLOBHO', nuevaFechaCita: '2026-10-10', nuevaHoraCita: '07:00:00',
+        });
+        expect(r).not.toHaveProperty('citaAnteriorRestaurada');
+    });
+
+    it('responderOfertaCupo: sin horario en data, no inventa campos', async () => {
+        post.mockRejectedValueOnce(errorHttp(502, body502Postgres()));
+        const r = await responderOfertaCupo('d', 'c', 'acepta');
+        expect(r).toMatchObject({ ok: false, code: 502, cause: 'POSTGRES_DESPUES_DE_GLOBHO' });
+        expect(r).not.toHaveProperty('nuevaFechaCita');
+        expect(r).not.toHaveProperty('nuevaHoraCita');
+    });
+});

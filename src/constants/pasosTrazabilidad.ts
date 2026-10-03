@@ -81,6 +81,10 @@ export const CATALOGO_PASOS = [
     { paso: 'recordatorio.confirmo', flujo: 'recordatorio', orden: 1, es_final: true },
     { paso: 'recordatorio.necesito_cancelar', flujo: 'recordatorio', orden: 1, es_final: true },
     { paso: 'recordatorio.no_podre_asistir', flujo: 'recordatorio', orden: 1, es_final: true },
+    // TB-05 / TBOT-03 (2026-10-03): elegir la cita y confirmar la cancelación. PENDIENTE en el backend:
+    // agregar estas 2 filas a `catalogo_pasos` (semilla de la migración 029) y a la tabla 11.3.
+    { paso: 'recordatorio.selecciona_cita', flujo: 'recordatorio', orden: 2, es_final: false },
+    { paso: 'recordatorio.confirma_cancelar', flujo: 'recordatorio', orden: 3, es_final: false },
     { paso: 'lista_espera.oferta_respuesta', flujo: 'lista_espera', orden: 1, es_final: true },
     { paso: 'lista_espera.retiro', flujo: 'lista_espera', orden: 1, es_final: true },
     { paso: 'legado.entrada', flujo: 'legado', orden: 0, es_final: false },
