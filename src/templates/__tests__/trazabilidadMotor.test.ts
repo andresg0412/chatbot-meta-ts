@@ -27,7 +27,8 @@ jest.mock('../../services/apiService', () => {
 
 import { EventEmitter } from 'events';
 import { createBot, MemoryDB } from '@builderbot/bot';
-import templates from '../index';
+import { construirTemplates } from '../index';
+const templates = construirTemplates(true);
 import * as api from '../../services/apiService';
 import { _estadoParaPruebas, _resetParaPruebas } from '../../utils/trazabilidad';
 

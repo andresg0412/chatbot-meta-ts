@@ -3,6 +3,7 @@ import { sanitizeString } from '../../../utils/sanitize';
 import { mapearTipoDocumento, KEYWORDS_TIPO_DOCUMENTO, OPCIONES_TIPO_DOCUMENTO } from '../../../utils/datosPacienteNuevo';
 import { step15AgendarCita } from './step15AgendarCita';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
+import { hayAgendamientoEnCurso, MENSAJE_CONVERSACION_TERMINADA } from '../../../utils/estadoConversacion';
 import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion } from '../../../utils/trazabilidad';
 
 // IMPORTANTE: los ids de la lista llevan "agindarcita" (no "agendarcita") A PROPÓSITO. @builderbot enruta
@@ -14,7 +15,12 @@ import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentifi
 // mostrar la lista, en vez de caer en otro flujo o enviarse al backend.
 
 const step14AgendarCita2 = addKeyword(KEYWORDS_TIPO_DOCUMENTO)
-    .addAction(async (ctx, { state, gotoFlow, flowDynamic }) => {
+    .addAction(async (ctx, { state, gotoFlow, flowDynamic, endFlow }) => {
+        // TBOT-02: entrada por keyword (lista/botón). Si no hay un agendamiento en curso (conversación
+        // cerrada y state limpio), no se continúa sin contexto.
+        if (!hayAgendamientoEnCurso(state)) {
+            return endFlow(MENSAJE_CONVERSACION_TERMINADA);
+        }
         const tipoDocRaw = ctx.listResponse ? ctx.listResponse.title : ctx.body;
         const tipoDoc = sanitizeString(tipoDocRaw, 30);
         const tipoDocumentoCodigo = mapearTipoDocumento(tipoDoc);

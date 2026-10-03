@@ -18,6 +18,8 @@ import {
   InfoSesionTraza,
   ActualizacionSesionTraza,
 } from './trazabilidad';
+// TBOT-02: toda sesión que termina borra el state de @builderbot del número (ver estadoConversacion.ts).
+import { limpiarEstadoConversacion } from './estadoConversacion';
 
 // Ruta del archivo JSON para persistencia de sesiones
 const SESSIONS_DB_PATH = path.join(__dirname, 'userSessionsDB.json');
@@ -139,6 +141,7 @@ async function closeSessionProactively(userId: string, motivo: MotivoFinSesion =
   session.timerId = undefined;
   saveUserSessions();
   emitirSesionFin(userId, session, motivoPorInactividad(session, motivo));
+  limpiarEstadoConversacion(userId);
   // Sin await: la estadística nunca bloquea (registrarActividadBot ya no espera al backend).
   registrarActividadBot('chat_abandonado', userId, {}, {
     sesion_id: session.sesionId ?? null,
@@ -199,6 +202,9 @@ export function updateUserActivity(userId: string, disparador: DisparadorSesion 
     // Una sesión activa que ya venció (timer perdido) se cierra antes de abrir la nueva.
     if (existingSession?.isActive && existingSession.sesionId) {
       emitirSesionFin(userId, existingSession, motivoPorInactividad(existingSession, 'timeout'));
+      // Cierre de la sesión vencida: su state no pasa a la nueva. Solo se llega aquí al abrir una sesión
+      // (welcome o respuesta a plantilla, antes de cualquier captura), nunca a mitad de un flujo.
+      limpiarEstadoConversacion(userId);
     }
     const sesionId = randomUUID();
     userSessions[userId] = {
@@ -263,6 +269,9 @@ export function closeUserSession(userId: string, motivo: MotivoFinSesion = 'comp
     session.timerId = undefined;
     saveUserSessions();
   }
+  // Fin de sesión (fin de flujo, "Salir", rate limit, crisis…): la próxima interacción empieza sin el
+  // paciente, el documento ni el convenio de esta. Todos los llamadores leen lo que necesitan antes.
+  limpiarEstadoConversacion(userId);
 }
 
 /**
@@ -283,6 +292,7 @@ export function expirarSesionPorInactividad(userId: string): boolean {
   session.timerId = undefined;
   saveUserSessions();
   emitirSesionFin(userId, session, motivoPorInactividad(session, 'timeout'));
+  limpiarEstadoConversacion(userId);
   registrarActividadBot('chat_abandonado', userId, {}, {
     sesion_id: session.sesionId ?? null,
     flujo: session.ultimoFlujo ?? null,
@@ -360,6 +370,7 @@ export function restoreActiveTimers(): void {
           emitirSesionFin(userId, session, 'timeout_12h');
           session.isActive = false;
           session.timerId = undefined;
+          limpiarEstadoConversacion(userId);
           expiredUnsafeCount++;
           console.log(`🧹 Sesión ${userId} cerrada silenciosamente: ${Math.floor(timeSinceLastActivity / (60 * 60 * 1000))} horas de inactividad`);
         } else {
@@ -419,6 +430,7 @@ export function cleanupOldSessionsWithoutNotification(): void {
     if (session.isActive && timeSinceLastActivity > META_MESSAGE_LIMIT_MS) {
       emitirSesionFin(userId, session, 'timeout_12h');
       session.isActive = false;
+      limpiarEstadoConversacion(userId);
       if (session.timerId) {
         clearTimeout(session.timerId);
         session.timerId = undefined;

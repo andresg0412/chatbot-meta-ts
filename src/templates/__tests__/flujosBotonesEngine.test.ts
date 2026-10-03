@@ -29,7 +29,8 @@ jest.mock('../../services/apiService', () => {
 
 import { EventEmitter } from 'events';
 import { createBot, MemoryDB } from '@builderbot/bot';
-import templates from '../index';
+import { construirTemplates } from '../index';
+const templates = construirTemplates(true);
 import * as api from '../../services/apiService';
 import { MENSAJE_RETIRO_EXITOSO, MENSAJE_RETIRO_NO_INSCRITO } from '../flujos/listaEspera/retiroListaEsperaFlow';
 import {

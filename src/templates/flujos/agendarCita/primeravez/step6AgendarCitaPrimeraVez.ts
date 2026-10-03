@@ -2,10 +2,16 @@ import { addKeyword, EVENTS } from '@builderbot/bot';
 import { step8AgendarCita } from '../step8AgendarCita';
 import { volverMenuPrincipal } from '../../common/volverMenuPrincipal';
 import { checkSessionTimeout } from '../../../../utils/proactiveSessionTimeout';
+import { hayAgendamientoEnCurso, MENSAJE_CONVERSACION_TERMINADA } from '../../../../utils/estadoConversacion';
 import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion } from '../../../../utils/trazabilidad';
 
 const step6AgendarCitaPrimeraVezPsicologiaAtencion = addKeyword(['psicologia_infantil', 'psicologia_adolescente', 'psicologia_adulto', 'psicologia_adulto_mayor', 'psicologia_pareja_familia'])
-    .addAction(async (ctx, { state, gotoFlow }) => {
+    .addAction(async (ctx, { state, gotoFlow, endFlow }) => {
+        // TBOT-02: entrada por keyword (lista/botón). Si no hay un agendamiento en curso (conversación
+        // cerrada y state limpio), no se continúa sin contexto.
+        if (!hayAgendamientoEnCurso(state)) {
+            return endFlow(MENSAJE_CONVERSACION_TERMINADA);
+        }
         trackPaso(ctx.from, 'agendar.pv06_tipo_atencion', 'ok');
         const atencionPsicologica = ctx.listResponse ? ctx.listResponse.title : ctx.body;
         await state.update({ atencionPsicologica: atencionPsicologica });
