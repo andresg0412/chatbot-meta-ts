@@ -5,6 +5,7 @@
 jest.mock('../../utils/proactiveSessionManager', () => ({
     setBotInstance: jest.fn(),
     updateUserActivity: jest.fn(),
+    renovarActividadSesion: jest.fn(() => 'activa'),
     isSessionExpired: jest.fn(() => false),
     closeUserSession: jest.fn(),
     getRemainingSessionTime: jest.fn(() => 60 * 60 * 1000),

@@ -58,6 +58,10 @@ jest.mock('../../services/apiService', () => {
         cancelarCita: jest.fn(async () => 'ok'),
         responderOfertaCupo: jest.fn(async () => ({ ok: true, code: 200, data: { registrado: true } })),
         responderRecordatorio: jest.fn(async () => ({ ok: true, data: { accion: 'confirma', persistido: true } })),
+        consultarCitasRecordatorio: jest.fn(async () => ({ ok: true, origen: 'recordatorio', citas: [{
+            cita_id: 'AG000001', agenda_id_externa: 9001, fecha_cita: '2099-01-10', hora_cita: '08:00',
+            profesional: 'Prof Uno', tipo_recordatorio: '24h', estado_agenda: 'Pendiente',
+        }] })),
         confirmarCitaCampahna: jest.fn(async () => ({ ok: true, estado: 'confirmada' })),
     };
 });
@@ -362,7 +366,8 @@ describe('TBOT-02: las respuestas a plantillas siguen funcionando', () => {
                 const from = nuevoNumero();
                 await sembrar(from, { numeroDocRecordatorio: '9999999', numeroDoc: '9999999' });
                 await enviar(from, ['Confirmo asistencia', '1234567890']);
-                expect(api.responderRecordatorio).toHaveBeenCalledWith(from, '1234567890', 'confirma');
+                expect(api.consultarCitasRecordatorio).toHaveBeenCalledWith('1234567890', from);
+                expect(api.responderRecordatorio).toHaveBeenCalledWith(from, '1234567890', 'confirma', 'AG000001');
                 await enviar(from, ['Confirmo', '1234567891']);
                 expect(api.confirmarCitaCampahna).toHaveBeenCalledWith(from, '1234567891');
             });

@@ -5,6 +5,7 @@
 jest.mock('../../utils/proactiveSessionManager', () => ({
     setBotInstance: jest.fn(),
     updateUserActivity: jest.fn(),
+    renovarActividadSesion: jest.fn(() => 'activa'),
     isSessionExpired: jest.fn(() => false),
     closeUserSession: jest.fn(),
     getRemainingSessionTime: jest.fn(() => 60 * 60 * 1000),
@@ -14,12 +15,23 @@ jest.mock('../../utils/proactiveSessionManager', () => ({
     getActiveSessionsCount: jest.fn(() => 0),
 }));
 
+jest.mock('../../utils/listaEsperaCascadaPoller', () => ({
+    ...jest.requireActual('../../utils/listaEsperaCascadaPoller'),
+    programarTickCascadaRetrasado: jest.fn(),
+}));
+
+const CITA_RECORDATORIO = {
+    cita_id: 'A1000001', agenda_id_externa: 5206177, fecha_cita: '2026-10-10', hora_cita: '07:50',
+    profesional: 'Ana Pérez', tipo_recordatorio: '24h', estado_agenda: 'Pendiente',
+};
+
 jest.mock('../../services/apiService', () => {
     const real = jest.requireActual('../../services/apiService');
     return {
         ...real,
         registrarActividadBot: jest.fn(async () => true),
         responderRecordatorio: jest.fn(async () => ({ ok: true, data: { accion: 'confirma', persistido: true } })),
+        consultarCitasRecordatorio: jest.fn(async () => ({ ok: true, origen: 'recordatorio', citas: [CITA_RECORDATORIO] })),
         responderOfertaCupo: jest.fn(async () => ({ ok: true, code: 200, data: { registrado: true } })),
         consultarListaEsperaPorDocumento: jest.fn(async () => ({ ok: true, encontrado: true, inscripciones: [] })),
         retirarListaEspera: jest.fn(async () => true),
@@ -36,9 +48,9 @@ import { MENSAJE_RETIRO_EXITOSO, MENSAJE_RETIRO_NO_INSCRITO } from '../flujos/li
 import {
     MENSAJE_DOCUMENTO_FINAL,
     MENSAJE_DOCUMENTO_REINTENTO,
-    MENSAJE_ERROR_RESPUESTA_RECORDATORIO,
 } from '../../utils/mensajesConfirmacion';
 import { MENSAJE_MOVIMIENTO_CITA_RESTAURADA, mensajeErrorGlobhoMovimiento } from '../../utils/mensajesMovimientoCita';
+import { mensajeErrorTecnicoRecordatorio } from '../../utils/mensajesRecordatorio';
 
 const mockedApi = api as jest.Mocked<typeof api>;
 
@@ -96,23 +108,30 @@ beforeEach(() => {
 });
 
 describe('Motor real de builderbot con los flujos registrados', () => {
-    it('"Confirmo asistencia" → pide documento → responderRecordatorio(confirma)', async () => {
+    it('"Confirmo asistencia" → pide documento → citas → responderRecordatorio(confirma, cita_id)', async () => {
         const salida = await conversar(['Confirmo asistencia', '1234567890']);
         expect(salida[0]).toMatch(/Para confirmar tu cita, por favor digita tu número de documento/);
-        expect(mockedApi.responderRecordatorio).toHaveBeenCalledWith(expect.any(String), '1234567890', 'confirma');
+        expect(mockedApi.consultarCitasRecordatorio).toHaveBeenCalledWith('1234567890', expect.any(String));
+        expect(mockedApi.responderRecordatorio).toHaveBeenCalledWith(expect.any(String), '1234567890', 'confirma', 'A1000001');
         expect(mockedApi.confirmarCitaCampahna).not.toHaveBeenCalled();
         expect(salida.join('\n')).toMatch(/quedó confirmada/);
     });
 
-    it('"Necesito cancelar" → flujo de recordatorio (no el de cancelar del menú) → no_asistira', async () => {
-        const salida = await conversar(['Necesito cancelar', '1234567890']);
+    it('"Necesito cancelar" → flujo de recordatorio (no el de cancelar del menú) → confirma → no_asistira', async () => {
+        const salida = await conversar(['Necesito cancelar', '1234567890', 'Sí, cancelar']);
         expect(salida[0]).toMatch(/Para cancelar tu cita, por favor digita tu número de documento/);
-        expect(mockedApi.responderRecordatorio).toHaveBeenCalledWith(expect.any(String), '1234567890', 'no_asistira');
+        expect(salida.join('\n')).toMatch(/¿Confirmas que deseas cancelarla\?/);
+        expect(mockedApi.responderRecordatorio).toHaveBeenCalledWith(expect.any(String), '1234567890', 'no_asistira', 'A1000001');
     });
 
-    it('"No podré asistir" → no_asistira', async () => {
-        await conversar(['No podré asistir', '1234567890']);
-        expect(mockedApi.responderRecordatorio).toHaveBeenCalledWith(expect.any(String), '1234567890', 'no_asistira');
+    it('"No podré asistir" → confirma → no_asistira', async () => {
+        await conversar(['No podré asistir', '1234567890', 'Sí, cancelar']);
+        expect(mockedApi.responderRecordatorio).toHaveBeenCalledWith(expect.any(String), '1234567890', 'no_asistira', 'A1000001');
+    });
+
+    it('"Necesito cancelar" sin confirmar NO cancela', async () => {
+        await conversar(['Necesito cancelar', '1234567890']);
+        expect(mockedApi.responderRecordatorio).not.toHaveBeenCalled();
     });
 
     it('"No puedo" (botón) → rechazo de oferta', async () => {
@@ -168,20 +187,21 @@ describe('Motor real de builderbot con los flujos registrados', () => {
             expect.objectContaining({ estado: 'ya_confirmado', resultado: 'exitoso' }));
     });
 
-    it('"Confirmo asistencia" con CITA_NOT_FOUND dos veces → un reintento y mensaje final', async () => {
-        mockedApi.responderRecordatorio
-            .mockResolvedValueOnce({ ok: false, causa: 'CITA_NOT_FOUND' })
-            .mockResolvedValueOnce({ ok: false, causa: 'CITA_NOT_FOUND' });
+    it('"Confirmo asistencia" sin citas dos veces → un reintento y mensaje final', async () => {
+        mockedApi.consultarCitasRecordatorio
+            .mockResolvedValueOnce({ ok: true, origen: 'citas_activas', citas: [] })
+            .mockResolvedValueOnce({ ok: false, causa: 'PACIENTE_NOT_FOUND', httpStatus: 404 });
         const salida = await conversar(['Confirmo asistencia', '1234567890', '1234567891']);
-        expect(mockedApi.responderRecordatorio).toHaveBeenCalledTimes(2);
+        expect(mockedApi.consultarCitasRecordatorio).toHaveBeenCalledTimes(2);
+        expect(mockedApi.responderRecordatorio).not.toHaveBeenCalled();
         expect(salida).toContain(MENSAJE_DOCUMENTO_REINTENTO);
         expect(salida).toContain(MENSAJE_DOCUMENTO_FINAL);
     });
 
     it('"Necesito cancelar" con error técnico → mensaje de error técnico, no "no encontramos"', async () => {
         mockedApi.responderRecordatorio.mockResolvedValueOnce({ ok: false, causa: 'ERROR' });
-        const salida = await conversar(['Necesito cancelar', '1234567890']);
-        expect(salida).toContain(MENSAJE_ERROR_RESPUESTA_RECORDATORIO);
+        const salida = await conversar(['Necesito cancelar', '1234567890', 'Sí, cancelar']);
+        expect(salida).toContain(mensajeErrorTecnicoRecordatorio('no_asistira'));
         expect(salida.join('\n')).not.toMatch(/No encontramos una cita activa/);
     });
 

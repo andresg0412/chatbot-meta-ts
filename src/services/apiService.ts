@@ -287,13 +287,25 @@ export async function consultarPacientePorDocumento(documento: string): Promise<
 
 /**
  * Resultado de `reagendarCita`. `GLOBHO_ERROR` es el 502 del contrato (Globho falló al mover la cita);
- * `citaAnteriorRestaurada` es `true` solo si el backend lo dice explícitamente. `ERROR` cubre todo lo
- * demás (incluido un 200 sin `data`, que antes también se trataba como fallo).
+ * `citaAnteriorRestaurada` es `true` solo si el backend lo dice explícitamente.
+ * `POSTGRES_DESPUES_DE_GLOBHO` (T-01, informe QA sección 10) es el 502 en el que la cita SÍ quedó movida
+ * en Globho pero no quedó registrada en Postgres: no se debe reintentar. `nuevaFechaCita`/`nuevaHoraCita`
+ * solo vienen si el backend los manda (hoy solo la cascada). `ERROR` cubre todo lo demás (incluido un 200
+ * sin `data`, que antes también se trataba como fallo).
  */
 export type ResultadoReagendarCita =
     | { ok: true; cita: IAgendaResponse }
     | { ok: false; error: 'GLOBHO_ERROR'; code: 502; citaAnteriorRestaurada: boolean }
+    | { ok: false; error: 'POSTGRES_DESPUES_DE_GLOBHO'; code: 502; nuevaFechaCita?: string; nuevaHoraCita?: string }
     | { ok: false; error: 'ERROR'; code?: number };
+
+/** `nueva_fecha_cita`/`nueva_hora_cita` del `data` de un 502 POSTGRES_DESPUES_DE_GLOBHO, si vienen como texto. */
+function horarioNuevoDe502(data: any): { nuevaFechaCita?: string; nuevaHoraCita?: string } {
+    const r: { nuevaFechaCita?: string; nuevaHoraCita?: string } = {};
+    if (typeof data?.nueva_fecha_cita === 'string' && data.nueva_fecha_cita) r.nuevaFechaCita = data.nueva_fecha_cita;
+    if (typeof data?.nueva_hora_cita === 'string' && data.nueva_hora_cita) r.nuevaHoraCita = data.nueva_hora_cita;
+    return r;
+}
 
 export async function reagendarCita(data: IReagendarCita): Promise<ResultadoReagendarCita> {
     try {
@@ -314,6 +326,9 @@ export async function reagendarCita(data: IReagendarCita): Promise<ResultadoReag
                 code: 502,
                 citaAnteriorRestaurada: body?.data?.cita_anterior_restaurada === true,
             };
+        }
+        if (status === 502 && body?.cause === 'POSTGRES_DESPUES_DE_GLOBHO') {
+            return { ok: false, error: 'POSTGRES_DESPUES_DE_GLOBHO', code: 502, ...horarioNuevoDe502(body?.data) };
         }
         return typeof status === 'number' ? { ok: false, error: 'ERROR', code: status } : { ok: false, error: 'ERROR' };
     }
@@ -1225,15 +1240,27 @@ export async function marcarFalloOfertaCupo(
  * - 409 CUPO_YA_ASIGNADO: alguien más aceptó primero.
  * - 502 GLOBHO_ERROR: Globho falló al mover la cita; `citaAnteriorRestaurada` dice si la cita actual
  *   quedó como estaba (`true`) o hay que corregirla a mano (`false`).
+ * - 502 POSTGRES_DESPUES_DE_GLOBHO (T-01): la cita SÍ quedó movida en Globho y falló Postgres; se dan
+ *   `nuevaFechaCita`/`nuevaHoraCita` si el backend los manda. No se debe reintentar.
  * - 200: `data.registrado` (rechaza) o `data.movimiento/nueva_fecha_cita/...` (acepta).
  * En error HTTP, `data` sigue siendo el body completo (compatibilidad); `cause` y
  * `citaAnteriorRestaurada` se dan ya extraídos.
  */
+export interface ResultadoRespuestaOfertaCupo {
+    ok: boolean;
+    code?: number;
+    data?: any;
+    cause?: string;
+    citaAnteriorRestaurada?: boolean;
+    nuevaFechaCita?: string;
+    nuevaHoraCita?: string;
+}
+
 export async function responderOfertaCupo(
     documento: string,
     celular: string,
     respuesta: 'acepta' | 'rechaza'
-): Promise<{ ok: boolean; code?: number; data?: any; cause?: string; citaAnteriorRestaurada?: boolean }> {
+): Promise<ResultadoRespuestaOfertaCupo> {
     try {
         const url = `${API_BACKEND_URL}/chatbot/listaespera/cascada/respuesta`;
         const response = await axios.post(url, { documento, celular, respuesta });
@@ -1243,11 +1270,13 @@ export async function responderOfertaCupo(
         if (error?.response) {
             const body = error.response.data;
             const cause = typeof body?.cause === 'string' ? body.cause : undefined;
-            const resultado: { ok: boolean; code?: number; data?: any; cause?: string; citaAnteriorRestaurada?: boolean } =
-                { ok: false, code: error.response.status, data: body };
+            const resultado: ResultadoRespuestaOfertaCupo = { ok: false, code: error.response.status, data: body };
             if (cause) resultado.cause = cause;
             if (error.response.status === 502 && cause === 'GLOBHO_ERROR') {
                 resultado.citaAnteriorRestaurada = body?.data?.cita_anterior_restaurada === true;
+            }
+            if (error.response.status === 502 && cause === 'POSTGRES_DESPUES_DE_GLOBHO') {
+                Object.assign(resultado, horarioNuevoDe502(body?.data));
             }
             return resultado;
         }
@@ -1288,11 +1317,77 @@ export type TipoRecordatorio = '48h' | '24h' | '2h';
 export async function registrarEnvioRecordatorio(citaId: string, tipoRecordatorio: TipoRecordatorio): Promise<boolean> {
     try {
         const url = `${API_BACKEND_URL}/chatbot/recordatorios/registrar-envio`;
-        const response = await axios.post(url, { cita_id: citaId, tipo_recordatorio: tipoRecordatorio });
+        const response = await axios.post(
+            url,
+            { cita_id: citaId, tipo_recordatorio: tipoRecordatorio },
+            { timeout: TIMEOUT_BACKEND_RECORDATORIOS_MS }
+        );
         return response.data?.isError === false;
     } catch (error) {
-        console.error('Error registrando envío de recordatorio:', error);
+        console.error('Error registrando envío de recordatorio:', (error as any)?.message ?? error);
         return false;
+    }
+}
+
+/**
+ * Timeout de las llamadas de los recordatorios con botones (TBOT-15). Axios no tiene timeout por
+ * defecto: sin esto, un backend colgado deja al paciente sin respuesta y la marca de "en proceso" del
+ * flujo tomada. Deja margen para la llamada a Globho que hace el backend (que no tiene timeout propio,
+ * TB-09).
+ */
+export const TIMEOUT_BACKEND_RECORDATORIOS_MS = 25000;
+
+/**
+ * Cita candidata para responder un recordatorio (TB-05). Contrato de `POST /chatbot/recordatorios/citas`
+ * y de `data.citas` en el 409 `CITA_AMBIGUA` de `responder`. `cita_id` es `agenda.agenda_id` (id
+ * interno), el mismo que se registra en `registrar-envio`.
+ */
+export interface CitaRecordatorio {
+    cita_id: string;
+    agenda_id_externa: number | null;
+    fecha_cita: string;
+    hora_cita: string;
+    profesional: string;
+    tipo_recordatorio: TipoRecordatorio | null;
+    estado_agenda: 'Pendiente' | 'Confirmado';
+}
+
+export type ResultadoCitasRecordatorio =
+    | { ok: true; origen: 'recordatorio' | 'citas_activas'; citas: CitaRecordatorio[] }
+    | { ok: false; causa: 'PACIENTE_NOT_FOUND' | 'DOCUMENTO_INVALIDO' | 'ERROR'; httpStatus: number | null };
+
+/** Tope del contrato: el backend devuelve como máximo 10 citas, ordenadas por fecha. */
+export const MAX_CITAS_RECORDATORIO = 10;
+
+/** Solo las filas con `cita_id`: sin él no hay forma de responder sobre esa cita. */
+function citasRecordatorioDesde(valor: unknown): CitaRecordatorio[] | null {
+    if (!Array.isArray(valor)) return null;
+    return valor
+        .filter((c) => c && typeof c === 'object' && typeof c.cita_id === 'string' && c.cita_id !== '')
+        .slice(0, MAX_CITAS_RECORDATORIO) as CitaRecordatorio[];
+}
+
+/**
+ * Citas sobre las que el paciente puede estar respondiendo un recordatorio (TB-05):
+ * `POST /chatbot/recordatorios/citas { documento, celular }`. Solo lectura. Nunca lanza.
+ * 404 → paciente inexistente; 400 → documento rechazado; cualquier otra cosa → ERROR.
+ */
+export async function consultarCitasRecordatorio(documento: string, celular: string): Promise<ResultadoCitasRecordatorio> {
+    try {
+        const url = `${API_BACKEND_URL}/chatbot/recordatorios/citas`;
+        const response = await axios.post(url, { documento, celular }, { timeout: TIMEOUT_BACKEND_RECORDATORIOS_MS });
+        const data = response?.data?.data;
+        const citas = citasRecordatorioDesde(data?.citas);
+        if (!citas) {
+            return { ok: false, causa: 'ERROR', httpStatus: response?.status ?? null };
+        }
+        return { ok: true, origen: data.origen === 'recordatorio' ? 'recordatorio' : 'citas_activas', citas };
+    } catch (error) {
+        registrarFalloBackend('/chatbot/recordatorios/citas', error);
+        const status: number | null = (error as any)?.response?.status ?? null;
+        const causa = status === 404 ? 'PACIENTE_NOT_FOUND' : status === 400 ? 'DOCUMENTO_INVALIDO' : 'ERROR';
+        console.error(`Error consultando citas del recordatorio (causa: ${causa}):`, (error as any)?.message ?? error);
+        return { ok: false, causa, httpStatus: status };
     }
 }
 
@@ -1305,23 +1400,46 @@ export interface RespuestaRecordatorioData {
     accion: string;
     agenda_id?: string;
     persistido: boolean;
-    estado_resultado?: 'confirmada' | 'ya_confirmada' | 'cancelada';
+    /** Contrato TB-05: 'confirmada' | 'ya_confirmada' | 'cancelada' | 'ya_cancelada'. */
+    estado_resultado?: string;
+    /** Contrato TB-05: la cita sobre la que actuó el backend (`cita_id` = agenda_id interno). */
+    cita_id?: string;
+    agenda_id_externa?: number | null;
     fecha_cita?: string;
     hora_cita?: string;
+    profesional?: string;
 }
+
+/**
+ * Fallos de `responder`. Además de los de `confirmarcitameta` (FalloConfirmacion), el contrato TB-05
+ * agrega dos 409: `CITA_AMBIGUA` (sin `cita_id` y con varias citas posibles; trae `data.citas`) y
+ * `CITA_NO_VALIDA` (el `cita_id` enviado no es una cita activa del paciente).
+ */
+export type FalloRespuestaRecordatorio =
+    | FalloConfirmacion
+    | { ok: false; causa: 'CITA_AMBIGUA'; citas: CitaRecordatorio[] }
+    | { ok: false; causa: 'CITA_NO_VALIDA'; motivo: 'OTRO_PACIENTE' | 'NO_ACTIVA' | 'PASADA' | null }
+    | { ok: false; causa: 'RESPUESTA_EN_PROCESO' };
 
 export type ResultadoRespuestaRecordatorio =
     | { ok: true; data: RespuestaRecordatorioData }
-    | FalloConfirmacion;
+    | FalloRespuestaRecordatorio;
 
+/**
+ * `POST /chatbot/recordatorios/responder`. Con `citaId` el backend actúa sobre ESA cita (TB-05); sin
+ * él, sobre la única cita posible (409 `CITA_AMBIGUA` si hay varias). Nunca lanza.
+ */
 export async function responderRecordatorio(
     celular: string,
     documento: string,
-    respuesta: 'confirma' | 'no_asistira'
+    respuesta: 'confirma' | 'no_asistira',
+    citaId?: string
 ): Promise<ResultadoRespuestaRecordatorio> {
     try {
         const url = `${API_BACKEND_URL}/chatbot/recordatorios/responder`;
-        const response = await axios.post(url, { celular, documento, respuesta });
+        const body: Record<string, string> = { celular, documento, respuesta };
+        if (citaId) body.cita_id = citaId;
+        const response = await axios.post(url, body, { timeout: TIMEOUT_BACKEND_RECORDATORIOS_MS });
         const data = response?.data?.data;
         if (!data || typeof data !== 'object') {
             return { ok: false, causa: 'ERROR' };
@@ -1329,7 +1447,29 @@ export async function responderRecordatorio(
         return { ok: true, data };
     } catch (error) {
         registrarFalloBackend('/chatbot/recordatorios/responder', error);
-        const fallo = mapearErrorConfirmacion(error);
+        const status: number | undefined = (error as any)?.response?.status;
+        const cuerpo = (error as any)?.response?.data;
+        let fallo: FalloRespuestaRecordatorio;
+        if (status === 409 && cuerpo?.cause === 'CITA_AMBIGUA') {
+            fallo = { ok: false, causa: 'CITA_AMBIGUA', citas: citasRecordatorioDesde(cuerpo?.data?.citas) ?? [] };
+        } else if (status === 409 && cuerpo?.cause === 'RESPUESTA_EN_PROCESO') {
+            // Otra respuesta a la misma cita sigue en curso en el backend; no se hizo nada con esta.
+            fallo = { ok: false, causa: 'RESPUESTA_EN_PROCESO' };
+        } else if (status === 409) {
+            // CITA_NO_VALIDA (motivo OTRO_PACIENTE / NO_ACTIVA / PASADA), o cualquier otro 409: la cita
+            // ya no admite el cambio.
+            const motivo = cuerpo?.data?.motivo;
+            fallo = {
+                ok: false,
+                causa: 'CITA_NO_VALIDA',
+                motivo: motivo === 'OTRO_PACIENTE' || motivo === 'NO_ACTIVA' || motivo === 'PASADA' ? motivo : null,
+            };
+        } else {
+            // 404 (CITA_NOT_FOUND, CITA_CANCELADA, CITA_REPROGRAMADA, CITA_PASADA), 502 GLOBHO_ERROR (al
+            // confirmar), 400 → DOCUMENTO_INVALIDO; 500 (incluye el fallo de Globho al cancelar), red o
+            // timeout → ERROR.
+            fallo = mapearErrorConfirmacion(error);
+        }
         console.error(`Error respondiendo recordatorio (causa: ${fallo.causa}):`, (error as any)?.message ?? error);
         return fallo;
     }

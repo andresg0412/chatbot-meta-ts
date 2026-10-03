@@ -8,6 +8,7 @@
 jest.mock('../../utils/proactiveSessionManager', () => ({
     setBotInstance: jest.fn(),
     updateUserActivity: jest.fn(),
+    renovarActividadSesion: jest.fn(() => 'activa'),
     isSessionExpired: jest.fn(() => false),
     closeUserSession: jest.fn(),
     getRemainingSessionTime: jest.fn(() => 60 * 60 * 1000),
@@ -18,7 +19,7 @@ jest.mock('../../utils/proactiveSessionManager', () => ({
 }));
 
 import { createFlow } from '@builderbot/bot';
-import { construirFlujosRegistrados } from '../index';
+import { construirFlujosRegistrados, FLUJOS_BOTONES_RECORDATORIO } from '../index';
 const flujosRegistrados = construirFlujosRegistrados(true);
 import { exitFlow, welcomeFlow } from '../welcomeFlow';
 import { killSwitchFlow } from '../flujos/principal/killSwitchFlow';
@@ -36,7 +37,8 @@ import { IDS_TIPO_DOCUMENTO, IDS_TIPO_DOCUMENTO_RETIRADOS } from '../../utils/da
 import { pasoAgenteFlow } from '../flujos/pasoAgente';
 import { pqrsFlow } from '../flujos/pasoAgente/enviarpqrs';
 import { ofertaCupoAceptaDocumentoFlow, ofertaCupoRechazaDocumentoFlow, retiroListaEsperaFlow } from '../flujos/listaEspera';
-import { confirmoAsistenciaFlow, necesitoCancelarFlow, noPodreAsistirFlow } from '../flujos/recordatorios';
+import { confirmoAsistenciaFlow, necesitoCancelarFlow, noPodreAsistirFlow, botonesConfirmarCancelacionFlow } from '../flujos/recordatorios';
+import { ID_FILA_NINGUNA, idFilaCita, MAX_CITAS_EN_LISTA, PREFIJO_ID_FILA_CITA } from '../../utils/mensajesRecordatorio';
 
 type FlowLike = { toJson: () => any[] };
 
@@ -62,6 +64,7 @@ const nombres = new Map<string, string>([
     [keyRef(confirmoAsistenciaFlow), 'confirmoAsistenciaFlow'],
     [keyRef(necesitoCancelarFlow), 'necesitoCancelarFlow'],
     [keyRef(noPodreAsistirFlow), 'noPodreAsistirFlow'],
+    [keyRef(botonesConfirmarCancelacionFlow), 'botonesConfirmarCancelacionFlow'],
 ]);
 
 const flujosNuevosExactos: FlowLike[] = [
@@ -69,6 +72,7 @@ const flujosNuevosExactos: FlowLike[] = [
     confirmoAsistenciaFlow,
     necesitoCancelarFlow,
     noPodreAsistirFlow,
+    botonesConfirmarCancelacionFlow,
     ofertaCupoAceptaDocumentoFlow,
     ofertaCupoRechazaDocumentoFlow,
 ];
@@ -231,7 +235,9 @@ describe('TBOT-03: botones de recordatorio con RECORDATORIOS_BOTONES_ENABLED apa
         }
         expect(flujosSinBotones).toContain(ofertaCupoAceptaDocumentoFlow);
         expect(flujosSinBotones).toContain(retiroListaEsperaFlow);
-        expect(flujosSinBotones.length).toBe((flujosRegistrados as FlowLike[]).length - 3);
+        expect(flujosSinBotones).not.toContain(botonesConfirmarCancelacionFlow);
+        expect(FLUJOS_BOTONES_RECORDATORIO).toHaveLength(4);
+        expect(flujosSinBotones.length).toBe((flujosRegistrados as FlowLike[]).length - FLUJOS_BOTONES_RECORDATORIO.length);
     });
 
     it('por defecto (flag sin definir) deja fuera los botones de recordatorio', () => {
@@ -252,8 +258,40 @@ describe('TBOT-03: botones de recordatorio con RECORDATORIOS_BOTONES_ENABLED apa
         expect(['confirmoAsistenciaFlow', 'necesitoCancelarFlow', 'noPodreAsistirFlow']).not.toContain(destinoSinBotones(texto));
     });
 
+    it('"Sí, cancelar" sigue yendo al flujo guiado de cancelar, como siempre', () => {
+        expect(destinoSinBotones('Sí, cancelar')).toBe('step1CencelarCita');
+    });
+
     it('la oferta de cupo sigue funcionando', () => {
         expect(destinoSinBotones('Sí, lo tomo')).toBe('ofertaCupoAceptaDocumentoFlow');
         expect(destinoSinBotones('No puedo')).toBe('ofertaCupoRechazaDocumentoFlow');
     });
+});
+
+// TB-05 / TBOT-03: ids de la lista de citas y botones de confirmar la cancelación.
+describe('TB-05: ids de la lista de citas y botones "Sí, cancelar" / "No, mantener"', () => {
+    const ids = [...Array.from({ length: MAX_CITAS_EN_LISTA }, (_, i) => idFilaCita(i)), ID_FILA_NINGUNA];
+    const registroSinBotones = createFlow(construirFlujosRegistrados(false) as any);
+
+    it('los ids son únicos, sin dígitos y con el prefijo', () => {
+        expect(new Set(ids).size).toBe(ids.length);
+        for (const id of ids) {
+            expect(id.startsWith(PREFIJO_ID_FILA_CITA)).toBe(true);
+            expect(id).not.toMatch(/[0-9]/);
+        }
+    });
+
+    it.each(ids)('"%s" no lo captura ningún flujo por keyword (lo atiende la captura de la lista)', (id) => {
+        expect(refDestino(registroReal, id)).toBeNull();
+        expect(refDestino(registroSinBotones, id)).toBeNull();
+    });
+
+    it.each(['Sí, cancelar', 'No, mantener', ' Sí, cancelar '])('"%s" → botonesConfirmarCancelacionFlow (antes que cancelar)', (texto) => {
+        expect(destino(texto)).toBe('botonesConfirmarCancelacionFlow');
+    });
+
+    it.each([['si, cancelar', 'step1CencelarCita'], ['Sí, cancelar mi cita', 'step1CencelarCita']])(
+        'texto libre "%s" → %s (sin cambios)', (texto, esperado) => {
+            expect(destino(texto)).toBe(esperado);
+        });
 });

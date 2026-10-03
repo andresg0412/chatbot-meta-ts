@@ -229,6 +229,28 @@ export function updateUserActivity(userId: string, disparador: DisparadorSesion 
   //console.log(`🔄 Actividad actualizada para ${userId}. Timer programado para ${new Date(now + SESSION_TIMEOUT_MS).toLocaleString()}`);
 }
 
+/** Cómo estaba la sesión antes de `renovarActividadSesion`. */
+export type EstadoPrevioSesion = 'activa' | 'sin_sesion' | 'vencida';
+
+/**
+ * Renueva la actividad del usuario (reprograma el timer de 1 h) y dice cómo estaba la sesión ANTES:
+ * - 'activa': seguía vigente; no se tocó el state.
+ * - 'sin_sesion': no había sesión activa (nunca la hubo, o ya la cerró el timer o un fin de flujo, que ya
+ *   limpiaron el state); se abrió una nueva.
+ * - 'vencida': seguía marcada activa pero pasó más de 1 h (el timer no alcanzó a correr); `updateUserActivity`
+ *   la cerró y LIMPIÓ el state antes de abrir la nueva.
+ * Con 'sin_sesion'/'vencida' el state que tuviera el flujo en curso ya no está: hay que llamarla ANTES de
+ * guardar claves nuevas, nunca después (T-02 del informe QA).
+ */
+export function renovarActividadSesion(userId: string, disparador: DisparadorSesion = 'keyword'): EstadoPrevioSesion {
+  const session = userSessions[userId];
+  const previo: EstadoPrevioSesion = !session || !session.isActive
+    ? 'sin_sesion'
+    : isSessionExpired(userId) ? 'vencida' : 'activa';
+  updateUserActivity(userId, disparador);
+  return previo;
+}
+
 /**
  * Verifica si la sesión de un usuario ha expirado por inactividad
  * @param userId - ID del usuario

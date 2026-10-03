@@ -1,17 +1,17 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { datosinicialesComunes } from '../common/datosInicialesComunes';
-import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
+import { abrirOSostenerSesion } from '../../../utils/proactiveSessionTimeout';
 import { registrarActividadBot } from '../../../services/apiService';
 import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin } from '../../../utils/trazabilidad';
 import { limpiarClavesFlujosCita } from '../../../utils/estadoConversacion';
 
 
 const step1Reprogramar = addKeyword(['280525003', '3', 'reprogramar cita', 'reprogramar', 'Reprogramar'])
-    .addAction(async (ctx, { state, flowDynamic, endFlow }) => {
-        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow, { paso: 'reprogramar.s01_inicio' });
-        if (!sessionValid) {
-            return endFlow();
-        }
+    .addAction(async (ctx, { state }) => {
+        // T-04: igual que cancelar. Con "reprogramar"/"3" como primer mensaje (sin welcomeFlow) no había
+        // sesión y checkSessionTimeout terminaba el flujo en silencio. Ahora se abre (o renueva) la sesión
+        // antes de limpiar claves.
+        abrirOSostenerSesion(ctx.from, { paso: 'reprogramar.s01_inicio' });
         // TBOT-02 (defensa en profundidad): sin documento, citas, profesional ni fechas de un recorrido
         // anterior (reprogramar y agendar comparten claves como profesionalId o citaSeleccionadaHora).
         await limpiarClavesFlujosCita(state);

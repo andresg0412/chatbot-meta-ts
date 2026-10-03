@@ -11,7 +11,12 @@ import { closeUserSession } from '../../../utils/proactiveSessionManager';
 import { registrarActividadBot } from '../../../services/apiService';
 import { programarTickCascadaRetrasado } from '../../../utils/listaEsperaCascadaPoller';
 import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin } from '../../../utils/trazabilidad';
-import { CAUSE_GLOBHO_ERROR, mensajeErrorGlobhoMovimiento } from '../../../utils/mensajesMovimientoCita';
+import {
+    CAUSE_GLOBHO_ERROR,
+    CAUSE_POSTGRES_DESPUES_DE_GLOBHO,
+    mensajeErrorGlobhoMovimiento,
+    mensajeCitaMovidaPendienteVerificacion,
+} from '../../../utils/mensajesMovimientoCita';
 
 
 function generarAgendaIdAleatorio() {
@@ -91,6 +96,35 @@ const confirmarReprogramarCita = addKeyword(EVENTS.ACTION)
                         cita_anterior_restaurada: resultado.citaAnteriorRestaurada
                     });
                     await flowDynamic(mensajeErrorGlobhoMovimiento(resultado.citaAnteriorRestaurada));
+                    closeUserSession(ctx.from);
+                    return endFlow();
+                }
+                if (resultado.error === 'POSTGRES_DESPUES_DE_GLOBHO') {
+                    // T-01: la cita SÍ quedó movida en Globho, pero no en Postgres. No se invita a reintentar
+                    // (movería otra vez una cita ya movida): se deriva al asesor. El horario es el que se
+                    // pidió a Globho (el backend solo lo devuelve en la cascada; si lo manda, se usa ese).
+                    // No se dispara el tick retrasado de la cascada: sin la cita anterior marcada en Postgres
+                    // no hay certeza de que el cupo se haya detectado, y el poller periódico lo recoge igual
+                    // en su siguiente vuelta si el backend sí lo registró.
+                    trackErrorBackend(ctx.from, 'reprogramar.confirma_reprogramar', '/chatbot/reagendar', {
+                        siempre: true,
+                        cause: CAUSE_POSTGRES_DESPUES_DE_GLOBHO,
+                        httpStatus: 502,
+                    });
+                    trackFin(ctx.from, 'reprogramar', 'revision_manual', {
+                        paso: 'reprogramar.confirma_reprogramar',
+                        citaIdExterna: citaAnterior.agenda_id_externa,
+                        metadata: { cause: CAUSE_POSTGRES_DESPUES_DE_GLOBHO, cita_creada_en_globho: true },
+                    });
+                    await registrarActividadBot('chat_flujo_reprogramar', ctx.from, {
+                        step: 'confirmar_cita',
+                        resultado: 'postgres_despues_de_globho',
+                        cita_creada_en_globho: true
+                    });
+                    await flowDynamic(mensajeCitaMovidaPendienteVerificacion(
+                        resultado.nuevaFechaCita ?? nuevaCita?.fechacita,
+                        resultado.nuevaHoraCita ?? nuevaCita?.horacita,
+                    ));
                     closeUserSession(ctx.from);
                     return endFlow();
                 }

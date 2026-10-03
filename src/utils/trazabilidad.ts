@@ -91,7 +91,10 @@ export type ResultadoFin =
     | 'fuera_horario'
     | 'error_backend'
     | 'informativo'
-    | 'cita_confirmada';
+    | 'cita_confirmada'
+    // T-01: la cita quedó movida en Globho pero no en Postgres (502 POSTGRES_DESPUES_DE_GLOBHO); queda
+    // para revisión de un asesor. No es ni éxito ni error recuperable.
+    | 'revision_manual';
 export type ResultadoIdentificacion = 'encontrado' | 'nuevo' | 'no_encontrado';
 export type ResultadoRespuestaCampana =
     | 'confirmo'

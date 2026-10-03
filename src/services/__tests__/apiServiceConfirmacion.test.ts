@@ -4,7 +4,7 @@
 jest.mock('axios', () => ({ __esModule: true, default: { post: jest.fn(), get: jest.fn() } }));
 
 import axios from 'axios';
-import { confirmarCitaCampahna, responderRecordatorio } from '../apiService';
+import { confirmarCitaCampahna, responderRecordatorio, consultarCitasRecordatorio, TIMEOUT_BACKEND_RECORDATORIOS_MS } from '../apiService';
 
 const post = (axios as any).post as jest.Mock;
 
@@ -119,7 +119,56 @@ describe('responderRecordatorio', () => {
             celular: '573001234567',
             documento: '1234567890',
             respuesta: 'confirma',
-        });
+        }, { timeout: TIMEOUT_BACKEND_RECORDATORIOS_MS });
+    });
+
+    it('con cita_id lo envía en el body (TB-05)', async () => {
+        post.mockResolvedValueOnce({ data: { code: 200, data: { accion: 'no_asistira', persistido: true } } });
+        await responderRecordatorio('573001234567', '1234567890', 'no_asistira', 'A9897918');
+        expect(post).toHaveBeenCalledWith(expect.any(String), {
+            celular: '573001234567', documento: '1234567890', respuesta: 'no_asistira', cita_id: 'A9897918',
+        }, { timeout: TIMEOUT_BACKEND_RECORDATORIOS_MS });
+    });
+
+    it('200 del contrato TB-05 (ya_cancelada) se devuelve completo', async () => {
+        const data = { cita_id: 'A9897918', agenda_id_externa: 5206177, fecha_cita: '2026-10-10', hora_cita: '07:50',
+            profesional: 'Ana Pérez', estado_resultado: 'ya_cancelada', accion: 'no_asistira', agenda_id: 'A9897918', persistido: true };
+        post.mockResolvedValueOnce({ data: { isError: false, code: 200, data } });
+        expect(await responderRecordatorio('c', 'd', 'no_asistira', 'A9897918')).toEqual({ ok: true, data });
+    });
+
+    it('409 CITA_AMBIGUA → citas del backend', async () => {
+        const cita = { cita_id: 'A9897918', agenda_id_externa: 5206177, fecha_cita: '2026-10-10', hora_cita: '07:50',
+            profesional: 'Ana Pérez', tipo_recordatorio: '24h', estado_agenda: 'Pendiente' };
+        post.mockRejectedValueOnce(errorHttp(409, { isError: true, cause: 'CITA_AMBIGUA', data: { origen: 'recordatorio', citas: [cita, { sin: 'id' }] } }));
+        expect(await responderRecordatorio('c', 'd', 'confirma')).toEqual({ ok: false, causa: 'CITA_AMBIGUA', citas: [cita] });
+    });
+
+    it.each(['OTRO_PACIENTE', 'NO_ACTIVA', 'PASADA'])('409 CITA_NO_VALIDA motivo %s', async (motivo) => {
+        post.mockRejectedValueOnce(errorHttp(409, { isError: true, cause: 'CITA_NO_VALIDA', data: { motivo } }));
+        expect(await responderRecordatorio('c', 'd', 'no_asistira', 'X')).toEqual({ ok: false, causa: 'CITA_NO_VALIDA', motivo });
+    });
+
+    it('409 RESPUESTA_EN_PROCESO', async () => {
+        post.mockRejectedValueOnce(errorHttp(409, { isError: true, cause: 'RESPUESTA_EN_PROCESO' }));
+        expect(await responderRecordatorio('c', 'd', 'no_asistira', 'X')).toEqual({ ok: false, causa: 'RESPUESTA_EN_PROCESO' });
+    });
+
+    it('409 sin cause conocida → CITA_NO_VALIDA sin motivo', async () => {
+        post.mockRejectedValueOnce(errorHttp(409, {}));
+        expect(await responderRecordatorio('c', 'd', 'confirma', 'X')).toEqual({ ok: false, causa: 'CITA_NO_VALIDA', motivo: null });
+    });
+
+    it('502 GLOBHO_ERROR (confirma) → GLOBHO_ERROR', async () => {
+        post.mockRejectedValueOnce(errorHttp(502, { isError: true, cause: 'GLOBHO_ERROR' }));
+        expect(await responderRecordatorio('c', 'd', 'confirma', 'X')).toEqual({ ok: false, causa: 'GLOBHO_ERROR' });
+    });
+
+    it('timeout de axios → ERROR', async () => {
+        const error: any = new Error('timeout of 25000ms exceeded');
+        error.code = 'ECONNABORTED';
+        post.mockRejectedValueOnce(error);
+        expect(await responderRecordatorio('c', 'd', 'no_asistira', 'X')).toEqual({ ok: false, causa: 'ERROR' });
     });
 
     it('200 con estado_resultado', async () => {
@@ -167,5 +216,46 @@ describe('responderRecordatorio', () => {
     it('error de red → ERROR', async () => {
         post.mockRejectedValueOnce(new Error('timeout of 10000ms exceeded'));
         expect(await responderRecordatorio('c', 'd', 'confirma')).toEqual({ ok: false, causa: 'ERROR' });
+    });
+});
+
+describe('consultarCitasRecordatorio (TB-05)', () => {
+    const cita = { cita_id: 'A9897918', agenda_id_externa: 5206177, fecha_cita: '2026-10-10', hora_cita: '07:50',
+        profesional: 'Ana Pérez', tipo_recordatorio: '24h', estado_agenda: 'Pendiente' };
+
+    it('envía {documento, celular} con timeout y devuelve origen y citas', async () => {
+        post.mockResolvedValueOnce({ status: 200, data: { isError: false, code: 200, data: { origen: 'recordatorio', citas: [cita] } } });
+        expect(await consultarCitasRecordatorio('1098768121', '573001112233')).toEqual({ ok: true, origen: 'recordatorio', citas: [cita] });
+        expect(post).toHaveBeenCalledWith(expect.stringMatching(/\/chatbot\/recordatorios\/citas$/),
+            { documento: '1098768121', celular: '573001112233' }, { timeout: TIMEOUT_BACKEND_RECORDATORIOS_MS });
+    });
+
+    it('lista vacía → ok con 0 citas', async () => {
+        post.mockResolvedValueOnce({ status: 200, data: { data: { origen: 'citas_activas', citas: [] } } });
+        expect(await consultarCitasRecordatorio('d', 'c')).toEqual({ ok: true, origen: 'citas_activas', citas: [] });
+    });
+
+    it('como máximo 10 citas y solo las que traen cita_id', async () => {
+        const muchas = Array.from({ length: 12 }, (_, i) => ({ ...cita, cita_id: `C${i}` }));
+        post.mockResolvedValueOnce({ status: 200, data: { data: { origen: 'citas_activas', citas: [{ cita_id: '' }, ...muchas] } } });
+        const r: any = await consultarCitasRecordatorio('d', 'c');
+        expect(r.citas).toHaveLength(10);
+        expect(r.citas[0].cita_id).toBe('C0');
+    });
+
+    it('404 PACIENTE_NOT_FOUND', async () => {
+        post.mockRejectedValueOnce(errorHttp(404, { isError: true, cause: 'PACIENTE_NOT_FOUND' }));
+        expect(await consultarCitasRecordatorio('d', 'c')).toEqual({ ok: false, causa: 'PACIENTE_NOT_FOUND', httpStatus: 404 });
+    });
+
+    it('400 → DOCUMENTO_INVALIDO; 500 / red / data sin citas → ERROR', async () => {
+        post.mockRejectedValueOnce(errorHttp(400, {}));
+        expect(await consultarCitasRecordatorio('d', 'c')).toEqual({ ok: false, causa: 'DOCUMENTO_INVALIDO', httpStatus: 400 });
+        post.mockRejectedValueOnce(errorHttp(500, {}));
+        expect(await consultarCitasRecordatorio('d', 'c')).toEqual({ ok: false, causa: 'ERROR', httpStatus: 500 });
+        post.mockRejectedValueOnce(new Error('timeout of 25000ms exceeded'));
+        expect(await consultarCitasRecordatorio('d', 'c')).toEqual({ ok: false, causa: 'ERROR', httpStatus: null });
+        post.mockResolvedValueOnce({ status: 200, data: { data: {} } });
+        expect(await consultarCitasRecordatorio('d', 'c')).toEqual({ ok: false, causa: 'ERROR', httpStatus: 200 });
     });
 });

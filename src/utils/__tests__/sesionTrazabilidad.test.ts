@@ -183,3 +183,27 @@ it('con el interruptor apagado no se emite ningún evento nuevo', () => {
     mgr.closeUserSession(TEL, 'salir');
     expect(traza._estadoParaPruebas().cola).toHaveLength(0);
 });
+
+// T-02/T-04 (informe QA): renovarActividadSesion dice cómo estaba la sesión antes de renovarla.
+it('renovarActividadSesion: sin_sesion → abre; activa → renueva sin cerrar; vencida → cierra (timeout) y abre otra', () => {
+    const { mgr, traza } = cargar();
+    expect(mgr.renovarActividadSesion(TEL, 'respuesta_plantilla')).toBe('sin_sesion');
+    const [inicio] = eventos(traza, 'sesion_inicio');
+    expect(inicio.metadata).toEqual({ disparador: 'respuesta_plantilla' });
+
+    jest.setSystemTime(new Date(Date.now() + 59 * 60 * 1000));
+    expect(mgr.renovarActividadSesion(TEL)).toBe('activa');
+    expect(eventos(traza, 'sesion_inicio')).toHaveLength(1);
+    expect(eventos(traza, 'sesion_fin')).toHaveLength(0);
+
+    // Más de 1 h sin actividad y el timer no corrió (setSystemTime no dispara timers).
+    jest.setSystemTime(new Date(Date.now() + UNA_HORA + 60 * 1000));
+    expect(mgr.isSessionExpired(TEL)).toBe(true);
+    expect(mgr.renovarActividadSesion(TEL)).toBe('vencida');
+    expect(eventos(traza, 'sesion_fin').map((e: any) => e.resultado)).toEqual(['timeout']);
+    expect(eventos(traza, 'sesion_inicio')).toHaveLength(2);
+    expect(mgr.isSessionExpired(TEL)).toBe(false);
+
+    mgr.closeUserSession(TEL);
+    expect(mgr.renovarActividadSesion(TEL)).toBe('sin_sesion');
+});
