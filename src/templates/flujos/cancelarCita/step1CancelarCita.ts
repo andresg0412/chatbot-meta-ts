@@ -3,10 +3,13 @@ import { datosinicialesComunes } from '../common/datosInicialesComunes';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 import { registrarActividadBot } from '../../../services/apiService';
 import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion, flujoDesdeSeleccionMenu } from '../../../utils/trazabilidad';
+import { limpiarClavesFlujosCita } from '../../../utils/estadoConversacion';
 
 
 const step1CencelarCita = addKeyword(['280525004', '4', 'cancelar', 'Cancelo', 'Cancelar', 'cancelo'])
-    .addAction(async (ctx, { flowDynamic, endFlow }) => {
+    .addAction(async (ctx, { state, flowDynamic, endFlow }) => {
+        // TBOT-02 (defensa en profundidad): sin documento, citas ni selección de un recorrido anterior.
+        await limpiarClavesFlujosCita(state);
         // Verificar si la sesión ha expirado por inactividad
         //    const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
         //    if (!sessionValid) {

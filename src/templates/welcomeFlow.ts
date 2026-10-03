@@ -2,7 +2,8 @@ import { createBot, createProvider, createFlow, addKeyword, utils, EVENTS } from
 import { politicaDatosFlow } from './flujos/principal/politicasDatos';
 import { checkAndRegisterUserAttempt } from '../utils/userRateLimiter';
 import { metricConversationStarted } from '../utils/metrics';
-import { updateUserActivity, closeUserSession } from '../utils/proactiveSessionManager';
+import { updateUserActivity, closeUserSession, isSessionExpired } from '../utils/proactiveSessionManager';
+import { reiniciarEstadoEnFlujo } from '../utils/estadoConversacion';
 import { isNumberValid } from '../constants/killSwichConstants';
 import { esBotHabilitado } from '../services/citasService';
 import { registrarActividadBot } from '../services/apiService';
@@ -38,6 +39,14 @@ const welcomeFlow = addKeyword(EVENTS.WELCOME)
                 flujo: sesionPrevia.ultimoFlujo,
                 contexto: 'welcome',
             });
+        }
+        // TBOT-02: una interacción nueva (sin sesión activa) empieza con el state limpio. Sin esto, el
+        // paciente, el documento y el convenio de la sesión anterior del mismo celular seguían en memoria
+        // y "Particular" agendaba a nombre de esa persona sin pedir el documento. Se evalúa ANTES de
+        // updateUserActivity (que abre la sesión nueva). Con una sesión activa no se borra nada aquí (la
+        // conversación se reinicia y el step1 de cada flujo limpia sus propias claves).
+        if (isSessionExpired(ctx.from)) {
+            await reiniciarEstadoEnFlujo(ctxFn.state, ctx.from);
         }
         await registrarActividadBot('chat_inicio', ctx.from);
         metricConversationStarted(ctx.from);

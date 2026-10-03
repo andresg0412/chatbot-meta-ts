@@ -127,6 +127,7 @@ import {
     noPodreAsistirFlow,
     noPodreAsistirAccionFlow,
 } from './flujos/recordatorios'
+import { isRecordatoriosBotonesEnabled } from '../utils/listaEsperaFlags';
 
 // ORDEN IMPORTANTE (runbook B1, proyecto-ips/docs/features/2026-09-26-lista-espera-runbook-produccion.md):
 // @builderbot asigna cada mensaje al PRIMER flujo de esta lista cuya keyword coincida, y las keywords
@@ -135,7 +136,7 @@ import {
 // para ganarle a los flujos viejos ('Confirmo', 'cancelar', 'salir'...) solo cuando el texto es
 // exactamente el del botón. Cualquier otro texto sigue yendo al mismo flujo de antes.
 // Cubierto por src/templates/__tests__/keywordRouting.test.ts.
-export const flujosRegistrados = [
+const flujosRegistradosCompletos = [
     killSwitchFlow,
     // Coincidencia exacta (regex anclada) — deben ir antes de exitFlow y de los flujos viejos.
     retiroListaEsperaFlow,
@@ -245,5 +246,25 @@ export const flujosRegistrados = [
     pasoAgenteFlow,
     pqrsFlow,
 ];
+
+// TBOT-03 (proyecto-ips/docs/features/2026-10-02-informe-qa-lista-espera.md): los botones de los
+// recordatorios ("Confirmo asistencia" / "Necesito cancelar" / "No podré asistir") solo se escuchan con
+// RECORDATORIOS_BOTONES_ENABLED=true. Con el flag apagado nadie recibe esas plantillas, y escribir la
+// frase a mano cancelaba la cita más próxima sin confirmación; ahora sigue yendo a los flujos de
+// siempre (p. ej. "Necesito cancelar" → cancelar cita guiado). Se evalúa al arrancar: cambiar el flag
+// exige `pm2 restart bot-meta --update-env`, igual que el resto de interruptores.
+const FLUJOS_BOTONES_RECORDATORIO = [confirmoAsistenciaFlow, necesitoCancelarFlow, noPodreAsistirFlow];
+
+export function construirFlujosRegistrados(recordatoriosBotones: boolean = isRecordatoriosBotonesEnabled()) {
+    return recordatoriosBotones
+        ? flujosRegistradosCompletos
+        : flujosRegistradosCompletos.filter((flujo) => !FLUJOS_BOTONES_RECORDATORIO.includes(flujo));
+}
+
+export function construirTemplates(recordatoriosBotones?: boolean) {
+    return createFlow(construirFlujosRegistrados(recordatoriosBotones));
+}
+
+export const flujosRegistrados = construirFlujosRegistrados();
 
 export default createFlow(flujosRegistrados);

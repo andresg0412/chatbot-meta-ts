@@ -5,6 +5,7 @@ import { step18AgendarCita } from './step18AgendarCita';
 import { CONVENIOS_SERVICIOS, ID_CONVENIOS_SERVICIOS } from '../../../constants/conveniosConstants';
 //import { obtenerConvenios } from '../../../services/apiService';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
+import { hayAgendamientoEnCurso, MENSAJE_CONVERSACION_TERMINADA } from '../../../utils/estadoConversacion';
 import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion } from '../../../utils/trazabilidad';
 
 const step13AgendarCitaParticular = addKeyword(EVENTS.ACTION)
@@ -24,7 +25,12 @@ const step13AgendarCitaParticular = addKeyword(EVENTS.ACTION)
 
 
 const step13AgendarCitaConvenio2 = addKeyword(['conv_poliza_sura', 'conv_poliza_allianz', 'conv_poliza_axa_colpatria', 'conv_poliza_seguros_bolivar', 'conv_coomeva_mp', 'conv_axa_colpatria_mp', 'conv_medplus_mp', 'conv_colmedica_mp'])
-    .addAction(async (ctx, { provider, state, gotoFlow, flowDynamic }) => {
+    .addAction(async (ctx, { provider, state, gotoFlow, flowDynamic, endFlow }) => {
+        // TBOT-02: entrada por keyword (lista/botón). Si no hay un agendamiento en curso (conversación
+        // cerrada y state limpio), no se continúa sin contexto.
+        if (!hayAgendamientoEnCurso(state)) {
+            return endFlow(MENSAJE_CONVERSACION_TERMINADA);
+        }
         const convenioSeleccionado = ctx.listResponse ? ctx.listResponse.title : ctx.body;
         // Obtener el nombre del servicio del convenio seleccionado
         const nombreConvenio = CONVENIOS_SERVICIOS[convenioSeleccionado];

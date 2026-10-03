@@ -18,7 +18,8 @@ jest.mock('../../utils/proactiveSessionManager', () => ({
 }));
 
 import { createFlow } from '@builderbot/bot';
-import { flujosRegistrados } from '../index';
+import { construirFlujosRegistrados } from '../index';
+const flujosRegistrados = construirFlujosRegistrados(true);
 import { exitFlow, welcomeFlow } from '../welcomeFlow';
 import { killSwitchFlow } from '../flujos/principal/killSwitchFlow';
 import { DISABLE_KEY } from '../../constants/killSwichConstants';
@@ -209,5 +210,50 @@ describe('Enrutamiento de keywords con el algoritmo real de @builderbot (runbook
             expect(pos).toBeGreaterThanOrEqual(0);
             expect(pos).toBeLessThan(posExit);
         }
+    });
+});
+
+// TBOT-03 (proyecto-ips/docs/features/2026-10-02-informe-qa-lista-espera.md): con
+// RECORDATORIOS_BOTONES_ENABLED apagado, los botones de recordatorio no se registran y la frase escrita a
+// mano no puede cancelar una cita sin confirmación.
+describe('TBOT-03: botones de recordatorio con RECORDATORIOS_BOTONES_ENABLED apagado', () => {
+    const flujosSinBotones = construirFlujosRegistrados(false) as FlowLike[];
+    const registroSinBotones = createFlow(flujosSinBotones as any);
+    const destinoSinBotones = (texto: string): string | null => {
+        const ref = refDestino(registroSinBotones, texto);
+        if (ref === null) return null;
+        return nombres.get(ref) ?? `otro:${ref}`;
+    };
+
+    it('no registra los 3 flujos de botón de recordatorio, pero sí el resto', () => {
+        for (const flow of [confirmoAsistenciaFlow, necesitoCancelarFlow, noPodreAsistirFlow]) {
+            expect(flujosSinBotones).not.toContain(flow);
+        }
+        expect(flujosSinBotones).toContain(ofertaCupoAceptaDocumentoFlow);
+        expect(flujosSinBotones).toContain(retiroListaEsperaFlow);
+        expect(flujosSinBotones.length).toBe((flujosRegistrados as FlowLike[]).length - 3);
+    });
+
+    it('por defecto (flag sin definir) deja fuera los botones de recordatorio', () => {
+        const anterior = process.env.RECORDATORIOS_BOTONES_ENABLED;
+        delete process.env.RECORDATORIOS_BOTONES_ENABLED;
+        try {
+            expect(construirFlujosRegistrados()).not.toContain(necesitoCancelarFlow);
+        } finally {
+            if (anterior !== undefined) process.env.RECORDATORIOS_BOTONES_ENABLED = anterior;
+        }
+    });
+
+    it('"Necesito cancelar" va al flujo guiado de cancelar cita', () => {
+        expect(destinoSinBotones('Necesito cancelar')).toBe('step1CencelarCita');
+    });
+
+    it.each(['Confirmo asistencia', 'No podré asistir'])('"%s" no llega a un flujo de recordatorio', (texto) => {
+        expect(['confirmoAsistenciaFlow', 'necesitoCancelarFlow', 'noPodreAsistirFlow']).not.toContain(destinoSinBotones(texto));
+    });
+
+    it('la oferta de cupo sigue funcionando', () => {
+        expect(destinoSinBotones('Sí, lo tomo')).toBe('ofertaCupoAceptaDocumentoFlow');
+        expect(destinoSinBotones('No puedo')).toBe('ofertaCupoRechazaDocumentoFlow');
     });
 });
