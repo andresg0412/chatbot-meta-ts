@@ -11,6 +11,7 @@ import { closeUserSession } from '../../../utils/proactiveSessionManager';
 import { registrarActividadBot } from '../../../services/apiService';
 import { programarTickCascadaRetrasado } from '../../../utils/listaEsperaCascadaPoller';
 import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin } from '../../../utils/trazabilidad';
+import { CAUSE_GLOBHO_ERROR, mensajeErrorGlobhoMovimiento } from '../../../utils/mensajesMovimientoCita';
 
 
 function generarAgendaIdAleatorio() {
@@ -70,8 +71,29 @@ const confirmarReprogramarCita = addKeyword(EVENTS.ACTION)
                     tipo_cita: citaAnterior.tipo_cita === '1' ? 'presencial' : 'virtual'
                 }
             }
-            const response = await reagendarCita(bodyReagendar);
-            if (!response) {
+            const resultado = await reagendarCita(bodyReagendar);
+            if (resultado.ok === false) {
+                if (resultado.error === 'GLOBHO_ERROR') {
+                    // 502 GLOBHO_ERROR: el mensaje depende de si la cita actual quedó como estaba.
+                    trackErrorBackend(ctx.from, 'reprogramar.confirma_reprogramar', '/chatbot/reagendar', {
+                        siempre: true,
+                        cause: CAUSE_GLOBHO_ERROR,
+                        httpStatus: 502,
+                    });
+                    trackFin(ctx.from, 'reprogramar', 'error_backend', {
+                        paso: 'reprogramar.confirma_reprogramar',
+                        citaIdExterna: citaAnterior.agenda_id_externa,
+                        metadata: { cause: CAUSE_GLOBHO_ERROR, cita_anterior_restaurada: resultado.citaAnteriorRestaurada },
+                    });
+                    await registrarActividadBot('chat_flujo_reprogramar', ctx.from, {
+                        step: 'confirmar_cita',
+                        resultado: 'error_globho',
+                        cita_anterior_restaurada: resultado.citaAnteriorRestaurada
+                    });
+                    await flowDynamic(mensajeErrorGlobhoMovimiento(resultado.citaAnteriorRestaurada));
+                    closeUserSession(ctx.from);
+                    return endFlow();
+                }
                 trackErrorBackend(ctx.from, 'reprogramar.confirma_reprogramar', '/chatbot/reagendar', { siempre: true });
                 trackFin(ctx.from, 'reprogramar', 'error_backend', { paso: 'reprogramar.confirma_reprogramar', citaIdExterna: citaAnterior.agenda_id_externa });
                 await flowDynamic('Error al reagendar la cita. Por favor, intenta nuevamente.');

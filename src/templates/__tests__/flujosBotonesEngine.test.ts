@@ -37,6 +37,7 @@ import {
     MENSAJE_DOCUMENTO_REINTENTO,
     MENSAJE_ERROR_RESPUESTA_RECORDATORIO,
 } from '../../utils/mensajesConfirmacion';
+import { MENSAJE_MOVIMIENTO_CITA_RESTAURADA, mensajeErrorGlobhoMovimiento } from '../../utils/mensajesMovimientoCita';
 
 const mockedApi = api as jest.Mocked<typeof api>;
 
@@ -204,6 +205,34 @@ describe('Motor real de builderbot con los flujos registrados', () => {
         const salida = await conversar(['retirar lista de espera', '1234567890']);
         expect(mockedApi.retirarListaEspera).not.toHaveBeenCalled();
         expect(salida).toContain(MENSAJE_RETIRO_NO_INSCRITO);
+    });
+
+    it('"Sí, lo tomo" con 502 GLOBHO_ERROR restaurada → la cita actual sigue igual', async () => {
+        mockedApi.responderOfertaCupo.mockResolvedValueOnce({
+            ok: false, code: 502, cause: 'GLOBHO_ERROR', citaAnteriorRestaurada: true, data: {},
+        });
+        const salida = await conversar(['Sí, lo tomo', '1234567890']);
+        expect(mockedApi.responderOfertaCupo).toHaveBeenCalledWith('1234567890', expect.any(String), 'acepta');
+        expect(salida).toContain(MENSAJE_MOVIMIENTO_CITA_RESTAURADA);
+        expect(salida.join('\n')).not.toMatch(/Ocurrió un error procesando tu respuesta/);
+        expect(mockedApi.registrarActividadBot).toHaveBeenCalledWith('chat_flujo_lista_espera', expect.any(String),
+            expect.objectContaining({ resultado: 'error_globho', cita_anterior_restaurada: true }));
+    });
+
+    it('"Sí, lo tomo" con 502 GLOBHO_ERROR no restaurada → recepción/asesor', async () => {
+        mockedApi.responderOfertaCupo.mockResolvedValueOnce({
+            ok: false, code: 502, cause: 'GLOBHO_ERROR', citaAnteriorRestaurada: false, data: {},
+        });
+        const salida = await conversar(['Sí, lo tomo', '1234567890']);
+        expect(salida).toContain(mensajeErrorGlobhoMovimiento(false));
+        expect(mockedApi.registrarActividadBot).toHaveBeenCalledWith('chat_flujo_lista_espera', expect.any(String),
+            expect.objectContaining({ resultado: 'error_globho', cita_anterior_restaurada: false }));
+    });
+
+    it('"Sí, lo tomo" con 500 → mensaje genérico de siempre', async () => {
+        mockedApi.responderOfertaCupo.mockResolvedValueOnce({ ok: false, code: 500, cause: 'INTERNAL', data: {} });
+        const salida = await conversar(['Sí, lo tomo', '1234567890']);
+        expect(salida).toContain('Ocurrió un error procesando tu respuesta. Por favor intenta nuevamente en unos minutos.');
     });
 
     it('"Salir" sigue cerrando la conversación y no retira de la lista de espera', async () => {
