@@ -5,10 +5,11 @@ import { construirMensajeFechasDisponibles, construirMensajeHorasDisponibles } f
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 import { closeUserSession } from '../../../utils/proactiveSessionManager';
 import { registrarActividadBot } from '../../../services/apiService';
+import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin } from '../../../utils/trazabilidad';
 
 const stepSeleccionaFechaReprogramar = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
-        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow, { paso: 'reprogramar.selecciona_fecha' });
         if (!sessionValid) {
             return endFlow();
         }
@@ -23,11 +24,13 @@ const stepSeleccionaFechaReprogramar = addKeyword(EVENTS.ACTION)
                 const { fechasOrdenadas, pasoSeleccionFecha } = state.getMyState();
                 const seleccion = ctx.body ? parseInt(ctx.body, 10) : 0;
                 if (isNaN(seleccion)) {
+                    trackNoEntendido(ctx.from, 'reprogramar.selecciona_fecha');
                     await flowDynamic('Por favor, ingresa un número válido.');
                     return gotoFlow(stepSeleccionaFechaReprogramar);
                 }
                 const mostrarFechas = fechasOrdenadas.slice(pasoSeleccionFecha.inicio, pasoSeleccionFecha.fin);
                 if (seleccion < 1 || seleccion > mostrarFechas.length + 1 || (seleccion === mostrarFechas.length + 1 && fechasOrdenadas.length <= pasoSeleccionFecha.fin)) {
+                    trackNoEntendido(ctx.from, 'reprogramar.selecciona_fecha');
                     await flowDynamic('Opción inválida. Por favor, selecciona una opción válida.');
                     return gotoFlow(stepSeleccionaFechaReprogramar);
                 }
@@ -42,6 +45,7 @@ const stepSeleccionaFechaReprogramar = addKeyword(EVENTS.ACTION)
                 }
 
                 const fechaSeleccionadaAgendar = mostrarFechas[seleccion - 1];
+                trackPaso(ctx.from, 'reprogramar.selecciona_fecha', 'ok');
                 const myState = await state.getMyState();
                 const tipoConsulta = myState.tipoConsultaPaciente; // 'Primera vez' o 'Control'
                 const especialidad = myState.especialidadAgendarCita;
@@ -50,6 +54,7 @@ const stepSeleccionaFechaReprogramar = addKeyword(EVENTS.ACTION)
                 if (tipoConsulta === 'Control') {
                     if (!ProfesionalID) {
                         await flowDynamic('No se ha seleccionado un profesional. Por favor, vuelve a intentarlo.');
+                        trackPaso(ctx.from, 'reprogramar.selecciona_fecha', 'error');
                         closeUserSession(ctx.from);
                         return endFlow();
                     }
@@ -59,6 +64,9 @@ const stepSeleccionaFechaReprogramar = addKeyword(EVENTS.ACTION)
                     citasFechaSeleccionada = await consultarCitasFecha(fechaSeleccionadaAgendar, tipoConsulta, especialidad);
                 }
 
+                if (!citasFechaSeleccionada || citasFechaSeleccionada.length === 0) {
+                    trackErrorBackend(ctx.from, 'reprogramar.selecciona_fecha', '/chatbot/horas');
+                }
                 const mostrarHoras = citasFechaSeleccionada.slice(0, 5);
                 const mensaje = construirMensajeHorasDisponibles(mostrarHoras, citasFechaSeleccionada.length, 5, `Horas disponibles para el *${fechaSeleccionadaAgendar}*:`);
                 await flowDynamic(mensaje);
@@ -66,6 +74,7 @@ const stepSeleccionaFechaReprogramar = addKeyword(EVENTS.ACTION)
                 return gotoFlow(stepHoraSeleccionada);
             } catch (error) {
                 console.error('Error en stepSeleccionaFechaReprogramar:', error);
+                trackPaso(ctx.from, 'reprogramar.selecciona_fecha', 'error');
                 await flowDynamic('Ocurrió un error inesperado. Por favor, intenta nuevamente más tarde.');
                 return gotoFlow(stepSeleccionaFechaReprogramar);
             }

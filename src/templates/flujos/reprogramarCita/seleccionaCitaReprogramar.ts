@@ -9,6 +9,9 @@ import { CONVENIOS_SERVICIOS, ID_CONVENIOS_SERVICIOS } from '../../../constants/
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 import { closeUserSession } from '../../../utils/proactiveSessionManager';
 import { registrarActividadBot } from '../../../services/apiService';
+import { programarTickCascadaRetrasado } from '../../../utils/listaEsperaCascadaPoller';
+import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin } from '../../../utils/trazabilidad';
+import { CAUSE_GLOBHO_ERROR, mensajeErrorGlobhoMovimiento } from '../../../utils/mensajesMovimientoCita';
 
 
 function generarAgendaIdAleatorio() {
@@ -44,6 +47,7 @@ const noConfirmaReprogramarCita = addKeyword(EVENTS.ACTION)
 const confirmarReprogramarCita = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { state, flowDynamic, gotoFlow, endFlow }) => {
         try {
+            trackPaso(ctx.from, 'reprogramar.confirma_reprogramar', 'ok');
             const citaAnterior = state.getMyState().citaSeleccionadaProgramada;
             const nuevaCita = state.getMyState().citaSeleccionadaHora;
             //console.log('citaAnterior:', citaAnterior);
@@ -67,23 +71,56 @@ const confirmarReprogramarCita = addKeyword(EVENTS.ACTION)
                     tipo_cita: citaAnterior.tipo_cita === '1' ? 'presencial' : 'virtual'
                 }
             }
-            const response = await reagendarCita(bodyReagendar);
-            if (!response) {
+            const resultado = await reagendarCita(bodyReagendar);
+            if (resultado.ok === false) {
+                if (resultado.error === 'GLOBHO_ERROR') {
+                    // 502 GLOBHO_ERROR: el mensaje depende de si la cita actual quedó como estaba.
+                    trackErrorBackend(ctx.from, 'reprogramar.confirma_reprogramar', '/chatbot/reagendar', {
+                        siempre: true,
+                        cause: CAUSE_GLOBHO_ERROR,
+                        httpStatus: 502,
+                    });
+                    trackFin(ctx.from, 'reprogramar', 'error_backend', {
+                        paso: 'reprogramar.confirma_reprogramar',
+                        citaIdExterna: citaAnterior.agenda_id_externa,
+                        metadata: { cause: CAUSE_GLOBHO_ERROR, cita_anterior_restaurada: resultado.citaAnteriorRestaurada },
+                    });
+                    await registrarActividadBot('chat_flujo_reprogramar', ctx.from, {
+                        step: 'confirmar_cita',
+                        resultado: 'error_globho',
+                        cita_anterior_restaurada: resultado.citaAnteriorRestaurada
+                    });
+                    await flowDynamic(mensajeErrorGlobhoMovimiento(resultado.citaAnteriorRestaurada));
+                    closeUserSession(ctx.from);
+                    return endFlow();
+                }
+                trackErrorBackend(ctx.from, 'reprogramar.confirma_reprogramar', '/chatbot/reagendar', { siempre: true });
+                trackFin(ctx.from, 'reprogramar', 'error_backend', { paso: 'reprogramar.confirma_reprogramar', citaIdExterna: citaAnterior.agenda_id_externa });
                 await flowDynamic('Error al reagendar la cita. Por favor, intenta nuevamente.');
                 closeUserSession(ctx.from);
                 return endFlow();
             }
+
             metricFlujoFinalizado('reagendar');
+            // cita_id_externa = la cita ANTERIOR (la nueva no trae su id en la respuesta, MEMORY.md sección 11).
+            trackFin(ctx.from, 'reprogramar', 'cita_reprogramada', { paso: 'reprogramar.confirma_reprogramar', citaIdExterna: citaAnterior.agenda_id_externa });
             await registrarActividadBot('chat_flujo_reprogramar', ctx.from, {
                 step: 'confirmar_cita',
                 cita: 'creada_globho'
             });
 
             await flowDynamic('Tu cita se ha agendado con éxito. 📅👍');
+            // Path rápido de la cascada de lista de espera: la franja anterior también queda libre al
+            // reprogramar (docs/features/2026-09-07-lista-espera-inteligente.md, 13.4-e). Se dispara
+            // DESPUÉS de confirmar al paciente y con retraso (LISTA_ESPERA_RETRASO_OFERTA_SEG + margen)
+            // para que la oferta no se cruce con esta confirmación. Fire-and-forget, nunca lanza.
+            programarTickCascadaRetrasado();
             await state.update({ citaReprogramada: true });
             return gotoFlow(revisarPagoConsulta);
         } catch (e) {
             metricError(e, ctx.from);
+            trackPaso(ctx.from, 'reprogramar.confirma_reprogramar', 'error');
+            trackFin(ctx.from, 'reprogramar', 'error_backend', { paso: 'reprogramar.confirma_reprogramar' });
             await flowDynamic('Ocurrió un error inesperado al reprogramar la cita.');
             closeUserSession(ctx.from);
             return endFlow();
@@ -93,7 +130,7 @@ const confirmarReprogramarCita = addKeyword(EVENTS.ACTION)
 
 const preguntarConfirmarBotones = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
-        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow);
+        const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow, { paso: 'reprogramar.confirma_reprogramar' });
         if (!sessionValid) {
             return endFlow();
         }
@@ -112,8 +149,10 @@ const preguntarConfirmarBotones = addKeyword(EVENTS.ACTION)
                 return ctxFn.gotoFlow(confirmarReprogramarCita);
             }
             if (ctx.body === 'No') {
+                trackPaso(ctx.from, 'reprogramar.confirma_reprogramar', 'ok', { metadata: { confirma: false } });
                 return ctxFn.gotoFlow(noConfirmaReprogramarCita);
             }
+            trackNoEntendido(ctx.from, 'reprogramar.confirma_reprogramar');
         }
     );
 

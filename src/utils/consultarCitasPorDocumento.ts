@@ -2,14 +2,16 @@ import {
     consultarPacientePorDocumento,
     consultarCitasProximasPaciente,
     crearPacienteDataBase,
+    ResultadoCrearPaciente,
 } from '../services/apiService';
+import { esEstadoCitaGestionable } from '../constants/estadosCita';
 
 export async function consultarCitasPorDocumento(tipoDoc: string, numeroDoc: string) {
     const citas = await consultarCitasProximasPaciente(numeroDoc);
     if (!citas || citas.length === 0) {
         return [];
     }
-    const citasProgramadas = citas.filter((cita: any) => cita.estado_agenda === 'Pendiente');
+    const citasProgramadas = citas.filter((cita: any) => esEstadoCitaGestionable(cita?.estado_agenda));
     return citasProgramadas;
 }
 
@@ -25,10 +27,10 @@ export async function consultarPaciente(numeroDoc: string) {
     };
 }
 
-export async function crearPaciente(datosPaciente: any) {
-    const pacienteCreado = await crearPacienteDataBase(datosPaciente);
-    if (!pacienteCreado) {
-        throw new Error('Error al crear el paciente');
-    }
-    return pacienteCreado.pacientes_id || null;
+/**
+ * Alta de paciente nuevo. Nunca lanza: devuelve el resultado con detalle (ver `ResultadoCrearPaciente`).
+ * Un documento ya registrado (200 con `ya_existia: true`) cuenta como éxito con el `pacientes_id` existente.
+ */
+export async function crearPaciente(datosPaciente: any): Promise<ResultadoCrearPaciente> {
+    return crearPacienteDataBase(datosPaciente);
 }

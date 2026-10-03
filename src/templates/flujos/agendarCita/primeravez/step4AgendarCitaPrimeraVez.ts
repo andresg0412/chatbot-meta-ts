@@ -3,10 +3,12 @@ import {
     step5AgendarCitaPrimeraVezPresencial,
     step5AgendarCitaPrimeraVezVirtual,
 } from './step5AgendarCitaPrimeraVez';
+import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion } from '../../../../utils/trazabilidad';
 
 const step4AgendarCitaPrimeraVez = addKeyword(EVENTS.ACTION)
     .addAction(
         async (ctx, { state, gotoFlow }) => {
+            trackPaso(ctx.from, 'agendar.pv04_especialidad_menu');
             const tipoCitaAgendarCita = await state.getMyState().tipoCitaAgendarCita;
             if (tipoCitaAgendarCita === 'Presencial') {
                 return gotoFlow(step5AgendarCitaPrimeraVezPresencial)

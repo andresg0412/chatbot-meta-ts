@@ -3,10 +3,12 @@ import { step6CancelarCita } from './step6CancelarCita';
 import { sanitizeString } from '../../../utils/sanitize';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 import { registrarActividadBot } from '../../../services/apiService';
+import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion, flujoDesdeSeleccionMenu } from '../../../utils/trazabilidad';
 
 
 const step5CancelarCita = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
+        trackPaso(ctx.from, 'cancelar.s05_lista_citas');
         await registrarActividadBot('chat_flujo_cancelar_cita', ctx.from, {
             step: 'consulta_citas_agendadas'
         });
@@ -16,6 +18,7 @@ const step5CancelarCita = addKeyword(EVENTS.ACTION)
         async (ctx, { state, flowDynamic, gotoFlow }) => {
             const esperaSeleccionCita = state.getMyState().esperaSeleccionCita;
             if (!esperaSeleccionCita) {
+                trackNoEntendido(ctx.from, 'cancelar.s05_lista_citas');
                 await flowDynamic('No se está esperando una selección de cita. Por favor, intenta nuevamente.');
                 return;
             }
