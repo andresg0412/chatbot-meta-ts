@@ -117,6 +117,12 @@ import {
     // LISTA DE ESPERA — retiro voluntario por WhatsApp (runbook B5)
     retiroListaEsperaFlow,
     retiroListaEsperaAccionFlow,
+    // LISTA DE ESPERA — respuesta a la invitación de las campañas de regularización/continua
+    invitacionAceptaFlow,
+    invitacionRechazaFlow,
+    invitacionDocumentoFlow,
+    invitacionSeleccionFlow,
+    invitacionRechazoPayloadFlow,
 } from './flujos/listaEspera'
 import {
     // RECORDATORIOS (Fase 3) — captura de respuesta en recordatorios con botones
@@ -151,6 +157,10 @@ const flujosRegistradosCompletos = [
     botonesConfirmarCancelacionFlow,
     ofertaCupoAceptaDocumentoFlow,
     ofertaCupoRechazaDocumentoFlow,
+    // Invitación a la lista de espera ("Sí, quiero recibir avisos" / "No, gracias"), regex ancladas.
+    // proyecto-ips/docs/features/2026-10-04-campanas-invitacion-lista-espera-implementacion.md, 6.6.
+    invitacionAceptaFlow,
+    invitacionRechazaFlow,
     welcomeFlow,
     exitFlow,
     ejecutarPlantillaDiariaFlow,
@@ -227,6 +237,9 @@ const flujosRegistradosCompletos = [
     stepListaEsperaOptIn,
     ofertaCupoAccionFlow,
     retiroListaEsperaAccionFlow,
+    invitacionDocumentoFlow,
+    invitacionSeleccionFlow,
+    invitacionRechazoPayloadFlow,
     confirmoAsistenciaAccionFlow,
     necesitoCancelarAccionFlow,
     noPodreAsistirAccionFlow,

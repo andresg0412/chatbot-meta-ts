@@ -11,6 +11,7 @@ import { executeReminderCampaign } from './controllers/reminderCampaignControlle
 import { executeConfirmationCampaign } from './controllers/executeCampaignController';
 import { executeRecuperacionCampaign } from './controllers/recuperacionCampaignController';
 import { executeConAsistenciaCampaign } from './controllers/conAsistenciaCampaignController';
+import { executeListaEsperaRegularizacionCampaign, executeListaEsperaContinuaCampaign } from './controllers/listaEsperaInvitacionCampaignController';
 import { createCrisisInterceptor } from './utils/crisisProtocol';
 import { startCascadaPoller } from './utils/listaEsperaCascadaPoller';
 import { procesarNoticeProvider } from './utils/avisoAsesor';
@@ -214,6 +215,19 @@ const main = async () => {
     adapterProvider.server.post(
         '/v1/campaigns/conasistencia',
         executeConAsistenciaCampaign
+    )
+
+    // Campañas de invitación a la lista de espera (regularización temporal y continua diaria). Responden
+    // 202 y procesan en segundo plano; apagadas con LISTA_ESPERA_INVITACION_ENABLED != 'true' (salvo
+    // modo_previsualizacion). Ver proyecto-ips/docs/features/2026-10-04-campanas-invitacion-lista-espera-implementacion.md, 6.5.
+    adapterProvider.server.post(
+        '/v1/campaigns/lista-espera-regularizacion',
+        executeListaEsperaRegularizacionCampaign
+    )
+
+    adapterProvider.server.post(
+        '/v1/campaigns/lista-espera-continua',
+        executeListaEsperaContinuaCampaign
     )
 
     httpServer(+PORT)

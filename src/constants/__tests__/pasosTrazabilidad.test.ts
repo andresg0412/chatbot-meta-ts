@@ -8,10 +8,18 @@ describe('catálogo de pasos de trazabilidad', () => {
         expect(new Set(ids).size).toBe(ids.length);
     });
 
-    // 67 de la tabla 11.3 + 2 de TB-05/TBOT-03 (recordatorio.selecciona_cita y recordatorio.confirma_cancelar),
-    // pendientes de sembrar en `catalogo_pasos` del backend.
-    it('tiene los 69 pasos (67 de la tabla 11.3 + 2 de TB-05/TBOT-03)', () => {
-        expect(CATALOGO_PASOS).toHaveLength(69);
+    // 67 de la tabla 11.3 + 2 de TB-05/TBOT-03 (recordatorio.selecciona_cita y recordatorio.confirma_cancelar)
+    // + 3 de la invitación a la lista de espera (migración 034).
+    it('tiene los 72 pasos (67 de la tabla 11.3 + 2 de TB-05/TBOT-03 + 3 de la invitación)', () => {
+        expect(CATALOGO_PASOS).toHaveLength(72);
+    });
+
+    // Semilla de `catalogo_pasos` de la migración 034 (proyecto-ips/docs/features/
+    // 2026-10-04-campanas-invitacion-lista-espera-implementacion.md, 6.1).
+    it('pasos de la invitación a la lista de espera idénticos a la migración 034', () => {
+        expect(obtenerPaso('lista_espera.invitacion_documento')).toEqual({ paso: 'lista_espera.invitacion_documento', flujo: 'lista_espera', orden: 1, es_final: false });
+        expect(obtenerPaso('lista_espera.invitacion_selecciona')).toEqual({ paso: 'lista_espera.invitacion_selecciona', flujo: 'lista_espera', orden: 2, es_final: false });
+        expect(obtenerPaso('lista_espera.invitacion_respuesta')).toEqual({ paso: 'lista_espera.invitacion_respuesta', flujo: 'lista_espera', orden: 3, es_final: true });
     });
 
     it('cada id tiene la forma <prefijo>.<nombre> y cabe en VARCHAR(60); flujo en VARCHAR(30)', () => {

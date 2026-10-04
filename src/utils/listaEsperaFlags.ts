@@ -28,6 +28,17 @@ export function isRecordatoriosBotonesEnabled(): boolean {
 }
 
 /**
+ * Campañas de invitación a la lista de espera (regularización y continua), ver
+ * proyecto-ips/docs/features/2026-10-04-campanas-invitacion-lista-espera-implementacion.md, 6.2/6.5.
+ * Apagado: los dos endpoints de campaña responden `{estado:'deshabilitada'}` sin llamar al backend
+ * (salvo la previsualización, que es de solo lectura). Los flujos de respuesta a los botones siempre
+ * están registrados (si no se envió ninguna plantilla, nadie toca esos botones).
+ */
+export function isInvitacionListaEsperaEnabled(): boolean {
+    return process.env.LISTA_ESPERA_INVITACION_ENABLED === 'true';
+}
+
+/**
  * Lista piloto `LISTA_ESPERA_TELEFONOS_PILOTO` (separada por comas, formato 57XXXXXXXXXX o 10
  * dígitos). Devuelve las claves de comparación (últimos 10 dígitos). Vacía = sin restricción.
  */
