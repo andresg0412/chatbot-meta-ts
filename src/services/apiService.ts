@@ -6,7 +6,8 @@ import { AgendaPendienteResponse, AgendaProgramadaResponse } from '../interfaces
 import { AccionCascada } from '../interfaces/ICascadaListaEspera';
 import { isRecordatoriosBotonesEnabled as flagRecordatoriosBotones, esTelefonoPiloto } from '../utils/listaEsperaFlags';
 import { formatearFechaLarga, formatearHoraHHMM } from '../utils/fechaHora';
-import { enmascararTelefono } from '../utils/telefono';
+import { enmascararTelefono, normalizarTelefonoWhatsApp } from '../utils/telefono';
+import { construirPayloadInvitacion } from '../utils/invitacionPayload';
 import { limpiarParametroPlantilla } from '../utils/parametroPlantilla';
 import { fechaBogotaHoy } from '../utils/fechaHora';
 import {
@@ -1564,5 +1565,350 @@ export async function consultarListaEsperaPorDocumento(
         }
         console.error('Error consultando lista de espera por documento:', error?.message ?? error);
         return { ok: false, encontrado: false, inscripciones: [] };
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Campañas de invitación a la lista de espera (regularización y continua).
+// Contrato: proyecto-ips/docs/features/2026-10-04-campanas-invitacion-lista-espera-implementacion.md,
+// sección 6.4 (endpoints E1-E8 bajo /api/chatbot/listaespera/invitaciones/*) y 6.5 (plantilla).
+//
+// Todas las funciones de backend devuelven `ResultadoBackendInvitacion` y NUNCA lanzan:
+//   - 2xx → { ok: true, code, data } (`data` = `response.data.data`);
+//   - 4xx → { ok: false, code, cause, data } con el `cause` y el `data` del cuerpo de error del backend;
+//   - 5xx, timeout o red → { ok: false, code: status | null, cause: cause | 'ERROR', data }.
+// Logs: solo endpoint, estado HTTP y `cause` (nunca teléfono, documento ni nombre).
+// ---------------------------------------------------------------------------
+
+export type CampanaTipoInvitacion = 'regularizacion' | 'continua';
+export type OrigenEjecucionInvitacion = 'cron' | 'manual' | 'endpoint';
+export type MotivoFinReservaInvitacion = 'sin_candidatas' | 'limite_alcanzado' | 'config_incompleta';
+export type MotivoFinEjecucionInvitacion =
+    | 'sin_candidatas'
+    | 'limite_alcanzado'
+    | 'fuera_de_horario'
+    | 'deshabilitada'
+    | 'error'
+    | 'config_incompleta';
+
+export type ResultadoBackendInvitacion<T> =
+    | { ok: true; code: number; data: T }
+    | { ok: false; code: number | null; cause: string; data: any };
+
+/** E1: previsualización (solo conteos y agenda_id). */
+export interface PrevisualizacionInvitacionesData {
+    campana_tipo: CampanaTipoInvitacion;
+    fecha_corte: string;
+    total_evaluadas: number;
+    total_elegibles: number;
+    excluidas: Record<string, number>;
+    pacientes_varias_citas: number;
+    muestra_agenda_ids: string[];
+}
+
+/** E2: invitación reservada (estado 'pendiente'). `especialidad` nunca se usa en mensajes (privacidad). */
+export interface InvitacionReservada {
+    invitacion_id: string;
+    agenda_id: string;
+    telefono: string;
+    nombre: string;
+    profesional: string;
+    fecha_cita: string;
+    hora_cita: string;
+    especialidad?: string;
+}
+
+export interface ReservarInvitacionesRequest {
+    campana_tipo: CampanaTipoInvitacion;
+    origen: OrigenEjecucionInvitacion;
+    ejecucion_id: string | null;
+    campana_ejecucion_id: string | null;
+    lote: number;
+    limite: number;
+    fecha_desde: string | null;
+    fecha_hasta: string | null;
+    solo_telefonos: string[];
+}
+
+export interface ReservarInvitacionesData {
+    ejecucion_id: string;
+    invitaciones: InvitacionReservada[];
+    reservadas_total: number;
+    quedan_elegibles: number;
+    motivo_fin: MotivoFinReservaInvitacion | null;
+}
+
+/** E3. `motivo` solo en los fallos que no vienen de Meta. */
+export interface RegistrarEnvioInvitacionRequest {
+    invitacion_id: string;
+    exito: boolean;
+    mensaje_wa_id?: string;
+    plantilla?: string;
+    error_code?: string;
+    error_titulo?: string;
+    motivo?: 'bloqueado_crisis' | 'cita_no_valida' | null;
+}
+
+export interface RegistrarEnvioInvitacionData {
+    invitacion_id: string;
+    estado: string;
+    ya_registrado: boolean;
+}
+
+/** E4. */
+export interface FinalizarSinRespuestaInvitacionesData {
+    pendientes_resueltas_enviada: number;
+    pendientes_a_error: number;
+    anuladas: number;
+    sin_respuesta: number;
+}
+
+/** E5: invitación vigente del paciente (fallback sin payload). */
+export interface InvitacionPorDocumento {
+    invitacion_id: string;
+    fecha_cita: string;
+    hora_cita: string;
+    profesional: string;
+}
+
+/** E6. */
+export interface ResponderInvitacionRequest {
+    invitacion_id: string;
+    celular: string;
+    documento: string;
+    respuesta: 'acepta' | 'rechaza';
+    via: 'payload' | 'documento';
+    consentimiento_texto?: string;
+}
+
+export type EstadoResultadoInvitacion = 'aceptada' | 'ya_aceptada' | 'rechazada' | 'ya_rechazada';
+
+export interface ResponderInvitacionData {
+    invitacion_id: string;
+    estado_resultado: EstadoResultadoInvitacion;
+    lista_espera_id: string | null;
+    nombre: string;
+    cita: { fecha_cita: string; hora_cita: string; profesional: string };
+}
+
+/** E7: decisión del opt-in del flujo de agendar (stepListaEsperaOptIn.ts). */
+export interface RegistrarOptinListaEsperaRequest {
+    paciente_id: string;
+    profesional_id: string;
+    fecha_cita: string; // YYYY-MM-DD
+    hora_cita: string;  // HH:mm
+    decision: 'acepta' | 'rechaza';
+    celular: string;
+    lista_espera_id: string | null;
+}
+
+export interface RegistrarOptinListaEsperaData {
+    invitacion_id: string;
+    ya_existia: boolean;
+}
+
+/** E8. */
+export interface FinalizarEjecucionInvitacionRequest {
+    ejecucion_id: string;
+    estado: 'finalizada' | 'abortada';
+    motivo_fin: MotivoFinEjecucionInvitacion;
+    duracion_ms: number;
+}
+
+const RUTA_INVITACIONES = '/chatbot/listaespera/invitaciones';
+
+async function llamarBackendInvitaciones<T>(
+    metodo: 'get' | 'post',
+    ruta: string,
+    payload?: Record<string, unknown>
+): Promise<ResultadoBackendInvitacion<T>> {
+    const endpoint = `${RUTA_INVITACIONES}/${ruta}`;
+    try {
+        const url = `${API_BACKEND_URL}${endpoint}`;
+        const response = metodo === 'get'
+            ? await axios.get(url, { params: payload ?? {}, timeout: TIMEOUT_BACKEND_RECORDATORIOS_MS })
+            : await axios.post(url, payload ?? {}, { timeout: TIMEOUT_BACKEND_RECORDATORIOS_MS });
+        return { ok: true, code: response?.status ?? 200, data: response?.data?.data as T };
+    } catch (error: any) {
+        registrarFalloBackend(endpoint, error);
+        const status: number | null = typeof error?.response?.status === 'number' ? error.response.status : null;
+        const cuerpo = error?.response?.data;
+        const cause = typeof cuerpo?.cause === 'string' && cuerpo.cause ? cuerpo.cause : 'ERROR';
+        console.error(`[invitaciones] ${endpoint} falló (status=${status ?? 'sin_respuesta'}, cause=${cause})`);
+        return { ok: false, code: status, cause, data: cuerpo?.data ?? null };
+    }
+}
+
+/** E1 `GET /candidatas`. Solo lectura. `solo_telefonos` viaja como lista separada por comas. */
+export async function previsualizarInvitaciones(params: {
+    campana_tipo: CampanaTipoInvitacion;
+    fecha_desde?: string | null;
+    fecha_hasta?: string | null;
+    solo_telefonos?: string[];
+}): Promise<ResultadoBackendInvitacion<PrevisualizacionInvitacionesData>> {
+    const query: Record<string, unknown> = { campana_tipo: params.campana_tipo };
+    if (params.campana_tipo === 'regularizacion') {
+        if (params.fecha_desde) query.fecha_desde = params.fecha_desde;
+        if (params.fecha_hasta) query.fecha_hasta = params.fecha_hasta;
+    }
+    if (params.solo_telefonos && params.solo_telefonos.length > 0) {
+        query.solo_telefonos = params.solo_telefonos.join(',');
+    }
+    return llamarBackendInvitaciones<PrevisualizacionInvitacionesData>('get', 'candidatas', query);
+}
+
+/** E2 `POST /reservar`. */
+export async function reservarInvitaciones(
+    body: ReservarInvitacionesRequest
+): Promise<ResultadoBackendInvitacion<ReservarInvitacionesData>> {
+    return llamarBackendInvitaciones<ReservarInvitacionesData>('post', 'reservar', { ...body });
+}
+
+/** E3 `POST /registrar-envio`. Idempotente en el backend. */
+export async function registrarEnvioInvitacion(
+    body: RegistrarEnvioInvitacionRequest
+): Promise<ResultadoBackendInvitacion<RegistrarEnvioInvitacionData>> {
+    return llamarBackendInvitaciones<RegistrarEnvioInvitacionData>('post', 'registrar-envio', { ...body });
+}
+
+/** E4 `POST /finalizar-sin-respuesta`. Sin `horas` el backend usa su variable de entorno. */
+export async function finalizarSinRespuestaInvitaciones(
+    horas?: number
+): Promise<ResultadoBackendInvitacion<FinalizarSinRespuestaInvitacionesData>> {
+    return llamarBackendInvitaciones<FinalizarSinRespuestaInvitacionesData>(
+        'post',
+        'finalizar-sin-respuesta',
+        typeof horas === 'number' ? { horas } : {}
+    );
+}
+
+/** E8 `POST /ejecuciones/finalizar`. Idempotente en el backend. */
+export async function finalizarEjecucionInvitacion(
+    body: FinalizarEjecucionInvitacionRequest
+): Promise<ResultadoBackendInvitacion<Record<string, unknown>>> {
+    return llamarBackendInvitaciones<Record<string, unknown>>('post', 'ejecuciones/finalizar', { ...body });
+}
+
+/** E5 `POST /por-documento` (fallback sin payload). 404 PACIENTE_NOT_FOUND llega como ok:false. */
+export async function consultarInvitacionesPorDocumento(
+    documento: string,
+    celular: string
+): Promise<ResultadoBackendInvitacion<{ invitaciones: InvitacionPorDocumento[] }>> {
+    return llamarBackendInvitaciones<{ invitaciones: InvitacionPorDocumento[] }>('post', 'por-documento', { documento, celular });
+}
+
+/** E6 `POST /responder`. Nunca toca la cita (ni Globho ni `agenda`). */
+export async function responderInvitacion(
+    body: ResponderInvitacionRequest
+): Promise<ResultadoBackendInvitacion<ResponderInvitacionData>> {
+    return llamarBackendInvitaciones<ResponderInvitacionData>('post', 'responder', { ...body });
+}
+
+/** E7 `POST /registrar-optin`. Best-effort: el llamador no cambia nada ante un fallo. */
+export async function registrarOptinListaEspera(
+    body: RegistrarOptinListaEsperaRequest
+): Promise<ResultadoBackendInvitacion<RegistrarOptinListaEsperaData>> {
+    return llamarBackendInvitaciones<RegistrarOptinListaEsperaData>('post', 'registrar-optin', { ...body });
+}
+
+/**
+ * Respaldos legibles para {{1}} y {{2}} de la plantilla de invitación: `limpiarParametroPlantilla` cambia
+ * un valor vacío por '-' (Meta rechaza parámetros vacíos), y el paciente leería "Hola, - 😊" o "con - el…".
+ * Encajan con el texto 6.9: "Hola, paciente 😊 Tienes una cita agendada con tu profesional el …".
+ */
+export const RESPALDO_NOMBRE_INVITACION = 'paciente';
+export const RESPALDO_PROFESIONAL_INVITACION = 'tu profesional';
+
+function textoORespaldo(valor: unknown, respaldo: string): string {
+    const texto = String(valor ?? '').replace(/\s+/g, ' ').trim();
+    return texto.length > 0 ? texto : respaldo;
+}
+
+/**
+ * Plantilla de invitación a la lista de espera (`NOMBRE_PLANTILLA_LE_INVITACION`, sección 6.9):
+ *   {{1}} nombre, {{2}} profesional, {{3}} formatearFechaLarga(fecha_cita), {{4}} formatearHoraHHMM(hora_cita);
+ *   botón 0 ("Sí, quiero recibir avisos") con payload 'LEINV:<id>:A', botón 1 ("No, gracias") con 'LEINV:<id>:R'.
+ * Privacidad: no se envía la especialidad aunque `reservar` la devuelva.
+ * Sin nombre de plantilla configurado no se llama a Meta (R14: nada de valores por defecto).
+ * Logs sin teléfono completo ni nombre (runbook B9).
+ */
+export async function enviarPlantillaInvitacionListaEspera(
+    inv: InvitacionReservada,
+    campanaEjecucionId: string | undefined,
+    campana: CampanaTraza
+): Promise<ResultadoEnvioMeta> {
+    const nombrePlantilla = (process.env.NOMBRE_PLANTILLA_LE_INVITACION ?? '').trim();
+    const telefono = normalizarTelefonoWhatsApp(inv?.telefono);
+    const trazar = (resultado: ResultadoEnvioMeta): ResultadoEnvioMeta => {
+        trackEnvioWhatsApp({
+            telefono: telefono ?? inv?.telefono ?? null,
+            campana,
+            campanaEjecucionId,
+            plantilla: nombrePlantilla || null,
+            tipoEnvio: 'plantilla',
+            resultado,
+            agendaId: inv?.agenda_id ?? null,
+        });
+        return resultado;
+    };
+    if (!nombrePlantilla) {
+        return trazar({ exito: false, errorCode: 'sin_plantilla', errorTitulo: 'NOMBRE_PLANTILLA_LE_INVITACION vacío' });
+    }
+    if (!telefono) {
+        return trazar({ exito: false, errorCode: 'telefono_invalido', errorTitulo: 'teléfono no contactable' });
+    }
+    try {
+        const payloadAcepta = construirPayloadInvitacion(inv.invitacion_id, 'A');
+        const payloadRechaza = construirPayloadInvitacion(inv.invitacion_id, 'R');
+        const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
+        const body = {
+            messaging_product: 'whatsapp',
+            to: telefono,
+            type: 'template',
+            template: {
+                name: nombrePlantilla,
+                language: { code: 'es_CO' },
+                components: [
+                    {
+                        type: 'body',
+                        parameters: [
+                            { type: 'text', text: limpiarParametroPlantilla(textoORespaldo(inv.nombre, RESPALDO_NOMBRE_INVITACION)) },
+                            { type: 'text', text: limpiarParametroPlantilla(textoORespaldo(inv.profesional, RESPALDO_PROFESIONAL_INVITACION)) },
+                            { type: 'text', text: limpiarParametroPlantilla(formatearFechaLarga(inv.fecha_cita)) },
+                            { type: 'text', text: limpiarParametroPlantilla(formatearHoraHHMM(inv.hora_cita)) },
+                        ],
+                    },
+                    {
+                        type: 'button',
+                        sub_type: 'quick_reply',
+                        index: '0',
+                        parameters: [{ type: 'payload', payload: payloadAcepta }],
+                    },
+                    {
+                        type: 'button',
+                        sub_type: 'quick_reply',
+                        index: '1',
+                        parameters: [{ type: 'payload', payload: payloadRechaza }],
+                    },
+                ],
+            },
+        };
+        const response = await axios.post(url, body, {
+            headers: {
+                'Authorization': `Bearer ${process.env.jwtToken}`,
+                'Content-Type': 'application/json',
+            },
+            timeout: 15000,
+        });
+        const resultadoEnvio = resultadoEnvioDesdeRespuesta(response.data);
+        console.log(
+            `[invitaciones] Plantilla de invitación ${resultadoEnvio.exito ? 'aceptada por Meta' : 'NO aceptada por Meta'} ` +
+            `(invitacion ${inv.invitacion_id}, tel ${enmascararTelefono(telefono)})`
+        );
+        return trazar(resultadoEnvio);
+    } catch (error: any) {
+        // No se imprime el error completo: su config.data lleva nombre y teléfono del paciente.
+        console.error(`[invitaciones] Error enviando plantilla de invitación ${inv?.invitacion_id}:`, resumirErrorMeta(error));
+        return trazar(resultadoEnvioDesdeError(error));
     }
 }

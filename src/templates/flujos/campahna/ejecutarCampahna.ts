@@ -119,6 +119,11 @@ export const ejecutarCampahnaConfirmacionPorFecha = async (
             });
             errores++;
           }
+        } else {
+          // Estado ausente o desconocido (p. ej. el backend dejó de enviar estado_agenda): no se envía
+          // nada, pero se cuenta como error para que la corrida no termine "0 exitosos, 0 errores".
+          console.error(`❌ Cita ${cita.cita_id} sin estado_agenda válido (${String(cita.estado_agenda)}); no se envía plantilla`);
+          errores++;
         }
 
         resultadosDetalle.push(resultado);

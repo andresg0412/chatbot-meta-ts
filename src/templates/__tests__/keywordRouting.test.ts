@@ -36,7 +36,7 @@ import { step1AgendarCita, step14AgendarCita2 } from '../flujos/agendarCita';
 import { IDS_TIPO_DOCUMENTO, IDS_TIPO_DOCUMENTO_RETIRADOS } from '../../utils/datosPacienteNuevo';
 import { pasoAgenteFlow } from '../flujos/pasoAgente';
 import { pqrsFlow } from '../flujos/pasoAgente/enviarpqrs';
-import { ofertaCupoAceptaDocumentoFlow, ofertaCupoRechazaDocumentoFlow, retiroListaEsperaFlow } from '../flujos/listaEspera';
+import { ofertaCupoAceptaDocumentoFlow, ofertaCupoRechazaDocumentoFlow, retiroListaEsperaFlow, invitacionAceptaFlow, invitacionRechazaFlow } from '../flujos/listaEspera';
 import { confirmoAsistenciaFlow, necesitoCancelarFlow, noPodreAsistirFlow, botonesConfirmarCancelacionFlow } from '../flujos/recordatorios';
 import { ID_FILA_NINGUNA, idFilaCita, MAX_CITAS_EN_LISTA, PREFIJO_ID_FILA_CITA } from '../../utils/mensajesRecordatorio';
 
@@ -75,6 +75,9 @@ const flujosNuevosExactos: FlowLike[] = [
     botonesConfirmarCancelacionFlow,
     ofertaCupoAceptaDocumentoFlow,
     ofertaCupoRechazaDocumentoFlow,
+    // Invitación a la lista de espera (2026-10-04): "Sí, quiero recibir avisos" / "No, gracias" exactos.
+    invitacionAceptaFlow,
+    invitacionRechazaFlow,
 ];
 
 const registroReal = createFlow(flujosRegistrados as any);
@@ -179,7 +182,7 @@ describe('Enrutamiento de keywords con el algoritmo real de @builderbot (runbook
             'Agendar cita', 'agendar', 'Reprogramar', 'reprogramar cita', 'PQRS', 'quejas', 'chatear con agente',
             'Hablar con asistente', 'Salir', 'salir', 'Exit', 'exit', 'En otro momento', 'Ya finalicé mi proceso',
             'Servicios', 'Convenios', 'Tarifas', 'Formas de pago', 'Ubicación', 'Horarios', 'Canales de atención',
-            'Sí, avísame', 'No, gracias', 'Acepto', 'No acepto', 'hola', 'buenas tardes', 'hoy no puedo ir',
+            'Sí, avísame', 'no, gracias', 'No gracias', 'Acepto', 'No acepto', 'hola', 'buenas tardes', 'hoy no puedo ir',
             'no puedo', 'si lo tomo', 'No podré', 'podré asistir', '1234567890', 'doc_cc', 'control_tipo_cedula',
             'psicologia_adulto', 'conv_poliza_sura', 'agindarcita_tipo_cd', 'agindarcita_tipo_pt', 'agindarcita_tipo_ot', 'recordatorio', 'ejecutar',
             'sinasistencia', 'conasistencia', DISABLE_KEY,

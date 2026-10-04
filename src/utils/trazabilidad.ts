@@ -33,7 +33,19 @@ import { isValidDocumentNumber, sanitizeString } from './sanitize';
 // ---------------------------------------------------------------------------
 
 export type OrigenEvento = 'usuario' | 'bot' | 'campana' | 'sistema' | 'backend';
-export type CampanaTraza = 'daily' | 'reminder' | 'execute' | 'recuperacion' | 'conasistencia' | 'oferta_cupo' | 'aviso_asesor';
+// 'le_invit_reg' / 'le_invit_cont': campañas de invitación a la lista de espera (regularización y continua).
+// Códigos cortos porque `chat_stats.campana` y `envios_whatsapp.campana` son VARCHAR(20) (C10 de
+// proyecto-ips/docs/features/2026-10-04-campanas-invitacion-lista-espera-implementacion.md).
+export type CampanaTraza =
+    | 'daily'
+    | 'reminder'
+    | 'execute'
+    | 'recuperacion'
+    | 'conasistencia'
+    | 'oferta_cupo'
+    | 'aviso_asesor'
+    | 'le_invit_reg'
+    | 'le_invit_cont';
 export type ValorMetadata = string | number | boolean | null;
 export type MetadataEvento = Record<string, ValorMetadata>;
 
@@ -103,7 +115,10 @@ export type ResultadoRespuestaCampana =
     | 'otro_momento'
     | 'finalizo'
     | 'acepta_cupo'
-    | 'rechaza_cupo';
+    | 'rechaza_cupo'
+    // Botones de la invitación a la lista de espera ("Sí, quiero recibir avisos" / "No, gracias").
+    | 'acepta_invitacion'
+    | 'rechaza_invitacion';
 
 /** Resultado de un envío saliente a Graph API (plantilla o texto). */
 export interface ResultadoEnvioMeta {

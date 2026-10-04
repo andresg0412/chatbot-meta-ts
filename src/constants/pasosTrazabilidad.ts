@@ -87,6 +87,12 @@ export const CATALOGO_PASOS = [
     { paso: 'recordatorio.confirma_cancelar', flujo: 'recordatorio', orden: 3, es_final: false },
     { paso: 'lista_espera.oferta_respuesta', flujo: 'lista_espera', orden: 1, es_final: true },
     { paso: 'lista_espera.retiro', flujo: 'lista_espera', orden: 1, es_final: true },
+    // Invitación a la lista de espera (campañas de regularización y continua), iguales a la semilla de
+    // `catalogo_pasos` de la migración 034 (proyecto-ips/docs/features/
+    // 2026-10-04-campanas-invitacion-lista-espera-implementacion.md, 6.1).
+    { paso: 'lista_espera.invitacion_documento', flujo: 'lista_espera', orden: 1, es_final: false },
+    { paso: 'lista_espera.invitacion_selecciona', flujo: 'lista_espera', orden: 2, es_final: false },
+    { paso: 'lista_espera.invitacion_respuesta', flujo: 'lista_espera', orden: 3, es_final: true },
     { paso: 'legado.entrada', flujo: 'legado', orden: 0, es_final: false },
 ] as const satisfies ReadonlyArray<PasoTrazabilidad>;
 

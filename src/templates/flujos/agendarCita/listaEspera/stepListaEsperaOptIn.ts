@@ -1,6 +1,7 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { closeUserSession } from '../../../../utils/proactiveSessionManager';
-import { registrarActividadBot, inscribirListaEspera } from '../../../../services/apiService';
+import { registrarActividadBot, inscribirListaEspera, registrarOptinListaEspera } from '../../../../services/apiService';
+import { extraerFechaISO, formatearHoraHHMM } from '../../../../utils/fechaHora';
 import { TEXTO_COMANDO_RETIRO_LISTA_ESPERA } from '../../keywordsBotones';
 import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion } from '../../../../utils/trazabilidad';
 
@@ -19,6 +20,50 @@ export const TEXTO_CONSENTIMIENTO_LISTA_ESPERA =
 // "Retirar lista de espera" lo atiende templates/flujos/listaEspera/retiroListaEsperaFlow.ts. Este
 // texto se guarda como auditoría en lista_espera.consentimiento_texto.
 
+/** Datos de la cita recién agendada para registrar la decisión del opt-in (leídos ANTES de closeUserSession). */
+interface DatosOptin {
+    pacienteId: string;
+    profesionalId: string;
+    fechaCita: string;
+    horaCita: string;
+}
+
+function leerDatosOptin(state: any): DatosOptin | null {
+    const actual = state?.getMyState?.() ?? {};
+    const cita = actual.citaSeleccionadaHora;
+    const fechaCita = extraerFechaISO(cita?.fechacita);
+    const horaCita = formatearHoraHHMM(cita?.horacita);
+    if (!actual.pacienteId || !cita?.profesionalId || !fechaCita || !horaCita) return null;
+    return { pacienteId: actual.pacienteId, profesionalId: cita.profesionalId, fechaCita, horaCita };
+}
+
+/**
+ * Registra la decisión del opt-in como invitación `optin_agendamiento` (E7, C4 de
+ * proyecto-ips/docs/features/2026-10-04-campanas-invitacion-lista-espera-implementacion.md, 6.7), para que
+ * las campañas de invitación no le vuelvan a preguntar por esta cita. Fire-and-forget: no espera, nunca
+ * lanza y no cambia ningún mensaje al paciente.
+ */
+function registrarDecisionOptin(
+    datos: DatosOptin | null,
+    decision: 'acepta' | 'rechaza',
+    celular: string,
+    listaEsperaId: string | null
+): void {
+    if (!datos) return;
+    registrarOptinListaEspera({
+        paciente_id: datos.pacienteId,
+        profesional_id: datos.profesionalId,
+        fecha_cita: datos.fechaCita,
+        hora_cita: datos.horaCita,
+        decision,
+        celular,
+        lista_espera_id: listaEsperaId,
+    }).catch((error) => console.error('[optin] Error registrando la decisión del opt-in:', (error as any)?.message ?? error));
+}
+
+/** Botón de rechazo explícito de la pregunta de opt-in (mismo texto que el botón de abajo). */
+const BOTON_OPTIN_NO_GRACIAS = 'No, gracias';
+
 const stepListaEsperaOptIn = addKeyword(EVENTS.ACTION)
     .addAnswer(
         TEXTO_CONSENTIMIENTO_LISTA_ESPERA,
@@ -26,12 +71,15 @@ const stepListaEsperaOptIn = addKeyword(EVENTS.ACTION)
             capture: true,
             buttons: [
                 { body: 'Sí, avísame' },
-                { body: 'No, gracias' },
+                { body: BOTON_OPTIN_NO_GRACIAS },
             ],
         },
         async (ctx, { state, flowDynamic, endFlow }) => {
+            // TBOT-02: closeUserSession borra el state, así que los datos de la cita se leen antes.
+            const datosOptin = leerDatosOptin(state);
             if (ctx.body === 'Salir' || ctx.body === 'salir') {
                 trackPaso(ctx.from, 'agendar.lista_espera_optin', 'ok', { metadata: { acepta: false } });
+                registrarDecisionOptin(datosOptin, 'rechaza', ctx.from, null);
                 closeUserSession(ctx.from, 'salir');
                 await flowDynamic('Listo, no te inscribimos en la lista de espera. Tu cita agendada sigue firme. ¡Gracias por confiar en nosotros! 😊');
                 return endFlow();
@@ -39,6 +87,12 @@ const stepListaEsperaOptIn = addKeyword(EVENTS.ACTION)
 
             if (ctx.body !== 'Sí, avísame') {
                 trackPaso(ctx.from, 'agendar.lista_espera_optin', 'ok', { metadata: { acepta: false } });
+                // D16 (2026-10-04-campanas-invitacion-lista-espera-implementacion.md): solo el botón "No, gracias"
+                // es un rechazo explícito que se registra (y bloquea la re-invitación). Cualquier otro texto es un
+                // abandono: no se registra nada y la campaña podrá invitarlo después. El mensaje no cambia.
+                if (typeof ctx.body === 'string' && ctx.body.trim() === BOTON_OPTIN_NO_GRACIAS) {
+                    registrarDecisionOptin(datosOptin, 'rechaza', ctx.from, null);
+                }
                 closeUserSession(ctx.from);
                 await registrarActividadBot('chat_flujo_lista_espera', ctx.from, { step: 'rechazada' });
                 await flowDynamic('Entendido, no te inscribiremos en la lista de espera. ¡Gracias por confiar en nosotros! 😊');
@@ -83,6 +137,7 @@ const stepListaEsperaOptIn = addKeyword(EVENTS.ACTION)
             // sin filtrar por ninguna disponibilidad declarada de antemano. Ver
             // docs/features/2026-09-07-lista-espera-inteligente.md, override explícito de la
             // sección 3.4 del spec original.
+            registrarDecisionOptin(datosOptin, 'acepta', ctx.from, inscripcion.lista_espera_id);
             closeUserSession(ctx.from);
             await flowDynamic(`¡Listo! Quedaste inscrito en la lista de espera. Si se libera un cupo antes con tu profesional te vamos a escribir por este mismo medio para ofrecértelo. Te esperamos en tu cita agendada. 😊\n\nSi en algún momento ya no quieres recibir estos avisos, escribe *"${TEXTO_COMANDO_RETIRO_LISTA_ESPERA}"*.`);
             return endFlow();

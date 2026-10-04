@@ -60,5 +60,24 @@ export const KW_RETIRAR_LISTA_ESPERA =
 /** Texto que se le indica al paciente para retirarse (consentimiento y mensaje de inscripción). */
 export const TEXTO_COMANDO_RETIRO_LISTA_ESPERA = 'Retirar lista de espera';
 
+// Invitación a la lista de espera (campañas de regularización y continua):
+// proyecto-ips/docs/features/2026-10-04-campanas-invitacion-lista-espera-implementacion.md, 6.6/6.9.
+// Botones de respuesta rápida de la plantilla `NOMBRE_PLANTILLA_LE_INVITACION`. "Sí, quiero recibir
+// avisos" mide 25 caracteres (el máximo de Meta para un botón de plantilla). "No, gracias" coincide con
+// el botón de la captura del opt-in de agendar (stepListaEsperaOptIn.ts): dentro de esa captura gana la
+// captura (su callback termina con endFlow), decisión C11/D18 del documento.
+
+/** Texto del botón de aceptar de la plantilla de invitación (debe ser idéntico al aprobado en Meta). */
+export const TEXTO_BOTON_SI_QUIERO_AVISOS = 'Sí, quiero recibir avisos';
+
+/** Texto del botón de rechazar de la plantilla de invitación (debe ser idéntico al aprobado en Meta). */
+export const TEXTO_BOTON_NO_GRACIAS_INVITACION = 'No, gracias';
+
+/** Botón "Sí, quiero recibir avisos" (invitación a la lista de espera). */
+export const KW_SI_QUIERO_AVISOS = '/^\\s*Sí, quiero recibir avisos\\s*$/';
+
+/** Botón "No, gracias" (invitación a la lista de espera). */
+export const KW_NO_GRACIAS_INVITACION = '/^\\s*No, gracias\\s*$/';
+
 /** Opción de addKeyword para las keywords de este archivo. */
 export const OPCIONES_REGEX = { regex: true } as const;
