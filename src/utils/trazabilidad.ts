@@ -116,9 +116,10 @@ export type ResultadoRespuestaCampana =
     | 'finalizo'
     | 'acepta_cupo'
     | 'rechaza_cupo'
-    // Botones de la invitación a la lista de espera ("Sí, quiero recibir avisos" / "No, gracias").
+    // Botones de la invitación a la lista de espera ("Si, deseo ingresar" / "No, gracias" / "Hablar con agente").
     | 'acepta_invitacion'
-    | 'rechaza_invitacion';
+    | 'rechaza_invitacion'
+    | 'solicita_agente_invitacion';
 
 /** Resultado de un envío saliente a Graph API (plantilla o texto). */
 export interface ResultadoEnvioMeta {

@@ -120,6 +120,7 @@ import {
     // LISTA DE ESPERA — respuesta a la invitación de las campañas de regularización/continua
     invitacionAceptaFlow,
     invitacionRechazaFlow,
+    invitacionAgenteFlow,
     invitacionDocumentoFlow,
     invitacionSeleccionFlow,
     invitacionRechazoPayloadFlow,
@@ -157,10 +158,11 @@ const flujosRegistradosCompletos = [
     botonesConfirmarCancelacionFlow,
     ofertaCupoAceptaDocumentoFlow,
     ofertaCupoRechazaDocumentoFlow,
-    // Invitación a la lista de espera ("Sí, quiero recibir avisos" / "No, gracias"), regex ancladas.
+    // Invitación a la lista de espera ("Si, deseo ingresar" / "No, gracias" / "Hablar con agente"), regex ancladas.
     // proyecto-ips/docs/features/2026-10-04-campanas-invitacion-lista-espera-implementacion.md, 6.6.
     invitacionAceptaFlow,
     invitacionRechazaFlow,
+    invitacionAgenteFlow,
     welcomeFlow,
     exitFlow,
     ejecutarPlantillaDiariaFlow,

@@ -24,8 +24,9 @@ import {
     KW_SI_LO_TOMO,
     KW_NO_PUEDO,
     KW_RETIRAR_LISTA_ESPERA,
-    KW_SI_QUIERO_AVISOS,
+    KW_SI_DESEO_INGRESAR,
     KW_NO_GRACIAS_INVITACION,
+    KW_HABLAR_CON_AGENTE_INVITACION,
 } from './keywordsBotones';
 
 /** Mismas palabras que exitFlow (welcomeFlow.ts), como texto completo. */
@@ -47,8 +48,9 @@ const BOTONES_ANCLADOS: RegExp[] = [
     KW_NO_PUEDO,
     KW_RETIRAR_LISTA_ESPERA,
     // Invitación a la lista de espera (2026-10-04-campanas-invitacion-lista-espera-implementacion.md, 6.6).
-    KW_SI_QUIERO_AVISOS,
+    KW_SI_DESEO_INGRESAR,
     KW_NO_GRACIAS_INVITACION,
+    KW_HABLAR_CON_AGENTE_INVITACION,
 ].map(regexDesdeLiteral);
 
 /**

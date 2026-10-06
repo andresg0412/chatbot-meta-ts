@@ -1,6 +1,10 @@
-// Respuesta a la plantilla de invitación a la lista de espera ("Sí, quiero recibir avisos" / "No,
-// gracias"): proyecto-ips/docs/features/2026-10-04-campanas-invitacion-lista-espera-implementacion.md,
+// Respuesta a la plantilla de invitación a la lista de espera ("Si, deseo ingresar" / "No, gracias" /
+// "Hablar con agente"): proyecto-ips/docs/features/2026-10-04-campanas-invitacion-lista-espera-implementacion.md,
 // secciones 4.1 y 6.6.
+//
+// "Hablar con agente" (botón agregado por el cliente al aprobar la plantilla, 2026-10-05) NO registra
+// respuesta en el backend: entrega el enlace del asesor (o el aviso de fuera de horario) y la invitación
+// sigue `enviada`, así que el paciente aún puede tocar "Si, deseo ingresar" o "No, gracias".
 //
 // Recorrido:
 //   1. Entrada por el botón (keyword anclada). Se parsea `ctx.payload` ('LEINV:<invitacion_id>:A|R',
@@ -40,13 +44,20 @@ import * as M from '../../../utils/mensajesInvitacionListaEspera';
 import { parsearPayloadInvitacion, campanaDeInvitacion } from '../../../utils/invitacionPayload';
 import type { AccionInvitacion } from '../../../utils/invitacionPayload';
 import { esBotonDeOtraPlantilla, esPalabraSalir, MENSAJE_SALIR } from '../palabrasGlobales';
-import { KW_SI_QUIERO_AVISOS, KW_NO_GRACIAS_INVITACION, OPCIONES_REGEX } from '../keywordsBotones';
+import {
+    KW_SI_DESEO_INGRESAR,
+    KW_NO_GRACIAS_INVITACION,
+    KW_HABLAR_CON_AGENTE_INVITACION,
+    OPCIONES_REGEX,
+} from '../keywordsBotones';
+import { isWorkingHours } from '../../../utils/verificarHorario';
 import {
     trackRespuestaCampana,
     trackPaso,
     trackNoEntendido,
     trackIdentificacion,
     trackErrorBackend,
+    trackFin,
 } from '../../../utils/trazabilidad';
 import type { PasoId } from '../../../constants/pasosTrazabilidad';
 import { welcomeFlow } from '../../welcomeFlow';
@@ -78,6 +89,7 @@ export const CLAVES_INVITACION: readonly string[] = [
     'invitacionIntentosSeleccion',
     'invitacionOcupado',
     'invitacionCapturaDesde',
+    'invitacionTextoBoton',
 ];
 
 type Fns = any;
@@ -188,7 +200,7 @@ async function ejecutarRespuesta(ctx: any, fns: Fns): Promise<any> {
     const via: 'payload' | 'documento' = st.invitacionVia === 'payload' ? 'payload' : 'documento';
     const elegida: InvitacionPorDocumento | undefined = st.invitacionElegida;
 
-    if (!invitacionId || !accion || (accion === 'A' && !documento)) {
+    if (!invitacionId || !accion || !documento) {
         await terminar(ctx, state);
         return endFlow(MENSAJE_CONVERSACION_TERMINADA);
     }
@@ -198,8 +210,8 @@ async function ejecutarRespuesta(ctx: any, fns: Fns): Promise<any> {
         celular: ctx.from,
         respuesta: accion === 'A' ? 'acepta' : 'rechaza',
         via,
-        ...(documento ? { documento } : {}),
-        ...(accion === 'A' ? { consentimiento_texto: M.construirConsentimientoInvitacion() } : {}),
+        documento,
+        ...(accion === 'A' ? { consentimiento_texto: M.construirConsentimientoInvitacion(st.invitacionTextoBoton) } : {}),
     };
 
     try {
@@ -338,6 +350,7 @@ async function entrada(ctx: any, fns: Fns, accionBoton: AccionInvitacion): Promi
         );
         await state.update({
             invitacionAccion: accionBoton,
+            invitacionTextoBoton: typeof ctx?.body === 'string' ? ctx.body.trim() : undefined,
             invitacionId,
             invitacionVia: invitacionId ? 'payload' : 'documento',
             invitacionIntentosDoc: 0,
@@ -435,8 +448,38 @@ const invitacionRechazoPayloadFlow = addKeyword(EVENTS.ACTION).addAction(async (
     }
 });
 
+/**
+ * Botón "Hablar con agente": enlace al asesor (mismo número y horario que el flujo de agente del menú,
+ * pasoAgente/index.ts). No llama al backend ni cambia la invitación. Si el paciente estaba en medio de
+ * otra respuesta, la captura ya soltó sus claves (palabrasGlobales.esBotonDeOtraPlantilla).
+ */
+async function hablarConAgente(ctx: any, fns: Fns): Promise<any> {
+    const { state, flowDynamic, endFlow } = fns;
+    try {
+        renovarActividadSesion(ctx.from, 'respuesta_plantilla');
+        // Doble toque mientras otra respuesta de esta invitación está en curso: termina en silencio.
+        if (turnoTomado(state)) return;
+        const payload = parsearPayloadInvitacion(ctx?.payload);
+        trackRespuestaCampana(
+            ctx.from,
+            campanaDeInvitacion(payload?.invitacionId),
+            'solicita_agente_invitacion',
+            PASO_RESPUESTA
+        );
+        const enHorario = isWorkingHours();
+        trackFin(ctx.from, 'agente', enHorario ? 'derivado_agente' : 'fuera_horario', { paso: 'agente.envio' });
+        await registrarActividad(ctx, { resultado: enHorario ? 'agente' : 'agente_fuera_horario', via: payload ? 'payload' : 'documento' });
+        await terminar(ctx, state);
+        const numeroAsesor = process.env.NUMERO_ASESOR_HUMANO || '573158070460';
+        await flowDynamic(enHorario ? M.mensajeInvitacionAgente(numeroAsesor) : M.MENSAJE_INVITACION_AGENTE_FUERA_HORARIO);
+        return endFlow();
+    } catch (error) {
+        return errorInesperado(ctx, fns, error);
+    }
+}
+
 // Coincidencia exacta anclada (keywordsBotones.ts); se registran al inicio de createFlow (templates/index.ts).
-const invitacionAceptaFlow = addKeyword(KW_SI_QUIERO_AVISOS, OPCIONES_REGEX).addAction(
+const invitacionAceptaFlow = addKeyword(KW_SI_DESEO_INGRESAR, OPCIONES_REGEX).addAction(
     async (ctx, fns) => entrada(ctx, fns, 'A')
 );
 
@@ -444,4 +487,15 @@ const invitacionRechazaFlow = addKeyword(KW_NO_GRACIAS_INVITACION, OPCIONES_REGE
     async (ctx, fns) => entrada(ctx, fns, 'R')
 );
 
-export { invitacionAceptaFlow, invitacionRechazaFlow, invitacionDocumentoFlow, invitacionSeleccionFlow, invitacionRechazoPayloadFlow };
+const invitacionAgenteFlow = addKeyword(KW_HABLAR_CON_AGENTE_INVITACION, OPCIONES_REGEX).addAction(
+    async (ctx, fns) => hablarConAgente(ctx, fns)
+);
+
+export {
+    invitacionAceptaFlow,
+    invitacionRechazaFlow,
+    invitacionAgenteFlow,
+    invitacionDocumentoFlow,
+    invitacionSeleccionFlow,
+    invitacionRechazoPayloadFlow,
+};

@@ -1,4 +1,4 @@
-// Payload de los botones de la plantilla de invitación a la lista de espera ('LEINV:<id>:A|R'):
+// Payload de los botones de la plantilla de invitación a la lista de espera ('LEINV:<id>:A|R|H'):
 // proyecto-ips/docs/features/2026-10-04-campanas-invitacion-lista-espera-implementacion.md, 4.1 y 6.6.
 import {
     construirPayloadInvitacion,
@@ -12,6 +12,7 @@ describe('parsearPayloadInvitacion', () => {
     it.each([
         ['LEINV:I1J2K3L4:A', { invitacionId: 'I1J2K3L4', accion: 'A' }],
         ['LEINV:abcd1234:R', { invitacionId: 'abcd1234', accion: 'R' }],
+        ['LEINV:I1J2K3L4:H', { invitacionId: 'I1J2K3L4', accion: 'H' }],
     ])('"%s" → %j', (payload, esperado) => {
         expect(parsearPayloadInvitacion(payload)).toEqual(esperado);
     });
@@ -32,7 +33,8 @@ describe('parsearPayloadInvitacion', () => {
         'LEINV:I1J2K3L4:A ',
         'LEINV:I1J2K3L4:A:extra',
         'CONFIRMAR_CITA',
-        'Sí, quiero recibir avisos',
+        'Si, deseo ingresar',
+        'LEINV:I1J2K3L4:h',
     ])('%j → null (cae al fallback por documento)', (payload) => {
         expect(parsearPayloadInvitacion(payload)).toBeNull();
     });
@@ -42,6 +44,7 @@ describe('construirPayloadInvitacion', () => {
     it('arma el payload de aceptar y rechazar y es reversible', () => {
         expect(construirPayloadInvitacion('I1J2K3L4', 'A')).toBe('LEINV:I1J2K3L4:A');
         expect(construirPayloadInvitacion('I1J2K3L4', 'R')).toBe('LEINV:I1J2K3L4:R');
+        expect(construirPayloadInvitacion('I1J2K3L4', 'H')).toBe('LEINV:I1J2K3L4:H');
         expect(parsearPayloadInvitacion(construirPayloadInvitacion('Zz9Yy8Xx', 'R'))).toEqual({ invitacionId: 'Zz9Yy8Xx', accion: 'R' });
     });
 
