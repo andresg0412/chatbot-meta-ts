@@ -295,6 +295,7 @@ describe('POST /v1/campaigns/lista-espera-regularizacion', () => {
         [{ modo_previsualizacion: 'true' }],
         [{ incluir_hoy: true }],
         [{ forzar_reintento: true }],
+        [{ modo_previsualizacion: true, incluir_ids: 'true' }],
         [[1, 2]],
     ])('body inválido %j → 400', async (body) => {
         const res = fakeRes();
@@ -317,6 +318,17 @@ describe('POST /v1/campaigns/lista-espera-regularizacion', () => {
             campana_tipo: 'regularizacion', fecha_desde: '2026-10-01', fecha_hasta: null, solo_telefonos: ['573001234567'],
         });
         expect(mockedApi.reservarInvitaciones).not.toHaveBeenCalled();
+    });
+
+    it('previsualización con incluir_ids (panel) → se pide la lista completa de ids al backend', async () => {
+        process.env.LISTA_ESPERA_TELEFONOS_PILOTO = '';
+        mockedApi.previsualizarInvitaciones.mockResolvedValueOnce({ ok: true, code: 200, data: { total_elegibles: 2 } } as any);
+        const res = fakeRes();
+        await executeListaEsperaRegularizacionCampaign({ body: { modo_previsualizacion: true, incluir_ids: true } }, res);
+        expect(res.status).toBe(200);
+        expect(mockedApi.previsualizarInvitaciones).toHaveBeenCalledWith({
+            campana_tipo: 'regularizacion', fecha_desde: null, fecha_hasta: null, incluir_ids: true,
+        });
     });
 
     it('previsualización con el backend caído → 502', async () => {
