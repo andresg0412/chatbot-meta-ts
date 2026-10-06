@@ -137,6 +137,10 @@ describe('cliente de /chatbot/listaespera/invitaciones/*', () => {
         get.mockResolvedValueOnce({ status: 200, data: { data: {} } });
         await previsualizarInvitaciones({ campana_tipo: 'continua', fecha_desde: '2026-10-01' });
         expect(get.mock.calls[1][1].params).toEqual({ campana_tipo: 'continua' });
+
+        get.mockResolvedValueOnce({ status: 200, data: { data: {} } });
+        await previsualizarInvitaciones({ campana_tipo: 'regularizacion', incluir_ids: true });
+        expect(get.mock.calls[2][1].params).toEqual({ campana_tipo: 'regularizacion', incluir_ids: true });
     });
 
     it.each([

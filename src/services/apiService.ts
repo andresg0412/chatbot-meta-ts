@@ -1604,6 +1604,11 @@ export interface PrevisualizacionInvitacionesData {
     excluidas: Record<string, number>;
     pacientes_varias_citas: number;
     muestra_agenda_ids: string[];
+    /** Solo con `incluir_ids` (panel de reportes): todos los agenda_id elegibles, sin datos personales. */
+    agenda_ids_elegibles?: string[];
+    dentro_de_horario_contacto?: boolean;
+    horario_contacto?: { inicio: string; fin: string };
+    max_por_ejecucion?: number;
 }
 
 /** E2: invitación reservada (estado 'pendiente'). `especialidad` nunca se usa en mensajes (privacidad). */
@@ -1745,8 +1750,10 @@ export async function previsualizarInvitaciones(params: {
     fecha_desde?: string | null;
     fecha_hasta?: string | null;
     solo_telefonos?: string[];
+    incluir_ids?: boolean;
 }): Promise<ResultadoBackendInvitacion<PrevisualizacionInvitacionesData>> {
     const query: Record<string, unknown> = { campana_tipo: params.campana_tipo };
+    if (params.incluir_ids) query.incluir_ids = true;
     if (params.campana_tipo === 'regularizacion') {
         if (params.fecha_desde) query.fecha_desde = params.fecha_desde;
         if (params.fecha_hasta) query.fecha_hasta = params.fecha_hasta;

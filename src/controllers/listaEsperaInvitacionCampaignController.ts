@@ -47,6 +47,8 @@ function responder(res: any, status: number, cuerpo: Record<string, unknown>) {
 
 interface SolicitudValidada {
     previsualizacion: boolean;
+    /** Solo previsualización de la regularización (panel de reportes): todos los agenda_id elegibles. */
+    incluirIds?: boolean;
     params: ParametrosEjecucionInvitacion;
 }
 
@@ -66,12 +68,14 @@ function validarModo(valor: unknown): boolean | null {
 export function validarSolicitudRegularizacion(bodyCrudo: unknown): Validacion {
     const body = cuerpoComoObjeto(bodyCrudo);
     if (!body) return { ok: false, error: 'El body debe ser un objeto JSON.' };
-    const permitidos = ['fecha_desde', 'fecha_hasta', 'limite', 'modo_previsualizacion', 'origen'];
+    const permitidos = ['fecha_desde', 'fecha_hasta', 'limite', 'modo_previsualizacion', 'origen', 'incluir_ids'];
     const extra = Object.keys(body).find((k) => !permitidos.includes(k));
     if (extra) return { ok: false, error: `Campo no permitido: ${extra}` };
 
     const previsualizacion = validarModo(body.modo_previsualizacion);
     if (previsualizacion === null) return { ok: false, error: 'modo_previsualizacion debe ser booleano.' };
+    const incluirIds = validarModo(body.incluir_ids);
+    if (incluirIds === null) return { ok: false, error: 'incluir_ids debe ser booleano.' };
 
     for (const campo of ['fecha_desde', 'fecha_hasta'] as const) {
         const valor = body[campo];
@@ -103,6 +107,7 @@ export function validarSolicitudRegularizacion(bodyCrudo: unknown): Validacion {
         ok: true,
         valor: {
             previsualizacion,
+            incluirIds,
             params: { limite, origen, fecha_desde: fechaDesde ?? null, fecha_hasta: fechaHasta ?? null },
         },
     };
@@ -120,7 +125,7 @@ export function validarSolicitudContinua(bodyCrudo: unknown): Validacion {
 
 async function atender(tipo: CampanaTipoInvitacion, validacion: Validacion, res: any) {
     if (validacion.ok === false) return responder(res, 400, { error: validacion.error });
-    const { previsualizacion, params } = validacion.valor;
+    const { previsualizacion, incluirIds, params } = validacion.valor;
 
     if (previsualizacion) {
         const pilotos = telefonosPilotoFormato57();
@@ -129,6 +134,7 @@ async function atender(tipo: CampanaTipoInvitacion, validacion: Validacion, res:
             fecha_desde: params.fecha_desde ?? null,
             fecha_hasta: params.fecha_hasta ?? null,
             ...(pilotos.length > 0 ? { solo_telefonos: pilotos } : {}),
+            ...(incluirIds ? { incluir_ids: true } : {}),
         });
         if (resultado.ok === true) return responder(res, 200, { ...(resultado.data ?? {}) });
         const status = resultado.code !== null && resultado.code >= 400 && resultado.code < 500 ? resultado.code : 502;
