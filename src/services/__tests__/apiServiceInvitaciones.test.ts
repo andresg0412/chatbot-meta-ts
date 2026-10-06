@@ -51,7 +51,7 @@ describe('enviarPlantillaInvitacionListaEspera', () => {
         post.mockResolvedValue({ status: 200, data: { messages: [{ id: 'wamid.1', message_status: 'accepted' }] } });
     });
 
-    it('arma la plantilla con 4 variables (sin especialidad) y los payloads LEINV en los botones 0 y 1', async () => {
+    it('arma la plantilla con 4 variables (sin especialidad) y los payloads LEINV en los botones 0, 1 y 2', async () => {
         const resultado = await enviarPlantillaInvitacionListaEspera(inv, 'uuid-1', 'le_invit_reg');
         expect(resultado).toEqual({ exito: true, mensajeWaId: 'wamid.1' });
         expect(post).toHaveBeenCalledTimes(1);
@@ -73,6 +73,7 @@ describe('enviarPlantillaInvitacionListaEspera', () => {
             },
             { type: 'button', sub_type: 'quick_reply', index: '0', parameters: [{ type: 'payload', payload: 'LEINV:I1J2K3L4:A' }] },
             { type: 'button', sub_type: 'quick_reply', index: '1', parameters: [{ type: 'payload', payload: 'LEINV:I1J2K3L4:R' }] },
+            { type: 'button', sub_type: 'quick_reply', index: '2', parameters: [{ type: 'payload', payload: 'LEINV:I1J2K3L4:H' }] },
         ]);
         expect(JSON.stringify(body)).not.toContain('Especialidad');
     });

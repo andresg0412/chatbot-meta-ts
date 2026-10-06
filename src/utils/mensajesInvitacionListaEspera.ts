@@ -16,7 +16,7 @@ import {
     limpiarProfesional,
     tituloFilaCita,
 } from './mensajesRecordatorio';
-import { TEXTO_BOTON_SI_QUIERO_AVISOS, TEXTO_COMANDO_RETIRO_LISTA_ESPERA } from '../templates/flujos/keywordsBotones';
+import { TEXTO_BOTON_SI_DESEO_INGRESAR, TEXTO_COMANDO_RETIRO_LISTA_ESPERA } from '../templates/flujos/keywordsBotones';
 
 // ---------------------------------------------------------------------------
 // Plantilla y consentimiento
@@ -35,11 +35,35 @@ export const TEXTO_PLANTILLA_INVITACION_LE =
     'podemos avisarte por este medio para que decidas si deseas adelantar tu cita. ' +
     'Tu cita actual se mantiene exactamente igual. Aceptar esta invitación no la cancela ni la modifica.';
 
-/** `consentimiento_texto` de `responder` con 'acepta' (6.6). Lee el nombre de la plantilla en cada llamada. */
-export function construirConsentimientoInvitacion(): string {
+/**
+ * `consentimiento_texto` de `responder` con 'acepta' (6.6). `textoBoton` = texto exacto del botón que tocó
+ * el paciente (con o sin tilde, tal como lo envió Meta); sin él, el texto del botón aprobado. Lee el nombre
+ * de la plantilla en cada llamada.
+ */
+export function construirConsentimientoInvitacion(textoBoton?: string): string {
     const plantilla = (process.env.NOMBRE_PLANTILLA_LE_INVITACION ?? '').trim();
-    return `${TEXTO_PLANTILLA_INVITACION_LE} | Botón: ${TEXTO_BOTON_SI_QUIERO_AVISOS} | Plantilla: ${plantilla}`;
+    const boton = (textoBoton ?? '').trim() || TEXTO_BOTON_SI_DESEO_INGRESAR;
+    return `${TEXTO_PLANTILLA_INVITACION_LE} | Botón: ${boton} | Plantilla: ${plantilla}`;
 }
+
+/** Botón "Hablar con agente" dentro del horario de atención: enlace al asesor. */
+export function mensajeInvitacionAgente(numeroAsesor: string): string {
+    return (
+        'Con gusto. Haz clic en el siguiente enlace para hablar con un asesor:\n' +
+        `👉 *Ir al chat con asesor*: https://wa.me/${numeroAsesor}?text=Hola,%20deseo%20hablar%20con%20una%20asistente.\n\n` +
+        'Tu cita sigue igual. Si después decides entrar a la lista de espera, puedes tocar *Si, deseo ingresar* en el mensaje de invitación.'
+    );
+}
+
+/**
+ * Botón "Hablar con agente" fuera del horario de atención. El horario es el que aplica `isWorkingHours()`
+ * (lunes a viernes, 7 am a 7 pm); el mensaje del menú (pasoAgente) también menciona los sábados, pero el
+ * código no los atiende.
+ */
+export const MENSAJE_INVITACION_AGENTE_FUERA_HORARIO =
+    'En estos momentos nuestros asesores no están disponibles. Nuestro horario de atención es de lunes a viernes ' +
+    'de 7 am a 7 pm. 📅⏰\n\n' +
+    'Tu cita sigue igual. Si deseas entrar a la lista de espera, puedes tocar *Si, deseo ingresar* en el mensaje de invitación.';
 
 // ---------------------------------------------------------------------------
 // Mensajes al paciente

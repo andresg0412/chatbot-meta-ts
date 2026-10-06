@@ -4,8 +4,9 @@
 // Los botones de respuesta rápida de una PLANTILLA llegan como mensaje `type: 'button'`, y ahí
 // @builderbot/provider-meta sí conserva `button.payload` en `ctx.payload` (a diferencia de `context.id`
 // en los mensajes `interactive`, que descarta). El payload se fija en cada envío:
-//   - botón index 0 ("Sí, quiero recibir avisos") → 'LEINV:<invitacion_id>:A'
-//   - botón index 1 ("No, gracias")               → 'LEINV:<invitacion_id>:R'
+//   - botón index 0 ("Si, deseo ingresar") → 'LEINV:<invitacion_id>:A'
+//   - botón index 1 ("No, gracias")        → 'LEINV:<invitacion_id>:R'
+//   - botón index 2 ("Hablar con agente")  → 'LEINV:<invitacion_id>:H' (solo trazabilidad: no registra respuesta)
 // `invitacion_id` = 8 alfanuméricos (VARCHAR(8) de generate_short_id()).
 //
 // Nunca se ha verificado en producción que `ctx.payload` llegue (prueba T-P2). Si no llega, o llega
@@ -13,20 +14,23 @@
 
 import type { CampanaTraza } from './trazabilidad';
 
+/** Decisión del paciente sobre la invitación (aceptar / rechazar). */
 export type AccionInvitacion = 'A' | 'R';
+/** Acción del payload: la decisión, o 'H' (pidió hablar con un asesor). */
+export type AccionPayloadInvitacion = AccionInvitacion | 'H';
 
 export const PREFIJO_PAYLOAD_INVITACION = 'LEINV';
 
 /** Formato exacto del contrato. Sin `trim` ni mayúsculas/minúsculas: lo genera el bot. */
-export const REGEX_PAYLOAD_INVITACION = /^LEINV:([A-Za-z0-9]{8}):([AR])$/;
+export const REGEX_PAYLOAD_INVITACION = /^LEINV:([A-Za-z0-9]{8}):([ARH])$/;
 
 export interface PayloadInvitacion {
     invitacionId: string;
-    accion: AccionInvitacion;
+    accion: AccionPayloadInvitacion;
 }
 
-/** 'LEINV:<id>:A' | 'LEINV:<id>:R'. Lanza si el id no tiene el formato del contrato (no se envía nada). */
-export function construirPayloadInvitacion(invitacionId: string, accion: AccionInvitacion): string {
+/** 'LEINV:<id>:A' | 'LEINV:<id>:R' | 'LEINV:<id>:H'. Lanza si el id no tiene el formato del contrato (no se envía nada). */
+export function construirPayloadInvitacion(invitacionId: string, accion: AccionPayloadInvitacion): string {
     const payload = `${PREFIJO_PAYLOAD_INVITACION}:${invitacionId}:${accion}`;
     if (!REGEX_PAYLOAD_INVITACION.test(payload)) {
         throw new Error('invitacion_id con formato inválido para el payload de la plantilla');
@@ -39,7 +43,7 @@ export function parsearPayloadInvitacion(payload: unknown): PayloadInvitacion | 
     if (typeof payload !== 'string') return null;
     const match = REGEX_PAYLOAD_INVITACION.exec(payload);
     if (!match) return null;
-    return { invitacionId: match[1], accion: match[2] as AccionInvitacion };
+    return { invitacionId: match[1], accion: match[2] as AccionPayloadInvitacion };
 }
 
 // ---------------------------------------------------------------------------

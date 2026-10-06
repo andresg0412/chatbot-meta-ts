@@ -36,7 +36,7 @@ import { step1AgendarCita, step14AgendarCita2 } from '../flujos/agendarCita';
 import { IDS_TIPO_DOCUMENTO, IDS_TIPO_DOCUMENTO_RETIRADOS } from '../../utils/datosPacienteNuevo';
 import { pasoAgenteFlow } from '../flujos/pasoAgente';
 import { pqrsFlow } from '../flujos/pasoAgente/enviarpqrs';
-import { ofertaCupoAceptaDocumentoFlow, ofertaCupoRechazaDocumentoFlow, retiroListaEsperaFlow, invitacionAceptaFlow, invitacionRechazaFlow } from '../flujos/listaEspera';
+import { ofertaCupoAceptaDocumentoFlow, ofertaCupoRechazaDocumentoFlow, retiroListaEsperaFlow, invitacionAceptaFlow, invitacionRechazaFlow, invitacionAgenteFlow } from '../flujos/listaEspera';
 import { confirmoAsistenciaFlow, necesitoCancelarFlow, noPodreAsistirFlow, botonesConfirmarCancelacionFlow } from '../flujos/recordatorios';
 import { ID_FILA_NINGUNA, idFilaCita, MAX_CITAS_EN_LISTA, PREFIJO_ID_FILA_CITA } from '../../utils/mensajesRecordatorio';
 
@@ -75,9 +75,10 @@ const flujosNuevosExactos: FlowLike[] = [
     botonesConfirmarCancelacionFlow,
     ofertaCupoAceptaDocumentoFlow,
     ofertaCupoRechazaDocumentoFlow,
-    // Invitación a la lista de espera (2026-10-04): "Sí, quiero recibir avisos" / "No, gracias" exactos.
+    // Invitación a la lista de espera: "Si, deseo ingresar" / "No, gracias" / "Hablar con agente" exactos.
     invitacionAceptaFlow,
     invitacionRechazaFlow,
+    invitacionAgenteFlow,
 ];
 
 const registroReal = createFlow(flujosRegistrados as any);

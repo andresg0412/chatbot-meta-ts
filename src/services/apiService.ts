@@ -1827,7 +1827,8 @@ function textoORespaldo(valor: unknown, respaldo: string): string {
 /**
  * Plantilla de invitación a la lista de espera (`NOMBRE_PLANTILLA_LE_INVITACION`, sección 6.9):
  *   {{1}} nombre, {{2}} profesional, {{3}} formatearFechaLarga(fecha_cita), {{4}} formatearHoraHHMM(hora_cita);
- *   botón 0 ("Sí, quiero recibir avisos") con payload 'LEINV:<id>:A', botón 1 ("No, gracias") con 'LEINV:<id>:R'.
+ *   botón 0 ("Si, deseo ingresar") con payload 'LEINV:<id>:A', botón 1 ("No, gracias") con 'LEINV:<id>:R',
+ *   botón 2 ("Hablar con agente") con 'LEINV:<id>:H'.
  * Privacidad: no se envía la especialidad aunque `reservar` la devuelva.
  * Sin nombre de plantilla configurado no se llama a Meta (R14: nada de valores por defecto).
  * Logs sin teléfono completo ni nombre (runbook B9).
@@ -1860,6 +1861,7 @@ export async function enviarPlantillaInvitacionListaEspera(
     try {
         const payloadAcepta = construirPayloadInvitacion(inv.invitacion_id, 'A');
         const payloadRechaza = construirPayloadInvitacion(inv.invitacion_id, 'R');
+        const payloadAgente = construirPayloadInvitacion(inv.invitacion_id, 'H');
         const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
         const body = {
             messaging_product: 'whatsapp',
@@ -1889,6 +1891,12 @@ export async function enviarPlantillaInvitacionListaEspera(
                         sub_type: 'quick_reply',
                         index: '1',
                         parameters: [{ type: 'payload', payload: payloadRechaza }],
+                    },
+                    {
+                        type: 'button',
+                        sub_type: 'quick_reply',
+                        index: '2',
+                        parameters: [{ type: 'payload', payload: payloadAgente }],
                     },
                 ],
             },

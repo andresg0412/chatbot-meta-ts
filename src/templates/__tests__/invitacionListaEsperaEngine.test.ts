@@ -31,11 +31,17 @@ jest.mock('../../services/apiService', () => {
     };
 });
 
+jest.mock('../../utils/verificarHorario', () => ({
+    ...jest.requireActual('../../utils/verificarHorario'),
+    isWorkingHours: jest.fn(() => true),
+}));
+
 import { EventEmitter } from 'events';
 import { addKeyword, createBot, createFlow, MemoryDB } from '@builderbot/bot';
 import { construirFlujosRegistrados } from '../index';
 import * as api from '../../services/apiService';
 import { closeUserSession } from '../../utils/proactiveSessionManager';
+import { isWorkingHours } from '../../utils/verificarHorario';
 import * as M from '../../utils/mensajesInvitacionListaEspera';
 import { MENSAJE_DOCUMENTO_FINAL } from '../../utils/mensajesConfirmacion';
 import { ID_FILA_NINGUNA } from '../../utils/mensajesRecordatorio';
@@ -111,7 +117,8 @@ function crearBot() {
 }
 
 const textos = (salida: Enviado[]) => salida.map((m) => m.texto);
-const SI = 'Sí, quiero recibir avisos';
+const SI = 'Si, deseo ingresar';
+const AGENTE = 'Hablar con agente';
 const NO = 'No, gracias';
 const ID = 'I1J2K3L4';
 const CITA = { fecha_cita: '2026-10-20', hora_cita: '09:00', profesional: 'Ana Pérez' };
@@ -129,7 +136,8 @@ const bot = crearBot();
 
 beforeEach(() => {
     jest.clearAllMocks();
-    process.env.NOMBRE_PLANTILLA_LE_INVITACION = 'lista_espera_invitacion';
+    process.env.NOMBRE_PLANTILLA_LE_INVITACION = 'invitacion_lista_espera';
+    (isWorkingHours as jest.Mock).mockReturnValue(true);
     mockedApi.responderInvitacion.mockImplementation(async (body: any) => respuestaOk(body.respuesta === 'acepta' ? 'aceptada' : 'rechazada') as any);
     mockedApi.consultarInvitacionesPorDocumento.mockResolvedValue({ ok: true, code: 200, data: { invitaciones: [INV_A] } } as any);
 });
@@ -146,7 +154,7 @@ describe('con payload', () => {
         expect(closeUserSession).toHaveBeenCalledWith(from, 'completado');
     });
 
-    it('"Sí, quiero recibir avisos" → pide documento → acepta con documento y consentimiento (7.2, 7.3)', async () => {
+    it('"Si, deseo ingresar" → pide documento → acepta con documento y consentimiento (7.2, 7.3)', async () => {
         const from = bot.nuevoNumero();
         const salida = textos(await bot.enviar(from, [{ body: SI, payload: `LEINV:${ID}:A` }, '1234567890']));
         expect(salida[0]).toBe(M.MENSAJE_PEDIR_DOCUMENTO_INVITACION);
@@ -156,7 +164,7 @@ describe('con payload', () => {
             respuesta: 'acepta',
             via: 'payload',
             documento: '1234567890',
-            consentimiento_texto: `${M.TEXTO_PLANTILLA_INVITACION_LE} | Botón: Sí, quiero recibir avisos | Plantilla: lista_espera_invitacion`,
+            consentimiento_texto: `${M.TEXTO_PLANTILLA_INVITACION_LE} | Botón: Si, deseo ingresar | Plantilla: invitacion_lista_espera`,
         });
         expect(salida).toContain(
             '¡Listo, María! Quedaste inscrito en la lista de espera para recibir avisos si se libera un cupo antes con Ana Pérez.\n\n' +
@@ -164,6 +172,14 @@ describe('con payload', () => {
             'recibir estos avisos, puedes escribir: *Retirar lista de espera*.'
         );
         expect(mockedApi.consultarInvitacionesPorDocumento).not.toHaveBeenCalled();
+    });
+
+    it('"Sí, deseo ingresar" (con tilde) también acepta y el consentimiento guarda el texto tocado', async () => {
+        await bot.enviar(bot.nuevoNumero(), [{ body: 'Sí, deseo ingresar', payload: `LEINV:${ID}:A` }, '1234567890']);
+        expect(mockedApi.responderInvitacion).toHaveBeenCalledWith(expect.objectContaining({
+            respuesta: 'acepta',
+            consentimiento_texto: `${M.TEXTO_PLANTILLA_INVITACION_LE} | Botón: Sí, deseo ingresar | Plantilla: invitacion_lista_espera`,
+        }));
     });
 
     it('si la acción del payload no coincide con el botón, manda el texto del botón', async () => {
@@ -316,6 +332,39 @@ describe('sin payload (fallback por documento)', () => {
         expect(salida.filter((m) => m.lista)).toHaveLength(2);
         expect(textos(salida)).toContain(M.MENSAJE_SELECCION_REINTENTO_INVITACION);
         expect(textos(salida)).toContain(M.MENSAJE_SELECCION_FINAL_INVITACION);
+        expect(mockedApi.responderInvitacion).not.toHaveBeenCalled();
+    });
+});
+
+describe('"Hablar con agente"', () => {
+    it('en horario → enlace al asesor, sin llamar al backend ni cambiar la invitación', async () => {
+        const from = bot.nuevoNumero();
+        const salida = textos(await bot.enviar(from, [{ body: AGENTE, payload: `LEINV:${ID}:H` }]));
+        expect(salida).toEqual([M.mensajeInvitacionAgente(process.env.NUMERO_ASESOR_HUMANO || '573158070460')]);
+        expect(salida[0]).toMatch(/https:\/\/wa\.me\//);
+        expect(mockedApi.responderInvitacion).not.toHaveBeenCalled();
+        expect(mockedApi.consultarInvitacionesPorDocumento).not.toHaveBeenCalled();
+        expect(closeUserSession).toHaveBeenCalledWith(from, 'completado');
+    });
+
+    it('fuera de horario → aviso de horario, sin enlace', async () => {
+        (isWorkingHours as jest.Mock).mockReturnValue(false);
+        const salida = textos(await bot.enviar(bot.nuevoNumero(), [{ body: AGENTE, payload: `LEINV:${ID}:H` }]));
+        expect(salida).toEqual([M.MENSAJE_INVITACION_AGENTE_FUERA_HORARIO]);
+        expect(mockedApi.responderInvitacion).not.toHaveBeenCalled();
+    });
+
+    it('sin payload también funciona', async () => {
+        const salida = textos(await bot.enviar(bot.nuevoNumero(), [AGENTE]));
+        expect(salida).toHaveLength(1);
+        expect(salida[0]).toMatch(/Ir al chat con asesor/);
+    });
+
+    it('durante la captura del documento → suelta la captura y entrega el enlace; luego un documento no registra nada', async () => {
+        const from = bot.nuevoNumero();
+        const salida = textos(await bot.enviar(from, [{ body: SI, payload: `LEINV:${ID}:A` }, { body: AGENTE, payload: `LEINV:${ID}:H` }]));
+        expect(salida[0]).toBe(M.MENSAJE_PEDIR_DOCUMENTO_INVITACION);
+        expect(salida.join('\n')).toMatch(/Ir al chat con asesor/);
         expect(mockedApi.responderInvitacion).not.toHaveBeenCalled();
     });
 });
