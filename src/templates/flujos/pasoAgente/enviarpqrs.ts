@@ -6,11 +6,12 @@ import { closeUserSession } from '../../../utils/proactiveSessionManager';
 import { abrirOSostenerSesion } from '../../../utils/proactiveSessionTimeout';
 import { registrarActividadBot } from '../../../services/apiService';
 import { trackPaso, trackFin } from '../../../utils/trazabilidad';
+import { OPCIONES_REGEX } from '../keywordsBotones';
 
 
 const NUMERO_ASESOR = process.env.NUMERO_ASESOR_HUMANO || '573158070460';
 
-const pqrsFlow = addKeyword(['280525006', 'PQRS', 'pqrs', '6', 'peticiones', 'quejas', 'reclamos', 'solicitudes'])
+const pqrsFlow = addKeyword('/^\\s*6\\s*$|280525006|pqrs|peticiones|quejas|reclamos|solicitudes/i', OPCIONES_REGEX)
     .addAction(async (ctx, ctxFn) => {
         try {
             // T-04: entrada por keyword sin welcomeFlow. Fuera de horario se vuelve al menú, que antes

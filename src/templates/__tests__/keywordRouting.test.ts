@@ -32,10 +32,11 @@ import {
 } from '../flujos/campahna';
 import { step1CencelarCita } from '../flujos/cancelarCita';
 import { step1Reprogramar } from '../flujos/reprogramarCita';
-import { step1AgendarCita, step14AgendarCita2 } from '../flujos/agendarCita';
+import { step1AgendarCita, step13AgendarCitaAgente, step14AgendarCita2 } from '../flujos/agendarCita';
 import { IDS_TIPO_DOCUMENTO, IDS_TIPO_DOCUMENTO_RETIRADOS } from '../../utils/datosPacienteNuevo';
 import { pasoAgenteFlow } from '../flujos/pasoAgente';
 import { pqrsFlow } from '../flujos/pasoAgente/enviarpqrs';
+import { multimediaFlow } from '../flujos/multimediaFlow';
 import { ofertaCupoAceptaDocumentoFlow, ofertaCupoRechazaDocumentoFlow, retiroListaEsperaFlow, invitacionAceptaFlow, invitacionRechazaFlow, invitacionAgenteFlow } from '../flujos/listaEspera';
 import { confirmoAsistenciaFlow, necesitoCancelarFlow, noPodreAsistirFlow, botonesConfirmarCancelacionFlow } from '../flujos/recordatorios';
 import { ID_FILA_NINGUNA, idFilaCita, MAX_CITAS_EN_LISTA, PREFIJO_ID_FILA_CITA } from '../../utils/mensajesRecordatorio';
@@ -56,8 +57,10 @@ const nombres = new Map<string, string>([
     [keyRef(step1Reprogramar), 'step1Reprogramar'],
     [keyRef(step1AgendarCita), 'step1AgendarCita'],
     [keyRef(step14AgendarCita2), 'step14AgendarCita2'],
+    [keyRef(step13AgendarCitaAgente), 'step13AgendarCitaAgente'],
     [keyRef(pasoAgenteFlow), 'pasoAgenteFlow'],
     [keyRef(pqrsFlow), 'pqrsFlow'],
+    [keyRef(multimediaFlow), 'multimediaFlow'],
     [keyRef(ofertaCupoAceptaDocumentoFlow), 'ofertaCupoAceptaDocumentoFlow'],
     [keyRef(ofertaCupoRechazaDocumentoFlow), 'ofertaCupoRechazaDocumentoFlow'],
     [keyRef(retiroListaEsperaFlow), 'retiroListaEsperaFlow'],
@@ -97,6 +100,25 @@ function destino(texto: string): string | null {
 }
 
 describe('Enrutamiento de keywords con el algoritmo real de @builderbot (runbook B1)', () => {
+    describe('Fase 1: multimedia y digitos de menu', () => {
+        it.each([
+            '_event_voice_note__1a2b3c4d-5678',
+            '_event_location__1a2b3c4d-5678',
+            '_event_media__1a2b3c4d-5678',
+        ])('"%s" -> multimediaFlow', (texto) => expect(destino(texto)).toBe('multimediaFlow'));
+
+        it.each([
+            ['3', 'step1Reprogramar'], ['280525003', 'step1Reprogramar'], ['Reprogramar cita', 'step1Reprogramar'],
+            ['4', 'step1CencelarCita'], ['5', 'pasoAgenteFlow'], ['280525005', 'pasoAgenteFlow'],
+            ['6', 'pqrsFlow'], ['quejas', 'pqrsFlow'],
+            ['hablar_con_agente', 'step13AgendarCitaAgente'],
+        ])('"%s" -> %s', (texto, esperado) => expect(destino(texto)).toBe(esperado));
+
+        it.each(['tengo 3 hijos', 'cita a las 4'])('"%s" no abre flujos numericos', (texto) => {
+            expect(['step1Reprogramar', 'step1CencelarCita', 'pasoAgenteFlow', 'pqrsFlow']).not.toContain(destino(texto));
+        });
+    });
+
     describe('botones nuevos → flujo nuevo (coincidencia exacta)', () => {
         it.each([
             ['Confirmo asistencia', 'confirmoAsistenciaFlow'],

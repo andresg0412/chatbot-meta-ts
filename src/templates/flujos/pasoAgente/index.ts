@@ -6,11 +6,12 @@ import { closeUserSession } from '../../../utils/proactiveSessionManager';
 import { abrirOSostenerSesion } from '../../../utils/proactiveSessionTimeout';
 import { registrarActividadBot } from '../../../services/apiService';
 import { trackPaso, trackFin } from '../../../utils/trazabilidad';
+import { OPCIONES_REGEX } from '../keywordsBotones';
 
 
 const NUMERO_ASESOR = process.env.NUMERO_ASESOR_HUMANO || '573158070460';
 
-const pasoAgenteFlow = addKeyword(['280525005', '5', 'chatear con agente', 'Hablar con asistente', 'Hablar con una asistente'])
+const pasoAgenteFlow = addKeyword('/^\\s*5\\s*$|280525005|chatear con agente|hablar con (una )?asistente/i', OPCIONES_REGEX)
     .addAction(async (ctx, ctxFn) => {
         try {
             // T-04: entrada por keyword sin welcomeFlow. Fuera de horario se vuelve al menú, que antes

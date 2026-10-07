@@ -87,5 +87,8 @@ export const KW_NO_GRACIAS_INVITACION = '/^\\s*No, gracias\\s*$/';
 /** Botón "Hablar con agente" (invitación a la lista de espera). */
 export const KW_HABLAR_CON_AGENTE_INVITACION = '/^\\s*Hablar con agente\\s*$/';
 
+/** Mensajes multimedia sintetizados por provider-meta. Debe registrarse antes de cualquier keyword numerica. */
+export const KW_MULTIMEDIA = '/^_event_(media|document|location|voice_note|contacts|order)_/';
+
 /** Opción de addKeyword para las keywords de este archivo. */
 export const OPCIONES_REGEX = { regex: true } as const;

@@ -3,7 +3,7 @@ import { politicaDatosFlow } from './flujos/principal/politicasDatos';
 import { checkAndRegisterUserAttempt } from '../utils/userRateLimiter';
 import { metricConversationStarted } from '../utils/metrics';
 import { updateUserActivity, closeUserSession, isSessionExpired } from '../utils/proactiveSessionManager';
-import { reiniciarEstadoEnFlujo } from '../utils/estadoConversacion';
+import { hayAgendamientoEnCurso, reiniciarEstadoEnFlujo } from '../utils/estadoConversacion';
 import { isNumberValid } from '../constants/killSwichConstants';
 import { esBotHabilitado } from '../services/citasService';
 import { registrarActividadBot } from '../services/apiService';
@@ -39,6 +39,14 @@ const welcomeFlow = addKeyword(EVENTS.WELCOME)
                 flujo: sesionPrevia.ultimoFlujo,
                 contexto: 'welcome',
             });
+            if (sesionPrevia.ultimoPaso === 'agendar.s13_convenio' && hayAgendamientoEnCurso(ctxFn.state)) {
+                await ctxFn.flowDynamic(
+                    'No encontré ese convenio en la lista. Si el tuyo no aparece, elige *Hablar con un agente* ' +
+                    'al final de la lista, o vuelve atrás y elige *Particular*.'
+                );
+                const { step13AgendarCitaConvenio } = await import('./flujos/agendarCita/step13AgendarCita');
+                return ctxFn.gotoFlow(step13AgendarCitaConvenio);
+            }
         }
         // TBOT-02: una interacción nueva (sin sesión activa) empieza con el state limpio. Sin esto, el
         // paciente, el documento y el convenio de la sesión anterior del mismo celular seguían en memoria

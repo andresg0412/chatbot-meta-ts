@@ -4,9 +4,10 @@ import { abrirOSostenerSesion } from '../../../utils/proactiveSessionTimeout';
 import { registrarActividadBot } from '../../../services/apiService';
 import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin } from '../../../utils/trazabilidad';
 import { limpiarClavesFlujosCita } from '../../../utils/estadoConversacion';
+import { OPCIONES_REGEX } from '../keywordsBotones';
 
 
-const step1Reprogramar = addKeyword(['280525003', '3', 'reprogramar cita', 'reprogramar', 'Reprogramar'])
+const step1Reprogramar = addKeyword('/^\\s*3\\s*$|280525003|reprogramar/i', OPCIONES_REGEX)
     .addAction(async (ctx, { state }) => {
         // T-04: igual que cancelar. Con "reprogramar"/"3" como primer mensaje (sin welcomeFlow) no había
         // sesión y checkSessionTimeout terminaba el flujo en silencio. Ahora se abre (o renueva) la sesión

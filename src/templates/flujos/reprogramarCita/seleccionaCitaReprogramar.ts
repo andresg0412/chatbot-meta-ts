@@ -17,6 +17,9 @@ import {
     mensajeErrorGlobhoMovimiento,
     mensajeCitaMovidaPendienteVerificacion,
 } from '../../../utils/mensajesMovimientoCita';
+import { tipoConsultaParaReprogramar } from './tipoConsultaReprogramar';
+import { esCatalogoSoloAsesor } from '../../../constants/catalogosSoloAsesor';
+import { derivarAAsesorSinOpciones } from '../../../utils/derivarAsesor';
 
 
 function generarAgendaIdAleatorio() {
@@ -55,11 +58,24 @@ const confirmarReprogramarCita = addKeyword(EVENTS.ACTION)
             trackPaso(ctx.from, 'reprogramar.confirma_reprogramar', 'ok');
             const citaAnterior = state.getMyState().citaSeleccionadaProgramada;
             const nuevaCita = state.getMyState().citaSeleccionadaHora;
+            if (esCatalogoSoloAsesor(citaAnterior?.catalogo)) {
+                await derivarAAsesorSinOpciones(ctx, flowDynamic, {
+                    flujo: 'reprogramar', paso: 'reprogramar.fechas', motivo: 'catalogo_solo_asesor',
+                });
+                return endFlow();
+            }
             //console.log('citaAnterior:', citaAnterior);
             //console.log('nuevaCita:', nuevaCita);
             const nombreConvenio = CONVENIOS_SERVICIOS[citaAnterior.convenio] ?? 'particular';
             const idConvenio = ID_CONVENIOS_SERVICIOS[citaAnterior.convenio] ?? '1787';
-            const tipoConsulta = citaAnterior.catalogo ? (citaAnterior.catalogo.toUpperCase().includes('PRIMERA VEZ') ? 'primera' : 'control') : '';
+            const tipoConsultaDeducido = tipoConsultaParaReprogramar(citaAnterior?.catalogo, citaAnterior?.profesional_id);
+            if (!tipoConsultaDeducido) {
+                await derivarAAsesorSinOpciones(ctx, flowDynamic, {
+                    flujo: 'reprogramar', paso: 'reprogramar.fechas', motivo: 'sin_profesional',
+                });
+                return endFlow();
+            }
+            const tipoConsulta = tipoConsultaDeducido === 'Primera vez' ? 'primera' : 'control';
             const bodyReagendar = {
                 cita_anterior: { cita_id: citaAnterior.agenda_id_externa },
                 nueva_cita: {

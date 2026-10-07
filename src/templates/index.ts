@@ -4,6 +4,7 @@ import { menuFlow } from './menuFlow';
 import { politicaDatosFlow } from './flujos/principal/politicasDatos';
 import { noAceptaPoliticas } from './flujos/principal/noAceptaPoliticas';
 import { killSwitchFlow } from './flujos/principal/killSwitchFlow';
+import { multimediaFlow } from './flujos/multimediaFlow';
 import {
     menuConocerIpsFlow,
     serviciosStepConocer,
@@ -88,6 +89,7 @@ import {
     step13AgendarCitaConvenio,
     step13AgendarCitaParticular,
     step13AgendarCitaConvenio2,
+    step13AgendarCitaAgente,
     step14AgendarCita,
     step14AgendarCita2,
     step15AgendarCita,
@@ -149,6 +151,7 @@ import { isRecordatoriosBotonesEnabled } from '../utils/listaEsperaFlags';
 // Cubierto por src/templates/__tests__/keywordRouting.test.ts.
 const flujosRegistradosCompletos = [
     killSwitchFlow,
+    multimediaFlow,
     // Coincidencia exacta (regex anclada) — deben ir antes de exitFlow y de los flujos viejos.
     retiroListaEsperaFlow,
     confirmoAsistenciaFlow,
@@ -218,6 +221,7 @@ const flujosRegistradosCompletos = [
     step13AgendarCitaConvenio,
     step13AgendarCitaParticular,
     step13AgendarCitaConvenio2,
+    step13AgendarCitaAgente,
     step14AgendarCita,
     step14AgendarCita2,
     step15AgendarCita,
