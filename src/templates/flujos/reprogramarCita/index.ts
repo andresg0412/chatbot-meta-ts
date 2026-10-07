@@ -7,3 +7,4 @@ export * from './step6Reprogramar';
 export * from './step7Reprogramar';
 export * from './stepHoraSeleccionada';
 export * from './stepSeleccionaFechaReprogramar';
+export * from './tipoConsultaReprogramar';

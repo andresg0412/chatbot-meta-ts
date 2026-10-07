@@ -16,6 +16,9 @@ import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 import { closeUserSession } from '../../../utils/proactiveSessionManager';
 import { registrarActividadBot } from '../../../services/apiService';
 import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin } from '../../../utils/trazabilidad';
+import { tipoConsultaParaReprogramar } from './tipoConsultaReprogramar';
+import { esCatalogoSoloAsesor } from '../../../constants/catalogosSoloAsesor';
+import { derivarAAsesorSinOpciones } from '../../../utils/derivarAsesor';
 
 
 const stepConfirmaReprogramar = addKeyword(EVENTS.ACTION)
@@ -38,10 +41,24 @@ const stepConfirmaReprogramar = addKeyword(EVENTS.ACTION)
                     return;
                 }
                 const { especialidad, catalogo, profesional_id, nombre_profesional } = citaSeleccionadaProgramada;
-                const catalogoUpper = catalogo ? catalogo.toUpperCase() : '';
-                const esPrimeraVez = catalogoUpper.includes('PRIMERA VEZ');
-                const esControl = catalogoUpper.includes('CONTROL');
-                const tipoConsulta = esPrimeraVez ? 'Primera vez' : esControl ? 'Control' : '';
+                if (esCatalogoSoloAsesor(catalogo)) {
+                    trackPaso(ctx.from, 'reprogramar.fechas', 'ok', { metadata: { motivo: 'catalogo_solo_asesor' } });
+                    await derivarAAsesorSinOpciones(ctx, flowDynamic, {
+                        flujo: 'reprogramar',
+                        paso: 'reprogramar.fechas',
+                        motivo: 'catalogo_solo_asesor',
+                    });
+                    return endFlow();
+                }
+                const tipoConsulta = tipoConsultaParaReprogramar(catalogo, profesional_id);
+                if (!tipoConsulta) {
+                    await derivarAAsesorSinOpciones(ctx, flowDynamic, {
+                        flujo: 'reprogramar',
+                        paso: 'reprogramar.fechas',
+                        motivo: 'sin_profesional',
+                    });
+                    return endFlow();
+                }
                 await registrarActividadBot('chat_flujo_reprogramar', ctx.from, {
                     step: 'consulta_fechas_disponibles',
                     especialidad: especialidad,
@@ -52,6 +69,10 @@ const stepConfirmaReprogramar = addKeyword(EVENTS.ACTION)
                 const fechasOrdenadas = await consultarFechasCitasDisponibles(tipoConsulta, especialidad, profesional_id);
                 if (!fechasOrdenadas || fechasOrdenadas.length === 0) {
                     trackErrorBackend(ctx.from, 'reprogramar.fechas', '/chatbot/fechas');
+                    await derivarAAsesorSinOpciones(ctx, flowDynamic, {
+                        flujo: 'reprogramar', paso: 'reprogramar.fechas', motivo: 'sin_fechas',
+                    });
+                    return endFlow();
                 }
                 await state.update({ fechasOrdenadas, tipoConsultaPaciente: tipoConsulta, especialidadAgendarCita: especialidad, profesionalId: profesional_id });
                 const mostrarFechas = await fechasOrdenadas.slice(0, 3);

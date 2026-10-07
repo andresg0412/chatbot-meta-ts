@@ -4,9 +4,10 @@ import { abrirOSostenerSesion } from '../../../utils/proactiveSessionTimeout';
 import { registrarActividadBot } from '../../../services/apiService';
 import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion, flujoDesdeSeleccionMenu } from '../../../utils/trazabilidad';
 import { limpiarClavesFlujosCita } from '../../../utils/estadoConversacion';
+import { OPCIONES_REGEX } from '../keywordsBotones';
 
 
-const step1CencelarCita = addKeyword(['280525004', '4', 'cancelar', 'Cancelo', 'Cancelar', 'cancelo'])
+const step1CencelarCita = addKeyword('/^\\s*4\\s*$|280525004|cancelar|cancelo/i', OPCIONES_REGEX)
     .addAction(async (ctx, { state }) => {
         // T-04: se puede entrar sin pasar por welcomeFlow ("cancelar", "4", "Sí, cancelar" o "Necesito
         // cancelar" con el flag apagado). Sin sesión, los pasos siguientes la daban por vencida y el flujo

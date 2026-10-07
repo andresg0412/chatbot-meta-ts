@@ -7,6 +7,8 @@ import { CONVENIOS_SERVICIOS, ID_CONVENIOS_SERVICIOS } from '../../../constants/
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 import { hayAgendamientoEnCurso, MENSAJE_CONVERSACION_TERMINADA } from '../../../utils/estadoConversacion';
 import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion } from '../../../utils/trazabilidad';
+import { pasoAgenteFlow } from '../pasoAgente';
+import { OPCIONES_REGEX } from '../keywordsBotones';
 
 const step13AgendarCitaParticular = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { provider, state, gotoFlow }) => {
@@ -66,6 +68,13 @@ const step13AgendarCitaConvenio2 = addKeyword(['conv_poliza_sura', 'conv_poliza_
         }
     });
 
+const step13AgendarCitaAgente = addKeyword('/^\\s*hablar_con_agente\\s*$/', OPCIONES_REGEX)
+    .addAction(async (ctx, { state, endFlow, gotoFlow }) => {
+        if (!hayAgendamientoEnCurso(state)) return endFlow(MENSAJE_CONVERSACION_TERMINADA);
+        trackPaso(ctx.from, 'agendar.s13_convenio', 'ok', { metadata: { opcion: 'hablar_con_agente' } });
+        return gotoFlow(pasoAgenteFlow);
+    });
+
 const step13AgendarCitaConvenio = addKeyword(EVENTS.ACTION)
     .addAction(async (ctx, { flowDynamic, endFlow }) => {
         const sessionValid = await checkSessionTimeout(ctx.from, flowDynamic, endFlow, { paso: 'agendar.s13_convenio' });
@@ -99,10 +108,12 @@ const step13AgendarCitaConvenio = addKeyword(EVENTS.ACTION)
             }
         };
         await provider.sendList(ctx.from, list);
+        trackPaso(ctx.from, 'agendar.s13_convenio', 'mostrado');
     });
 
 export {
     step13AgendarCitaConvenio,
     step13AgendarCitaParticular,
     step13AgendarCitaConvenio2,
+    step13AgendarCitaAgente,
 };

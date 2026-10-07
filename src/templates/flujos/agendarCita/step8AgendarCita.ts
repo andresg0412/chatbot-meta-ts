@@ -7,6 +7,7 @@ import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 import { closeUserSession } from '../../../utils/proactiveSessionManager';
 import { registrarActividadBot } from '../../../services/apiService';
 import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion } from '../../../utils/trazabilidad';
+import { derivarAAsesorSinOpciones } from '../../../utils/derivarAsesor';
 
 
 const step8AgendarCita = addKeyword(EVENTS.ACTION)
@@ -33,6 +34,10 @@ const step8AgendarCita = addKeyword(EVENTS.ACTION)
                 const fechasOrdenadas = await consultarFechasCitasDisponibles(tipoConsulta, especialidad, ProfesionalID);
                 if (!fechasOrdenadas || fechasOrdenadas.length === 0) {
                     trackErrorBackend(ctx.from, 'agendar.s08_fechas', '/chatbot/fechas');
+                    await derivarAAsesorSinOpciones(ctx, flowDynamic, {
+                        flujo: 'agendar', paso: 'agendar.s08_fechas', motivo: 'sin_fechas',
+                    });
+                    return endFlow();
                 }
                 await state.update({ fechasOrdenadas });
                 const mostrarFechas = await fechasOrdenadas.slice(0, 3);

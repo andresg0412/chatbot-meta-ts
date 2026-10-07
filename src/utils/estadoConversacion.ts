@@ -106,6 +106,10 @@ export const CLAVES_FLUJOS_CITA: readonly string[] = [
     'citaSeleccionada',
     'citaReprogramada',
     'citas',
+    'reprogramarDiasSinHoras',
+    'reprogramarErroresSeguidos',
+    'agendarDiasSinHoras',
+    'agendarErroresSeguidos',
 ];
 
 let almacen: AlmacenEstadoBot | null = null;
