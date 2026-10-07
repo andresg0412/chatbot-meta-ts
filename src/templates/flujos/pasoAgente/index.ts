@@ -11,7 +11,8 @@ import { OPCIONES_REGEX } from '../keywordsBotones';
 
 const NUMERO_ASESOR = process.env.NUMERO_ASESOR_HUMANO || '573158070460';
 
-const pasoAgenteFlow = addKeyword('/^\\s*5\\s*$|280525005|chatear con agente|hablar con (una )?asistente/i', OPCIONES_REGEX)
+// La última alternativa es KW_HABLAR_CON_UN_AGENTE (keywordsBotones.ts): botón "Hablar con un agente".
+const pasoAgenteFlow = addKeyword('/^\\s*5\\s*$|280525005|chatear con agente|hablar con (una )?asistente|^\\s*hablar con (un )?agente\\s*$/i', OPCIONES_REGEX)
     .addAction(async (ctx, ctxFn) => {
         try {
             // T-04: entrada por keyword sin welcomeFlow. Fuera de horario se vuelve al menú, que antes

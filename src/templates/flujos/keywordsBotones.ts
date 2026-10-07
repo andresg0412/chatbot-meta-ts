@@ -89,6 +89,14 @@ export const KW_NO_GRACIAS_INVITACION = '/^\\s*No, gracias\\s*$/';
 /** Botón "Hablar con agente" (invitación a la lista de espera). */
 export const KW_HABLAR_CON_AGENTE_INVITACION = '/^\\s*Hablar con agente\\s*$/';
 
+/**
+ * Botón "Hablar con un agente" de las plantillas de oferta de cupo (index 2) y de los recordatorios con
+ * botones: lo atiende pasoAgenteFlow. Anclada, para no capturar frases como "no quiero hablar con un
+ * agente". También admite "hablar con agente" escrito a mano; el botón exacto "Hablar con agente" de la
+ * invitación lo sigue tomando invitacionAgenteFlow, registrado antes en createFlow.
+ */
+export const KW_HABLAR_CON_UN_AGENTE = '/^\\s*hablar con (un )?agente\\s*$/i';
+
 /** Mensajes multimedia sintetizados por provider-meta. Debe registrarse antes de cualquier keyword numerica. */
 export const KW_MULTIMEDIA = '/^_event_(media|document|location|voice_note|contacts|order)_/';
 
