@@ -1062,6 +1062,45 @@ export async function enviarPlantillaUsuariosConAsistencia(cita: AgendaPendiente
  */
 export const TIMEOUT_BACKEND_CASCADA_MS = 20000;
 
+export interface ResultadoIntencionOfertaCupo {
+    estado: 'vigente' | 'rechazada' | 'vencida' | 'sin_oferta' | 'ambigua';
+    expira_at?: string | null;
+    prorrogada?: boolean;
+    estado_cupo?: string;
+}
+
+/** Registra el toque de un botón de oferta. Nunca bloquea el flujo por un error de red. */
+export async function registrarIntencionOfertaCupo(
+    celular: string,
+    respuesta: 'acepta' | 'rechaza'
+): Promise<{ ok: true; data: ResultadoIntencionOfertaCupo } | { ok: false }> {
+    try {
+        const url = `${API_BACKEND_URL}/chatbot/listaespera/cascada/oferta/intencion`;
+        const response = await axios.post(url, { celular, respuesta }, { timeout: 4000 });
+        const data = response.data?.data;
+        if (!data || typeof data.estado !== 'string') return { ok: false };
+        return { ok: true, data };
+    } catch (error: any) {
+        console.error('Error registrando intención de oferta:', error?.message ?? error);
+        return { ok: false };
+    }
+}
+
+/** Informa al backend de un estado failed de Meta; la ruta ignora mensajes que no sean ofertas. */
+export async function marcarOfertaNoEntregada(mensajeWaId: string, errorCode?: string | null): Promise<boolean> {
+    try {
+        const url = `${API_BACKEND_URL}/chatbot/listaespera/cascada/oferta/no-entregada`;
+        const response = await axios.post(url, {
+            mensaje_wa_id: mensajeWaId,
+            ...(errorCode ? { error_code: errorCode } : {})
+        }, { timeout: TIMEOUT_BACKEND_CASCADA_MS });
+        return response.data?.code === 200;
+    } catch (error: any) {
+        console.error('Error reportando oferta no entregada:', error?.message ?? error);
+        return false;
+    }
+}
+
 export async function tickCascadaListaEspera(limite?: number): Promise<AccionCascada[]> {
     try {
         const url = `${API_BACKEND_URL}/chatbot/listaespera/cascada/tick`;

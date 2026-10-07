@@ -15,6 +15,7 @@
 //   toma id, status, timestamp, recipient_id y errors[0].code/title: NUNCA `pricing` ni `conversation`.
 
 import { isTrazabilidadV2Enabled, registrarMensajeSesionTraza, trackEvento, uuidV5 } from './trazabilidad';
+import { marcarOfertaNoEntregada } from '../services/apiService';
 
 const ESTADOS_META = new Set(['sent', 'delivered', 'read', 'failed']);
 
@@ -164,10 +165,16 @@ export function registrarEstadosWebhook(body: any): number {
 export function crearMiddlewareEstadosMeta() {
     return function middlewareEstadosMeta(req: any, _res: any, next: (err?: any) => void) {
         try {
-            if (req?.method === 'POST' && isTrazabilidadV2Enabled()) {
+            if (req?.method === 'POST') {
                 const ruta = typeof req?.path === 'string' ? req.path : String(req?.url ?? '').split('?')[0];
                 if (ruta === '/webhook' && req?.body && typeof req.body === 'object') {
-                    registrarEstadosWebhook(req.body);
+                    const estados = extraerEstadosWebhook(req.body);
+                    for (const estado of estados) {
+                        if (estado.status === 'failed' && estado.waMessageId) {
+                            void marcarOfertaNoEntregada(estado.waMessageId, estado.errorCode).catch(() => undefined);
+                        }
+                    }
+                    if (isTrazabilidadV2Enabled()) registrarEstadosWebhook(req.body);
                 }
             }
         } catch (error) {
