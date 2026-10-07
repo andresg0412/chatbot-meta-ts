@@ -28,6 +28,7 @@ import {
     KW_SI_DESEO_INGRESAR,
     KW_NO_GRACIAS_INVITACION,
     KW_HABLAR_CON_AGENTE_INVITACION,
+    KW_HABLAR_CON_UN_AGENTE,
 } from './keywordsBotones';
 
 /** Mismas palabras que exitFlow (welcomeFlow.ts), como texto completo. */
@@ -54,6 +55,8 @@ const BOTONES_ANCLADOS: RegExp[] = [
     KW_SI_DESEO_INGRESAR,
     KW_NO_GRACIAS_INVITACION,
     KW_HABLAR_CON_AGENTE_INVITACION,
+    // Botón "Hablar con un agente" de la oferta de cupo y de los recordatorios (pasoAgenteFlow).
+    KW_HABLAR_CON_UN_AGENTE,
 ].map(regexDesdeLiteral);
 
 /**

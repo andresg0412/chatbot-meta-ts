@@ -118,4 +118,11 @@ describe('palabras globales (BOTONES_ANCLADOS)', () => {
         expect(esBotonDeOtraPlantilla('No, gracias por todo')).toBe(false);
         expect(esBotonDeOtraPlantilla('hablar con agente ya')).toBe(false);
     });
+
+    it('el botón "Hablar con un agente" (oferta de cupo y recordatorios) se reconoce dentro de una captura', () => {
+        expect(esBotonDeOtraPlantilla('Hablar con un agente')).toBe(true);
+        expect(esBotonDeOtraPlantilla(' Hablar con un agente ')).toBe(true);
+        expect(esBotonDeOtraPlantilla('quiero hablar con un agente')).toBe(false);
+        expect(esBotonDeOtraPlantilla('Hablar con un agente por favor')).toBe(false);
+    });
 });

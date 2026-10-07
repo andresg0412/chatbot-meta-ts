@@ -116,6 +116,27 @@ describe('Enrutamiento de keywords con el algoritmo real de @builderbot (runbook
             ['hablar_con_agente', 'step13AgendarCitaAgente'],
         ])('"%s" -> %s', (texto, esperado) => expect(destino(texto)).toBe(esperado));
 
+        // Botón "Hablar con un agente" de la oferta de cupo y de los recordatorios: antes caía en welcomeFlow.
+        it.each([
+            ['Hablar con un agente', 'pasoAgenteFlow'],
+            [' Hablar con un agente ', 'pasoAgenteFlow'],
+            ['hablar con un agente', 'pasoAgenteFlow'],
+            ['hablar con agente', 'pasoAgenteFlow'],
+            ['Hablar con agente', 'otro:invitacionAgenteFlow'],
+        ])('"%s" -> %s', (texto, esperado) => {
+            const real = destino(texto);
+            if (esperado === 'otro:invitacionAgenteFlow') {
+                expect(refDestino(registroReal, texto)).toBe(keyRef(invitacionAgenteFlow));
+            } else {
+                expect(real).toBe(esperado);
+            }
+        });
+
+        it.each(['no quiero hablar con un agente', 'Hablar con un agente por favor', 'quiero hablar con un agente'])(
+            '"%s" no abre pasoAgenteFlow',
+            (texto) => expect(destino(texto)).not.toBe('pasoAgenteFlow')
+        );
+
         it.each(['tengo 3 hijos', 'cita a las 4'])('"%s" no abre flujos numericos', (texto) => {
             expect(['step1Reprogramar', 'step1CencelarCita', 'pasoAgenteFlow', 'pqrsFlow']).not.toContain(destino(texto));
         });
