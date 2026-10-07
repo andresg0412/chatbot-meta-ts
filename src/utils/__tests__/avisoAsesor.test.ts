@@ -1,6 +1,7 @@
 // Runbook B6: registro de avisos al asesor que no se entregan (sin envíos reales: apiService simulado).
 jest.mock('../../services/apiService', () => ({
     enviarMensajeTextoMeta: jest.fn(),
+    enviarPlantillaAvisoAsesor: jest.fn(),
     registrarActividadBot: jest.fn(async () => true),
 }));
 
@@ -83,4 +84,35 @@ it('notice de otro número (paciente) no se atribuye a avisos del asesor', async
 it('notice con payload inesperado no lanza', () => {
     expect(() => procesarNoticeProvider(undefined)).not.toThrow();
     expect(() => procesarNoticeProvider({ instructions: 'x' })).not.toThrow();
+});
+
+it('usa texto libre si no se proporciona plantilla', async () => {
+    mockedApi.enviarMensajeTextoMeta.mockResolvedValueOnce({ exito: true });
+    await expect(enviarAvisoAsesor({
+        tipo: 'escalamiento_lista_espera', canal: '573158070460', referencia: 'cupo:C2', mensaje: 'aviso',
+    })).resolves.toBe(true);
+    expect(mockedApi.enviarPlantillaAvisoAsesor).not.toHaveBeenCalled();
+    expect(mockedApi.enviarMensajeTextoMeta).toHaveBeenCalledWith('573158070460', 'aviso');
+});
+
+it('envía la plantilla configurada con sus cuatro variables', async () => {
+    mockedApi.enviarPlantillaAvisoAsesor.mockResolvedValueOnce({ exito: true, mensajeWaId: 'wamid.template' });
+    await expect(enviarAvisoAsesor({
+        tipo: 'escalamiento_lista_espera', canal: '573158070460', referencia: 'cupo:C3', mensaje: 'respaldo',
+        plantilla: { nombre: 'aviso_cupo_escalado', variables: ['Dra. A', '7 oct', '10:00', 'sin candidatos'] },
+    })).resolves.toBe(true);
+    expect(mockedApi.enviarPlantillaAvisoAsesor).toHaveBeenCalledWith(
+        '573158070460', 'aviso_cupo_escalado', ['Dra. A', '7 oct', '10:00', 'sin candidatos']
+    );
+    expect(mockedApi.enviarMensajeTextoMeta).not.toHaveBeenCalled();
+});
+
+it('si falla la plantilla, hace un único respaldo de texto libre', async () => {
+    mockedApi.enviarPlantillaAvisoAsesor.mockResolvedValueOnce({ exito: false, errorCode: 'template_error' });
+    mockedApi.enviarMensajeTextoMeta.mockResolvedValueOnce({ exito: true });
+    await expect(enviarAvisoAsesor({
+        tipo: 'escalamiento_lista_espera', canal: '573158070460', referencia: 'cupo:C4', mensaje: 'respaldo',
+        plantilla: { nombre: 'aviso_cupo_escalado', variables: ['A', 'B', 'C', 'D'] },
+    })).resolves.toBe(true);
+    expect(mockedApi.enviarMensajeTextoMeta).toHaveBeenCalledTimes(1);
 });

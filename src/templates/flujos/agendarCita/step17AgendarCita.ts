@@ -10,6 +10,7 @@ import {
 import { step18AgendarCita } from './step18AgendarCita';
 import { crearPaciente } from '../../../utils/consultarCitasPorDocumento';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
+import { aplicarFiltroCaptura } from '../filtroCaptura';
 import { closeUserSession } from '../../../utils/proactiveSessionManager';
 import { registrarActividadBot, CausaFalloCrearPaciente } from '../../../services/apiService';
 import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion } from '../../../utils/trazabilidad';
@@ -91,7 +92,12 @@ const step17AgendarCita6 = addKeyword(EVENTS.ACTION)
         {
             capture: true,
         },
-        async (ctx, { state, gotoFlow, flowDynamic }) => {
+        async (ctx, fns) => {
+            const { state, gotoFlow, flowDynamic, endFlow } = fns;
+            const filtro = await aplicarFiltroCaptura(ctx, { flowDynamic, endFlow }, {
+                paso: 'agendar.s17_formulario_paciente', reintentar: () => gotoFlow(step17AgendarCita6), permitirSalir: false,
+            });
+            if (filtro) return filtro.salida;
             const correoElectronico = normalizarEmail(sanitizeString(ctx.body, 200));
             if (!correoElectronico) {
                 trackNoEntendido(ctx.from, 'agendar.s17_formulario_paciente', 1, { contexto: 'correo' });
@@ -113,7 +119,12 @@ const step17AgendarCita5 = addKeyword(EVENTS.ACTION)
     })
     .addAnswer('Ahora, por favor digita tu fecha de nacimiento. Utiliza el formato DD/MM/AAAA, por ejemplo 24/12/1990:',
         { capture: true },
-        async (ctx, { state, gotoFlow, flowDynamic }) => {
+        async (ctx, fns) => {
+            const { state, gotoFlow, flowDynamic, endFlow } = fns;
+            const filtro = await aplicarFiltroCaptura(ctx, { flowDynamic, endFlow }, {
+                paso: 'agendar.s17_formulario_paciente', reintentar: () => gotoFlow(step17AgendarCita5), permitirSalir: false,
+            });
+            if (filtro) return filtro.salida;
             // Se guarda en formato YYYY-MM-DD (el que exige el backend).
             const fechaFormateada = normalizarFechaNacimiento(sanitizeString(ctx.body, 20));
             if (!fechaFormateada) {
@@ -135,7 +146,12 @@ const step17AgendarCita4 = addKeyword(EVENTS.ACTION)
     })
     .addAnswer('Digita tu *SEGUNDO* apellido. Si no tienes, escribe *no*:',
         { capture: true },
-        async (ctx, { state, gotoFlow, flowDynamic }) => {
+        async (ctx, fns) => {
+            const { state, gotoFlow, flowDynamic, endFlow } = fns;
+            const filtro = await aplicarFiltroCaptura(ctx, { flowDynamic, endFlow }, {
+                paso: 'agendar.s17_formulario_paciente', reintentar: () => gotoFlow(step17AgendarCita4), permitirSalir: false,
+            });
+            if (filtro) return filtro.salida;
             // '' = no tiene segundo apellido (el backend lo guarda como NULL).
             const apellidoPaciente2 = normalizarNombreOpcional(ctx.body);
             if (apellidoPaciente2 === null) {
@@ -157,7 +173,12 @@ const step17AgendarCita3 = addKeyword(EVENTS.ACTION)
     })
     .addAnswer('Digita tu *PRIMER* apellido:',
         { capture: true },
-        async (ctx, { state, gotoFlow, flowDynamic }) => {
+        async (ctx, fns) => {
+            const { state, gotoFlow, flowDynamic, endFlow } = fns;
+            const filtro = await aplicarFiltroCaptura(ctx, { flowDynamic, endFlow }, {
+                paso: 'agendar.s17_formulario_paciente', reintentar: () => gotoFlow(step17AgendarCita3), permitirSalir: false,
+            });
+            if (filtro) return filtro.salida;
             const apellidoPaciente1 = normalizarNombre(ctx.body);
             if (!apellidoPaciente1) {
                 trackNoEntendido(ctx.from, 'agendar.s17_formulario_paciente', 1, { contexto: 'apellido' });
@@ -178,7 +199,12 @@ const step17AgendarCita2 = addKeyword(EVENTS.ACTION)
     })
     .addAnswer('Ahora, digita tu *SEGUNDO* nombre. Si no tienes, escribe *no*:',
         { capture: true },
-        async (ctx, { state, gotoFlow, flowDynamic }) => {
+        async (ctx, fns) => {
+            const { state, gotoFlow, flowDynamic, endFlow } = fns;
+            const filtro = await aplicarFiltroCaptura(ctx, { flowDynamic, endFlow }, {
+                paso: 'agendar.s17_formulario_paciente', reintentar: () => gotoFlow(step17AgendarCita2), permitirSalir: false,
+            });
+            if (filtro) return filtro.salida;
             // '' = no tiene segundo nombre (el backend lo guarda como NULL).
             const nombrePaciente2 = normalizarNombreOpcional(ctx.body);
             if (nombrePaciente2 === null) {
@@ -209,7 +235,12 @@ const step17AgendarCita = addKeyword(EVENTS.ACTION)
     })
     .addAnswer('Por favor, digita tu *PRIMER* nombre:',
         { capture: true },
-        async (ctx, { state, gotoFlow, flowDynamic }) => {
+        async (ctx, fns) => {
+            const { state, gotoFlow, flowDynamic, endFlow } = fns;
+            const filtro = await aplicarFiltroCaptura(ctx, { flowDynamic, endFlow }, {
+                paso: 'agendar.s17_formulario_paciente', reintentar: () => gotoFlow(step17AgendarCita), permitirSalir: false,
+            });
+            if (filtro) return filtro.salida;
             const nombrePaciente1 = normalizarNombre(ctx.body);
             if (!nombrePaciente1) {
                 trackNoEntendido(ctx.from, 'agendar.s17_formulario_paciente', 1, { contexto: 'nombre' });

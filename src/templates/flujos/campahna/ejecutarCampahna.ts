@@ -26,6 +26,7 @@ import {
   MENSAJE_ERROR_CONFIRMACION
 } from '../../../utils/mensajesConfirmacion';
 import { iniciarEjecucionCampana, finalizarEjecucionCampana, trackRespuestaCampana, trackPaso, trackNoEntendido, trackIdentificacion, trackErrorBackend, trackFin, cerrarSesionTraza } from '../../../utils/trazabilidad';
+import { aplicarFiltroCaptura } from '../filtroCaptura';
 
 /**
  * Función core que ejecuta la campaña de confirmación para una fecha específica.
@@ -367,7 +368,12 @@ const confirmarCitaDocumentoFlow = addKeyword(['Confirmar cita', 'Confirmar', 'c
   })
   .addAnswer(MENSAJE_PEDIR_DOCUMENTO_CONFIRMAR,
     { capture: true },
-    async (ctx, { state, gotoFlow, flowDynamic }) => {
+    async (ctx, fns) => {
+      const { state, gotoFlow, flowDynamic, endFlow } = fns;
+      const filtro = await aplicarFiltroCaptura(ctx, { flowDynamic, endFlow }, {
+        paso: 'campana.confirmar_documento', reintentar: () => gotoFlow(confirmarCitaDocumentoFlow),
+      });
+      if (filtro) return filtro.salida;
       const numeroDoc = sanitizeString(ctx.body, 20);
       if (!isValidDocumentNumber(numeroDoc)) {
         trackNoEntendido(ctx.from, 'campana.confirmar_documento');
@@ -394,7 +400,12 @@ const confirmarCitaDocumentoCampahna48Flow = addKeyword(['Confirmo'])
   })
   .addAnswer(MENSAJE_PEDIR_DOCUMENTO_CONFIRMAR,
     { capture: true },
-    async (ctx, { state, gotoFlow, flowDynamic }) => {
+    async (ctx, fns) => {
+      const { state, gotoFlow, flowDynamic, endFlow } = fns;
+      const filtro = await aplicarFiltroCaptura(ctx, { flowDynamic, endFlow }, {
+        paso: 'campana.confirmar_documento', reintentar: () => gotoFlow(confirmarCitaDocumentoCampahna48Flow),
+      });
+      if (filtro) return filtro.salida;
       const numeroDoc = sanitizeString(ctx.body, 20);
       if (!isValidDocumentNumber(numeroDoc)) {
         trackNoEntendido(ctx.from, 'campana.confirmar_documento');

@@ -45,11 +45,12 @@ import {
 import type { CitaRecordatorio, ResultadoCitasRecordatorio, ResultadoRespuestaRecordatorio } from '../../../services/apiService';
 import { sanitizeString, isValidDocumentNumber } from '../../../utils/sanitize';
 import { closeUserSession, renovarActividadSesion } from '../../../utils/proactiveSessionManager';
+import { isWorkingHours } from '../../../utils/verificarHorario';
+import { numeroAsesorHumano } from '../../../utils/mensajesMovimientoCita';
 import { MENSAJE_CONVERSACION_TERMINADA } from '../../../utils/estadoConversacion';
 import { programarTickCascadaRetrasado } from '../../../utils/listaEsperaCascadaPoller';
 import {
     MAX_REINTENTOS_DOCUMENTO,
-    MENSAJE_DOCUMENTO_FINAL,
     MENSAJE_DOCUMENTO_REINTENTO,
     MENSAJE_ERROR_RESPUESTA_RECORDATORIO,
 } from '../../../utils/mensajesConfirmacion';
@@ -74,6 +75,7 @@ import {
 } from '../../../utils/trazabilidad';
 import type { ResultadoRespuestaCampana } from '../../../utils/trazabilidad';
 import type { PasoId } from '../../../constants/pasosTrazabilidad';
+import { parsearPayloadRecordatorio } from '../../../utils/recordatorioPayload';
 import { step1CencelarCita } from '../cancelarCita/step1CancelarCita';
 import { welcomeFlow } from '../../welcomeFlow';
 
@@ -138,6 +140,7 @@ const CADUCIDAD_TURNO_MS = 2 * 60 * 1000;
 /** Claves propias de estos flujos. Se borran en todo final. */
 export const CLAVES_RECORDATORIO: readonly string[] = [
     'recordatorioBoton',
+    'recordatorioViaPayload',
     'numeroDocRecordatorio',
     'recordatorioCitas',
     'recordatorioCita',
@@ -203,6 +206,9 @@ function configDe(state: any): ConfigBoton | undefined {
 async function registrarRespuesta(ctx: any, cfg: ConfigBoton, extra: Record<string, unknown>): Promise<void> {
     await registrarActividadBot('recordatorio_respuesta', ctx.from, {
         accion: cfg.accion,
+        // Solo es 'payload' si la respuesta se resolvió sin documento (ver crearFlujoEntrada); un payload
+        // presente en un botón que igual pide documento (cancelar) cuenta como 'documento'.
+        via: ctx?.__viaPayload === true ? 'payload' : 'documento',
         ...(cfg.boton !== 'confirmo' ? { origen_boton: cfg.boton } : {}),
         ...extra,
     });
@@ -292,8 +298,15 @@ async function sinCita(ctx: any, fns: Fns, cfg: ConfigBoton, consulta: Resultado
             });
             return gotoFlow(FLUJOS_ENTRADA[cfg.boton]);
         }
+        const enHorario = isWorkingHours();
+        trackFin(ctx.from, 'recordatorio', enHorario ? 'derivado_agente' : 'fuera_horario', {
+            paso: cfg.paso, metadata: { motivo: 'documento_no_encontrado' },
+        });
+        await registrarRespuesta(ctx, cfg, { resultado: enHorario ? 'derivado_agente' : 'fuera_horario', motivo: 'documento_no_encontrado' });
         await terminar(ctx, state);
-        await flowDynamic(MENSAJE_DOCUMENTO_FINAL);
+        await flowDynamic(enHorario
+            ? `No pudimos identificar la cita. Un asesor puede ayudarte directamente:\n👉 https://wa.me/${numeroAsesorHumano()}?text=Hola,%20deseo%20hablar%20con%20una%20asistente.`
+            : 'En este momento nuestros asesores no están disponibles. Nuestro horario es de lunes a viernes de 7 am a 7 pm y sábados de 7 am a 1 pm. Escríbenos en ese horario y con gusto te ayudaremos.');
         return endFlow();
     }
     await registrarRespuesta(ctx, cfg, { resultado: 'error_o_sin_cita', causa });
@@ -306,7 +319,8 @@ async function sinCita(ctx: any, fns: Fns, cfg: ConfigBoton, consulta: Resultado
 async function ejecutarRespuesta(ctx: any, fns: Fns, cfg: ConfigBoton, cita: CitaRecordatorio): Promise<any> {
     const { state, flowDynamic, endFlow } = fns;
     const numeroDoc = estado(state).numeroDocRecordatorio;
-    if (!numeroDoc || !cita?.cita_id) {
+    const viaPayload = Boolean(estado(state).recordatorioViaPayload) && cfg.accion === 'confirma';
+    if ((!numeroDoc && !viaPayload) || !cita?.cita_id) {
         await terminar(ctx, state);
         await flowDynamic(M.MENSAJE_SIN_IDENTIFICAR);
         return endFlow();
@@ -314,13 +328,27 @@ async function ejecutarRespuesta(ctx: any, fns: Fns, cfg: ConfigBoton, cita: Cit
 
     let resultado: ResultadoRespuestaRecordatorio;
     try {
-        resultado = await responderRecordatorio(ctx.from, numeroDoc, cfg.accion, cita.cita_id);
+        resultado = viaPayload
+            ? await responderRecordatorio(ctx.from, '', cfg.accion, cita.cita_id, 'payload')
+            : await responderRecordatorio(ctx.from, numeroDoc ?? '', cfg.accion, cita.cita_id);
     } catch (error) {
         console.error('Error respondiendo recordatorio:', (error as any)?.message ?? error);
         resultado = { ok: false, causa: 'ERROR' };
     }
 
     try {
+        if (viaPayload && resultado.ok === false) {
+            // Payload rechazado o backend temporalmente no disponible: vuelve al camino ya probado
+            // con documento. Nunca se usa el payload para cancelar sin confirmación explícita.
+            await flowDynamic(MENSAJE_DOCUMENTO_REINTENTO);
+            await esperarRespuesta(state, {
+                recordatorioViaPayload: false,
+                recordatorioReingreso: true,
+                recordatorioBoton: cfg.boton,
+                recordatorioIntentosDoc: 0,
+            });
+            return fns.gotoFlow(FLUJOS_ENTRADA[cfg.boton]);
+        }
         if (resultado.ok === true) {
             const data = resultado.data;
             const datosCita = M.citaParaMensaje(cita, data);
@@ -466,7 +494,8 @@ function crearFlujoAccion(cfg: ConfigBoton) {
 /** Paso 1: el botón del recordatorio y la captura del documento. */
 function crearFlujoEntrada(cfg: ConfigBoton, keyword: string) {
     return addKeyword(keyword, OPCIONES_REGEX)
-        .addAction(async (ctx, { state, endFlow }) => {
+        .addAction(async (ctx, fns) => {
+            const { state, endFlow, flowDynamic } = fns;
             if (estado(state).recordatorioReingreso) {
                 // Reintento del documento (gotoFlow a este mismo flujo): se conservan los contadores. La
                 // actividad ya la renovó la captura que hizo el gotoFlow.
@@ -484,6 +513,17 @@ function crearFlujoEntrada(cfg: ConfigBoton, keyword: string) {
             // Trazabilidad: respuesta esperada (tabla 11.2), una sola vez (no en el reintento del documento).
             // campana null: el bot no sabe a qué recordatorio responde.
             trackRespuestaCampana(ctx.from, null, cfg.resultadoCampana, cfg.paso);
+            const payload = parsearPayloadRecordatorio(ctx?.payload);
+            const accionEsperada = cfg.accion === 'confirma' ? 'C' : cfg.boton === 'necesito_cancelar' ? 'X' : 'N';
+            if (payload && payload.accion === accionEsperada && cfg.accion === 'confirma') {
+                tomarTurno(state);
+                ctx.__viaPayload = true;
+                await state.update({ recordatorioViaPayload: true, recordatorioCita: { cita_id: payload.citaId } });
+                return ejecutarRespuesta(ctx, fns as Fns, cfg, { cita_id: payload.citaId } as CitaRecordatorio);
+            }
+            if (payload && payload.accion !== accionEsperada) {
+                console.warn('[recordatorios] El payload no coincide con el botón; se solicitará documento.');
+            }
         })
         .addAnswer(cfg.promptDocumento, { capture: true }, async (ctx, fns) => {
             const filtro = await filtrarEntrada(ctx, fns);

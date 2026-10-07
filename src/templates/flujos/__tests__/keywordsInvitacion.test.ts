@@ -113,6 +113,7 @@ describe('palabras globales (BOTONES_ANCLADOS)', () => {
         expect(esBotonDeOtraPlantilla('Sí, deseo ingresar')).toBe(true);
         expect(esBotonDeOtraPlantilla('No, gracias')).toBe(true);
         expect(esBotonDeOtraPlantilla('Hablar con agente')).toBe(true);
+        expect(esBotonDeOtraPlantilla('Chatear con agente')).toBe(true);
         expect(esBotonDeOtraPlantilla('no, gracias')).toBe(false);
         expect(esBotonDeOtraPlantilla('No, gracias por todo')).toBe(false);
         expect(esBotonDeOtraPlantilla('hablar con agente ya')).toBe(false);

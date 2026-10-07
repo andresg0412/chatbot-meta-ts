@@ -25,6 +25,15 @@ export function normalizarTelefonoWhatsApp(raw: unknown): string | null {
     return digitos;
 }
 
+/** Destino seguro para plantillas: celular colombiano o teléfono extranjero con indicativo. */
+export function destinoPlantillaWhatsApp(raw: unknown): string | null {
+    const digitos = soloDigitos(raw);
+    if (/^3\d{9}$/.test(digitos)) return `57${digitos}`;
+    if (/^573\d{9}$/.test(digitos)) return digitos;
+    if (digitos.length >= 11 && digitos.length <= 15 && !digitos.startsWith('57')) return digitos;
+    return null;
+}
+
 /**
  * Clave de comparación entre formatos (10 dígitos vs `57...`): los últimos 10 dígitos.
  * `null` si no hay al menos 10 dígitos.

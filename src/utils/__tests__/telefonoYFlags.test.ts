@@ -1,5 +1,5 @@
 // Runbook B4/B7/B9: normalización de teléfono, lista piloto e interruptores.
-import { normalizarTelefonoWhatsApp, claveComparacionTelefono, enmascararTelefono } from '../telefono';
+import { normalizarTelefonoWhatsApp, destinoPlantillaWhatsApp, claveComparacionTelefono, enmascararTelefono } from '../telefono';
 import {
     esTelefonoPiloto,
     hayListaPiloto,
@@ -8,6 +8,7 @@ import {
     isCrisisProtocolEnabled,
     isCascadaEnabled,
     isRecordatoriosBotonesEnabled,
+    isRecordatoriosPayloadEnabled,
 } from '../listaEsperaFlags';
 
 const ENV_ORIGINAL = { ...process.env };
@@ -29,6 +30,19 @@ describe('normalizarTelefonoWhatsApp', () => {
 
     it.each([[null], [undefined], [''], ['   '], ['12345'], ['6071234']])('%p → null (no contactable)', (entrada) => {
         expect(normalizarTelefonoWhatsApp(entrada)).toBeNull();
+    });
+});
+
+describe('destinoPlantillaWhatsApp', () => {
+    it.each([
+        ['3214593929', '573214593929'],
+        ['573214593929', '573214593929'],
+        ['6764341329', null],
+        ['123405923', null],
+        ['5712345678901', null],
+        ['14155550123', '14155550123'],
+    ])('%s → %p', (entrada, esperado) => {
+        expect(destinoPlantillaWhatsApp(entrada)).toBe(esperado);
     });
 });
 
@@ -73,6 +87,7 @@ describe('interruptores: default apagado, solo "true" enciende', () => {
         ['CRISIS_PROTOCOL_ENABLED', isCrisisProtocolEnabled],
         ['LISTA_ESPERA_CASCADA_ENABLED', isCascadaEnabled],
         ['RECORDATORIOS_BOTONES_ENABLED', isRecordatoriosBotonesEnabled],
+        ['RECORDATORIOS_PAYLOAD_ENABLED', isRecordatoriosPayloadEnabled],
     ];
     it.each(casos)('%s', (variable, fn) => {
         delete process.env[variable];

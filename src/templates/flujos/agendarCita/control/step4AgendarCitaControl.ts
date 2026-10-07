@@ -1,6 +1,7 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import { step5AgendarCitaControl } from './step5AgendarCitaControl';
 import { checkSessionTimeout } from '../../../../utils/proactiveSessionTimeout';
+import { aplicarFiltroCaptura } from '../../filtroCaptura';
 import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion } from '../../../../utils/trazabilidad';
 
 const step4AgendarCitaControl = addKeyword(EVENTS.ACTION)
@@ -19,7 +20,12 @@ const step4AgendarCitaControl = addKeyword(EVENTS.ACTION)
                 { body: 'NeuroPsicologia' },
             ],
         },
-        async (ctx, { state, gotoFlow }) => {
+        async (ctx, fns) => {
+            const { state, gotoFlow, flowDynamic, endFlow } = fns;
+            const filtro = await aplicarFiltroCaptura(ctx, { flowDynamic, endFlow }, {
+                paso: 'agendar.ct04_especialidad', reintentar: () => gotoFlow(step4AgendarCitaControl),
+            });
+            if (filtro) return filtro.salida;
             trackPaso(ctx.from, 'agendar.ct04_especialidad', 'ok');
             await state.update({ especialidadAgendarCita: ctx.body });
             return gotoFlow(step5AgendarCitaControl);

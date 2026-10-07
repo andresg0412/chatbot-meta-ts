@@ -41,6 +41,7 @@ function regexDesdeLiteral(literal: string): RegExp {
 
 /** Botones de plantilla con keyword anclada (lista de espera y recordatorios). */
 const BOTONES_ANCLADOS: RegExp[] = [
+    '/^\\s*chatear con agente\\s*$/i',
     KW_CONFIRMO_ASISTENCIA,
     KW_NECESITO_CANCELAR,
     KW_NO_PODRE_ASISTIR,

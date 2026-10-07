@@ -3,6 +3,7 @@ import { isValidDocumentNumber } from '../../../utils/sanitize';
 import { limpiarNumeroDocumento } from '../../../utils/datosPacienteNuevo';
 import { step16AgendarCita } from './step16AgendarCita';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
+import { aplicarFiltroCaptura } from '../filtroCaptura';
 import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion } from '../../../utils/trazabilidad';
 
 const step15AgendarCita = addKeyword(EVENTS.ACTION)
@@ -14,7 +15,12 @@ const step15AgendarCita = addKeyword(EVENTS.ACTION)
     })
     .addAnswer('Ahora, por favor digita tu número de documento 🔢:',
         { capture: true },
-        async (ctx, { state, gotoFlow, flowDynamic }) => {
+        async (ctx, fns) => {
+            const { state, gotoFlow, flowDynamic, endFlow } = fns;
+            const filtro = await aplicarFiltroCaptura(ctx, { flowDynamic, endFlow }, {
+                paso: 'agendar.s15_documento', reintentar: () => gotoFlow(step15AgendarCita),
+            });
+            if (filtro) return filtro.salida;
             // Sin espacios, puntos ni guiones ("1.234.567" -> "1234567"); antes se rechazaba.
             const numeroDocumentoPaciente = limpiarNumeroDocumento(ctx.body);
             if (!isValidDocumentNumber(numeroDocumentoPaciente)) {
