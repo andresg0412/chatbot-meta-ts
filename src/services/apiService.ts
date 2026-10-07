@@ -4,10 +4,11 @@ import { IPaciente } from '../interfaces/IPacienteIn';
 import { IReagendarCita, IAgendaResponse, ICrearCita } from '../interfaces/IReagendarCita';
 import { AgendaPendienteResponse, AgendaProgramadaResponse } from '../interfaces/IReagendarCita';
 import { AccionCascada } from '../interfaces/ICascadaListaEspera';
-import { isRecordatoriosBotonesEnabled as flagRecordatoriosBotones, esTelefonoPiloto } from '../utils/listaEsperaFlags';
+import { isRecordatoriosBotonesEnabled as flagRecordatoriosBotones, isRecordatoriosPayloadEnabled, esTelefonoPiloto } from '../utils/listaEsperaFlags';
 import { formatearFechaLarga, formatearHoraHHMM } from '../utils/fechaHora';
-import { enmascararTelefono, normalizarTelefonoWhatsApp } from '../utils/telefono';
+import { destinoPlantillaWhatsApp, enmascararTelefono, normalizarTelefonoWhatsApp } from '../utils/telefono';
 import { construirPayloadInvitacion } from '../utils/invitacionPayload';
+import { construirPayloadRecordatorio } from '../utils/recordatorioPayload';
 import { limpiarParametroPlantilla } from '../utils/parametroPlantilla';
 import { fechaBogotaHoy } from '../utils/fechaHora';
 import {
@@ -42,6 +43,22 @@ function isRecordatoriosBotonesEnabled(): boolean {
  */
 function usarVarianteConBotones(telefonoPaciente: unknown): boolean {
     return isRecordatoriosBotonesEnabled() && esTelefonoPiloto(telefonoPaciente);
+}
+
+/**
+ * Orden documentado por etiqueta de plantilla: 0 confirmar, 1 necesito cancelar, 2 no podré asistir.
+ * Verificar estos índices en Meta Business Manager antes de activar RECORDATORIOS_PAYLOAD_ENABLED.
+ */
+function componentesPayloadRecordatorio(citaId: string | undefined): any[] {
+    if (!isRecordatoriosPayloadEnabled() || !citaId) return [];
+    try {
+        return (['C', 'X', 'N'] as const).map((accion, indice) => ({
+            type: 'button', sub_type: 'quick_reply', index: String(indice),
+            parameters: [{ type: 'payload', payload: construirPayloadRecordatorio(citaId, accion) }],
+        }));
+    } catch {
+        return [];
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -398,6 +415,11 @@ export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse 
     let plantillaUsada: string | undefined;
     const trazar = (resultado: ResultadoEnvioMeta) =>
         trazarEnvioPlantilla(cita, 'execute', plantillaUsada, campanaEjecucionId, resultado);
+    const destino = destinoPlantillaWhatsApp(cita.telefono_paciente);
+    if (!destino) {
+        console.warn(`[Meta] Plantilla omitida por teléfono inválido (${enmascararTelefono(cita.telefono_paciente)})`);
+        return trazar({ exito: false, errorCode: 'telefono_invalido', errorTitulo: 'teléfono no contactable' });
+    }
     try {
         // Formatear la fecha, aparece en formato YYYY-MM-ddTHH:mm:ss.SSSZ convertir en formato '31 de julio de 2025'
         const fechaCita = new Date(cita.fecha_cita);
@@ -414,9 +436,9 @@ export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse 
         plantillaUsada = nombrePlantilla;
         console.log('Enviando plantilla URL:', url);
         console.log('Administradora:', administradora);
-        const body = {
+        const body: any = {
             "messaging_product": "whatsapp",
-            "to": `${cita.telefono_paciente}`,
+            "to": destino,
             "type": "template",
             "template": {
                 "name": `${nombrePlantilla}`,
@@ -439,6 +461,7 @@ export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse 
                 ]
             }
         };
+        if (usarBotones) body.template.components.push(...componentesPayloadRecordatorio(cita.cita_id));
         const response = await axios.post(url, body, {
             headers: {
                 'Authorization': `Bearer ${process.env.jwtToken}`,
@@ -473,6 +496,11 @@ export async function enviarPlantillaRecordatorio24h(cita: AgendaProgramadaRespo
     let plantillaUsada: string | undefined;
     const trazar = (resultado: ResultadoEnvioMeta) =>
         trazarEnvioPlantilla(cita, 'execute', plantillaUsada, campanaEjecucionId, resultado);
+    const destino = destinoPlantillaWhatsApp(cita.telefono_paciente);
+    if (!destino) {
+        console.warn(`[Meta] Plantilla omitida por teléfono inválido (${enmascararTelefono(cita.telefono_paciente)})`);
+        return trazar({ exito: false, errorCode: 'telefono_invalido', errorTitulo: 'teléfono no contactable' });
+    }
     try {
         // Formatear la fecha, aparece en formato YYYY-MM-ddTHH:mm:ss.SSSZ convertir en formato '31 de julio de 2025'
         const fechaCita = new Date(cita.fecha_cita);
@@ -487,9 +515,9 @@ export async function enviarPlantillaRecordatorio24h(cita: AgendaProgramadaRespo
         const usarBotones = usarVarianteConBotones(cita.telefono_paciente);
         const nombrePlantilla = usarBotones ? process.env.NOMBRE_PLANTILLA_META_CONFIRMADO_24H_BOTONES : process.env.NOMBRE_PLANTILLA_META_CONFIRMADO_24H;
         plantillaUsada = nombrePlantilla;
-        const body = {
+        const body: any = {
             "messaging_product": "whatsapp",
-            "to": `${cita.telefono_paciente}`,
+            "to": destino,
             "type": "template",
             "template": {
                 "name": `${nombrePlantilla}`,
@@ -508,6 +536,7 @@ export async function enviarPlantillaRecordatorio24h(cita: AgendaProgramadaRespo
                 ]
             }
         };
+        if (usarBotones) body.template.components.push(...componentesPayloadRecordatorio(cita.cita_id));
         const response = await axios.post(url, body, {
             headers: {
                 'Authorization': `Bearer ${process.env.jwtToken}`,
@@ -542,6 +571,11 @@ export async function enviarPlantillaDiaria(cita: AgendaPendienteResponse, campa
     let plantillaUsada: string | undefined;
     const trazar = (resultado: ResultadoEnvioMeta) =>
         trazarEnvioPlantilla(cita, 'daily', plantillaUsada, campanaEjecucionId, resultado);
+    const destino = destinoPlantillaWhatsApp(cita.telefono_paciente);
+    if (!destino) {
+        console.warn(`[Meta] Plantilla omitida por teléfono inválido (${enmascararTelefono(cita.telefono_paciente)})`);
+        return trazar({ exito: false, errorCode: 'telefono_invalido', errorTitulo: 'teléfono no contactable' });
+    }
     try {
         // Formatear la fecha, aparece en formato YYYY-MM-ddTHH:mm:ss.SSSZ convertir en formato '31 de julio de 2025'
         const fechaCita = new Date(cita.fecha_cita);
@@ -556,9 +590,9 @@ export async function enviarPlantillaDiaria(cita: AgendaPendienteResponse, campa
         const nombrePlantilla = usarBotones ? process.env.NOMBRE_PLANTILLA_META_DIARIA_BOTONES : process.env.NOMBRE_PLANTILLA_META_DIARIA;
         plantillaUsada = nombrePlantilla;
         console.log('Enviando plantilla URL:', url);
-        const body = {
+        const body: any = {
             "messaging_product": "whatsapp",
-            "to": `${cita.telefono_paciente}`,
+            "to": destino,
             "type": "template",
             "template": {
                 "name": `${nombrePlantilla}`,
@@ -578,6 +612,7 @@ export async function enviarPlantillaDiaria(cita: AgendaPendienteResponse, campa
                 ]
             }
         };
+        if (usarBotones) body.template.components.push(...componentesPayloadRecordatorio(cita.cita_id));
         const response = await axios.post(url, body, {
             headers: {
                 'Authorization': `Bearer ${process.env.jwtToken}`,
@@ -612,6 +647,11 @@ export async function enviarPlantillaRecordatorio(cita: AgendaPendienteResponse,
     let plantillaUsada: string | undefined;
     const trazar = (resultado: ResultadoEnvioMeta) =>
         trazarEnvioPlantilla(cita, 'reminder', plantillaUsada, campanaEjecucionId, resultado);
+    const destino = destinoPlantillaWhatsApp(cita.telefono_paciente);
+    if (!destino) {
+        console.warn(`[Meta] Plantilla omitida por teléfono inválido (${enmascararTelefono(cita.telefono_paciente)})`);
+        return trazar({ exito: false, errorCode: 'telefono_invalido', errorTitulo: 'teléfono no contactable' });
+    }
     try {
         // Formatear la fecha, aparece en formato YYYY-MM-ddTHH:mm:ss.SSSZ convertir en formato '31 de julio de 2025'
         const fechaCita = new Date(cita.fecha_cita);
@@ -628,9 +668,9 @@ export async function enviarPlantillaRecordatorio(cita: AgendaPendienteResponse,
         plantillaUsada = nombrePlantilla;
         console.log('Enviando plantilla URL:', url);
         console.log('Administradora:', administradora);
-        const body = {
+        const body: any = {
             "messaging_product": "whatsapp",
-            "to": `${cita.telefono_paciente}`,
+            "to": destino,
             "type": "template",
             "template": {
                 "name": `${nombrePlantilla}`,
@@ -653,6 +693,7 @@ export async function enviarPlantillaRecordatorio(cita: AgendaPendienteResponse,
                 ]
             }
         };
+        if (usarBotones) body.template.components.push(...componentesPayloadRecordatorio(cita.cita_id));
         const response = await axios.post(url, body, {
             headers: {
                 'Authorization': `Bearer ${process.env.jwtToken}`,
@@ -860,6 +901,11 @@ export async function enviarPlantillaRecuperar(cita: AgendaPendienteResponse, ca
     let plantillaUsada: string | undefined;
     const trazar = (resultado: ResultadoEnvioMeta) =>
         trazarEnvioPlantilla(cita, 'recuperacion', plantillaUsada, campanaEjecucionId, resultado);
+    const destino = destinoPlantillaWhatsApp(cita.telefono_paciente);
+    if (!destino) {
+        console.warn(`[Meta] Plantilla omitida por teléfono inválido (${enmascararTelefono(cita.telefono_paciente)})`);
+        return trazar({ exito: false, errorCode: 'telefono_invalido', errorTitulo: 'teléfono no contactable' });
+    }
     try {
         // Formatear la fecha, aparece en formato YYYY-MM-ddTHH:mm:ss.SSSZ convertir en formato '31 de julio de 2025'
 
@@ -875,7 +921,7 @@ export async function enviarPlantillaRecuperar(cita: AgendaPendienteResponse, ca
         const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
         const body = {
             "messaging_product": "whatsapp",
-            "to": `${cita.telefono_paciente}`,
+            "to": destino,
             "type": "template",
             "template": {
                 "name": `${process.env.NOMBRE_PLANTILLA_META_CANCELADOS}`,
@@ -985,6 +1031,11 @@ export async function enviarPlantillaUsuariosConAsistencia(cita: AgendaPendiente
     let plantillaUsada: string | undefined;
     const trazar = (resultado: ResultadoEnvioMeta) =>
         trazarEnvioPlantilla(cita, 'conasistencia', plantillaUsada, campanaEjecucionId, resultado);
+    const destino = destinoPlantillaWhatsApp(cita.telefono_paciente);
+    if (!destino) {
+        console.warn(`[Meta] Plantilla omitida por teléfono inválido (${enmascararTelefono(cita.telefono_paciente)})`);
+        return trazar({ exito: false, errorCode: 'telefono_invalido', errorTitulo: 'teléfono no contactable' });
+    }
     try {
         // Formatear la fecha, aparece en formato YYYY-MM-ddTHH:mm:ss.SSSZ convertir en formato '31 de julio de 2025'
 
@@ -1000,7 +1051,7 @@ export async function enviarPlantillaUsuariosConAsistencia(cita: AgendaPendiente
         const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
         const body = {
             "messaging_product": "whatsapp",
-            "to": `${cita.telefono_paciente}`,
+            "to": destino,
             "type": "template",
             "template": {
                 "name": `${process.env.NOMBRE_PLANTILLA_META_ASISTIDOS}`,
@@ -1210,6 +1261,36 @@ export async function enviarPlantillaOfertaCupo(
         // mensaje con nombre y teléfono del paciente); solo estado HTTP y error de Meta.
         console.error('Error enviando plantilla de oferta de cupo:', resumirErrorMeta(error));
         return trazar(resultadoEnvioDesdeError(error));
+    }
+}
+
+/** Envía una plantilla interna de utilidad al asesor, con parámetros dinámicos saneados. */
+export async function enviarPlantillaAvisoAsesor(
+    telefono: string,
+    nombre: string,
+    variables: string[],
+): Promise<ResultadoEnvioMeta> {
+    try {
+        const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
+        const response = await axios.post(url, {
+            messaging_product: 'whatsapp',
+            to: telefono,
+            type: 'template',
+            template: {
+                name: nombre,
+                language: { code: 'es_CO' },
+                components: [{
+                    type: 'body',
+                    parameters: variables.map((valor) => ({ type: 'text', text: limpiarParametroPlantilla(valor) })),
+                }],
+            },
+        }, {
+            headers: { Authorization: `Bearer ${process.env.jwtToken}`, 'Content-Type': 'application/json' },
+            timeout: 15000,
+        });
+        return resultadoEnvioDesdeRespuesta(response.data);
+    } catch (error) {
+        return resultadoEnvioDesdeError(error);
     }
 }
 
@@ -1459,7 +1540,8 @@ export type FalloRespuestaRecordatorio =
     | FalloConfirmacion
     | { ok: false; causa: 'CITA_AMBIGUA'; citas: CitaRecordatorio[] }
     | { ok: false; causa: 'CITA_NO_VALIDA'; motivo: 'OTRO_PACIENTE' | 'NO_ACTIVA' | 'PASADA' | null }
-    | { ok: false; causa: 'RESPUESTA_EN_PROCESO' };
+    | { ok: false; causa: 'RESPUESTA_EN_PROCESO' }
+    | { ok: false; causa: 'PAYLOAD_NO_VALIDO' };
 
 export type ResultadoRespuestaRecordatorio =
     | { ok: true; data: RespuestaRecordatorioData }
@@ -1473,12 +1555,17 @@ export async function responderRecordatorio(
     celular: string,
     documento: string,
     respuesta: 'confirma' | 'no_asistira',
-    citaId?: string
+    citaId?: string,
+    via: 'payload' | 'documento' = 'documento'
 ): Promise<ResultadoRespuestaRecordatorio> {
     try {
         const url = `${API_BACKEND_URL}/chatbot/recordatorios/responder`;
-        const body: Record<string, string> = { celular, documento, respuesta };
+        const body: Record<string, string> = { celular, respuesta };
+        if (documento) body.documento = documento;
         if (citaId) body.cita_id = citaId;
+        // Keep the legacy document request body byte-for-byte compatible. The backend infers
+        // `documento` when `via` is omitted; only the new payload path needs the explicit marker.
+        if (via === 'payload') body.via = via;
         const response = await axios.post(url, body, { timeout: TIMEOUT_BACKEND_RECORDATORIOS_MS });
         const data = response?.data?.data;
         if (!data || typeof data !== 'object') {
@@ -1504,6 +1591,8 @@ export async function responderRecordatorio(
                 causa: 'CITA_NO_VALIDA',
                 motivo: motivo === 'OTRO_PACIENTE' || motivo === 'NO_ACTIVA' || motivo === 'PASADA' ? motivo : null,
             };
+        } else if (status === 403 && cuerpo?.cause === 'PAYLOAD_NO_VALIDO') {
+            fallo = { ok: false, causa: 'PAYLOAD_NO_VALIDO' };
         } else {
             // 404 (CITA_NOT_FOUND, CITA_CANCELADA, CITA_REPROGRAMADA, CITA_PASADA), 502 GLOBHO_ERROR (al
             // confirmar), 400 → DOCUMENTO_INVALIDO; 500 (incluye el fallo de Globho al cancelar), red o
@@ -1719,7 +1808,7 @@ export interface InvitacionPorDocumento {
 export interface ResponderInvitacionRequest {
     invitacion_id: string;
     celular: string;
-    documento: string;
+    documento?: string;
     respuesta: 'acepta' | 'rechaza';
     via: 'payload' | 'documento';
     consentimiento_texto?: string;

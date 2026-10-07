@@ -2,6 +2,7 @@ import { addKeyword, EVENTS } from '@builderbot/bot';
 import { stepConfirmaReprogramar } from './stepConfirmaReprogramar';
 import { noConfirmaReprogramar } from './noConfirmaReprogramar';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
+import { aplicarFiltroCaptura } from '../filtroCaptura';
 import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin } from '../../../utils/trazabilidad';
 
 const step7Reprogramar = addKeyword(EVENTS.ACTION)
@@ -21,6 +22,10 @@ const step7Reprogramar = addKeyword(EVENTS.ACTION)
             ],
         },
         async (ctx, ctxFn) => {
+            const filtro = await aplicarFiltroCaptura(ctx, ctxFn, {
+                paso: 'reprogramar.s07_confirmacion', reintentar: () => ctxFn.gotoFlow(step7Reprogramar),
+            });
+            if (filtro) return filtro.salida;
             if (ctx.body === 'Si') {
                 trackPaso(ctx.from, 'reprogramar.s07_confirmacion', 'ok');
                 return ctxFn.gotoFlow(stepConfirmaReprogramar)

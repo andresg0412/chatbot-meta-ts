@@ -2,6 +2,7 @@ import { addKeyword, EVENTS } from '@builderbot/bot';
 import { step19AgendarCita } from './step19AgendarCita';
 import { volverMenuPrincipal } from '../common';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
+import { aplicarFiltroCaptura } from '../filtroCaptura';
 import { MENSAJE_CONVERSACION_TERMINADA } from '../../../utils/estadoConversacion';
 import { registrarActividadBot } from '../../../services/apiService';
 import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion } from '../../../utils/trazabilidad';
@@ -24,6 +25,10 @@ const step18AgendarCita2 = addKeyword(EVENTS.ACTION)
             ],
         },
         async (ctx, ctxFn) => {
+            const filtro = await aplicarFiltroCaptura(ctx, ctxFn, {
+                paso: 'agendar.s18_confirmacion', reintentar: () => ctxFn.gotoFlow(step18AgendarCita2),
+            });
+            if (filtro) return filtro.salida;
             if (ctx.body === 'Si') {
                 trackPaso(ctx.from, 'agendar.s18_confirmacion', 'ok');
                 await registrarActividadBot('chat_flujo_agendar', ctx.from, {

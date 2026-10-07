@@ -3,6 +3,7 @@ import { menuFlow } from '../../menuFlow';
 import { datosinicialesComunes4 } from '../common';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 import { closeUserSession } from '../../../utils/proactiveSessionManager';
+import { aplicarFiltroCaptura } from '../filtroCaptura';
 import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion, flujoDesdeSeleccionMenu } from '../../../utils/trazabilidad';
 
 const stepOpcionReprogramar = addKeyword(EVENTS.ACTION)
@@ -19,7 +20,12 @@ const stepOpcionReprogramar = addKeyword(EVENTS.ACTION)
                 { body: 'Salir' },
             ],
         },
-        async (ctx, { provider, state, gotoFlow, flowDynamic, endFlow }) => {
+        async (ctx, fns) => {
+            const { provider, state, gotoFlow, flowDynamic, endFlow } = fns;
+            const filtro = await aplicarFiltroCaptura(ctx, { flowDynamic, endFlow }, {
+                paso: 'cancelar.opcion_reprogramar', reintentar: () => gotoFlow(stepOpcionReprogramar),
+            });
+            if (filtro) return filtro.salida;
             if (ctx.body === 'Reprogramar cita') {
                 trackPaso(ctx.from, 'cancelar.opcion_reprogramar', 'ok', { metadata: { opcion: 'reprogramar' } });
                 // A partir de aquí el flujo en curso es reprogramar (los pasos comunes lo heredan de la sesión).

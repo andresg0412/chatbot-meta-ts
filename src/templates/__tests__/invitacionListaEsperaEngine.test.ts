@@ -145,10 +145,10 @@ beforeEach(() => {
 describe('con payload', () => {
     it('"No, gracias" → rechaza directo, sin pedir documento (7.4)', async () => {
         const from = bot.nuevoNumero();
-        const salida = textos(await bot.enviar(from, [{ body: NO, payload: `LEINV:${ID}:R` }, '1234567890']));
+        const salida = textos(await bot.enviar(from, [{ body: NO, payload: `LEINV:${ID}:R` }]));
         expect(mockedApi.responderInvitacion).toHaveBeenCalledTimes(1);
-        expect(mockedApi.responderInvitacion).toHaveBeenCalledWith({ invitacion_id: ID, celular: from, respuesta: 'rechaza', via: 'payload', documento: '1234567890' });
-        expect(salida[0]).toBe(M.MENSAJE_PEDIR_DOCUMENTO_INVITACION);
+        expect(mockedApi.responderInvitacion).toHaveBeenCalledWith({ invitacion_id: ID, celular: from, respuesta: 'rechaza', via: 'payload' });
+        expect(salida).toHaveLength(1);
         expect(salida).toContain('Entendido, no te inscribiremos en la lista de espera. Tu cita del 20 de octubre de 2026 a las 09:00 continúa vigente. 😊');
         expect(mockedApi.consultarInvitacionesPorDocumento).not.toHaveBeenCalled();
         expect(closeUserSession).toHaveBeenCalledWith(from, 'completado');
@@ -193,7 +193,7 @@ describe('con payload', () => {
         expect(mockedApi.responderInvitacion).toHaveBeenCalledTimes(2);
         expect(salida).toContain(M.MENSAJE_DOCUMENTO_NO_COINCIDE_REINTENTO);
         expect(salida.filter((t) => t === M.MENSAJE_PEDIR_DOCUMENTO_INVITACION)).toHaveLength(2);
-        expect(salida[salida.length - 1]).toBe(MENSAJE_DOCUMENTO_FINAL);
+        expect(salida[salida.length - 1]).toMatch(/Ir al chat con asesor/);
     });
 
     it('DOCUMENTO_NO_COINCIDE y luego el documento correcto → aceptada', async () => {
@@ -227,8 +227,8 @@ describe('con payload', () => {
         [fallo(null, 'ERROR'), M.MENSAJE_ERROR_RESPUESTA_INVITACION],
     ])('rechazo con %j → mensaje correcto, sin reintentar', async (resultado, esperado) => {
         mockedApi.responderInvitacion.mockResolvedValueOnce(resultado as any);
-        const salida = textos(await bot.enviar(bot.nuevoNumero(), [{ body: NO, payload: `LEINV:${ID}:R` }, '1234567890']));
-        expect(salida).toEqual([M.MENSAJE_PEDIR_DOCUMENTO_INVITACION, esperado]);
+        const salida = textos(await bot.enviar(bot.nuevoNumero(), [{ body: NO, payload: `LEINV:${ID}:R` }]));
+        expect(salida).toEqual([esperado]);
         expect(mockedApi.responderInvitacion).toHaveBeenCalledTimes(1);
     });
 
@@ -378,9 +378,9 @@ describe('palabras globales durante las capturas', () => {
         expect(mockedApi.responderInvitacion).not.toHaveBeenCalled();
     });
 
-    it('"No, gracias" (otra invitación) durante la captura del documento → pasa al rechazo', async () => {
+    it('"No, gracias" (otra invitación) durante la captura del documento → procesa el rechazo directo', async () => {
         await bot.enviar(bot.nuevoNumero(), [{ body: SI, payload: `LEINV:${ID}:A` }, { body: NO, payload: 'LEINV:OTRA0001:R' }]);
-        expect(mockedApi.responderInvitacion).not.toHaveBeenCalled();
+        expect(mockedApi.responderInvitacion).toHaveBeenCalledWith(expect.objectContaining({ invitacion_id: 'OTRA0001', respuesta: 'rechaza', via: 'payload' }));
     });
 
     it('"Sí, lo tomo" durante la captura del documento → flujo de la oferta de cupo', async () => {

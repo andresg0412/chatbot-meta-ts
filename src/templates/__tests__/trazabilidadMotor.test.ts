@@ -154,7 +154,10 @@ it('"Confirmo asistencia" confirmada → flujo_fin recordatorio cita_confirmada 
     const ok = await conversar(['Confirmo asistencia', '1234567890']);
     const noEncontrada = await conversar(['Confirmo asistencia', '1234567890', '1234567891']);
     expect(eventosDe(ok, 'flujo_fin')[0]).toEqual(expect.objectContaining({ flujo: 'recordatorio', resultado: 'cita_confirmada', agenda_id: 'AG000002', paso: 'recordatorio.confirmo' }));
-    expect(eventosDe(noEncontrada, 'flujo_fin')).toHaveLength(0);
+    expect(eventosDe(noEncontrada, 'flujo_fin')[0]).toEqual(expect.objectContaining({
+        flujo: 'recordatorio', resultado: 'fuera_horario', paso: 'recordatorio.confirmo',
+        metadata: { motivo: 'documento_no_encontrado' },
+    }));
     expect(mockedApi.responderRecordatorio).toHaveBeenCalledTimes(1);
 });
 

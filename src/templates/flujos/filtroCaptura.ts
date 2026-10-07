@@ -32,9 +32,11 @@ interface FuncionesCaptura {
 export async function aplicarFiltroCaptura(
     ctx: { from: string; body?: unknown },
     fns: FuncionesCaptura,
-    opciones: { paso: PasoId; reintentar: () => Promise<any> | any }
+    opciones: { paso: PasoId; reintentar: () => Promise<any> | any; permitirSalir?: boolean; permitirDejarPasar?: boolean }
 ): Promise<{ salida: any } | undefined> {
     const resultado = clasificarEntradaCaptura(ctx.body);
+    if (resultado.tipo === 'salir' && opciones.permitirSalir === false) return undefined;
+    if (resultado.tipo === 'dejar_pasar' && opciones.permitirDejarPasar === false) return undefined;
     if (resultado.tipo === 'seguir') return undefined;
 
     if (resultado.tipo === 'salir') {

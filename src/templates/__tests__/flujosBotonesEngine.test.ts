@@ -158,7 +158,7 @@ describe('Motor real de builderbot con los flujos registrados', () => {
         const salida = await conversar(['Confirmo', '1234567890', '1234567891']);
         expect(mockedApi.confirmarCitaCampahna).toHaveBeenCalledTimes(2);
         expect(salida).toContain(MENSAJE_DOCUMENTO_REINTENTO);
-        expect(salida).toContain(MENSAJE_DOCUMENTO_FINAL);
+        expect(salida[salida.length - 1]).toBe(MENSAJE_DOCUMENTO_FINAL);
         expect(salida.filter((m) => /Para confirmar por favor digita/.test(m))).toHaveLength(2);
         // El reintento vuelve al flujo de 48h (métrica campahna_recordatorio), no al de 24h.
         const eventos = (mockedApi.registrarActividadBot.mock.calls as any[]).map((c) => c[0]);
@@ -195,7 +195,7 @@ describe('Motor real de builderbot con los flujos registrados', () => {
         expect(mockedApi.consultarCitasRecordatorio).toHaveBeenCalledTimes(2);
         expect(mockedApi.responderRecordatorio).not.toHaveBeenCalled();
         expect(salida).toContain(MENSAJE_DOCUMENTO_REINTENTO);
-        expect(salida).toContain(MENSAJE_DOCUMENTO_FINAL);
+        expect(salida[salida.length - 1]).toMatch(/nuestros asesores no están disponibles|escríbenos en ese horario/);
     });
 
     it('"Necesito cancelar" con error técnico → mensaje de error técnico, no "no encontramos"', async () => {

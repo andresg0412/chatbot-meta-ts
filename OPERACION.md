@@ -115,3 +115,9 @@ pm2 delete bot-meta
 pm2 start ecosystem.config.js
 pm2 save
 ```
+
+## Payload de confirmación de recordatorios (Fase 3)
+
+`RECORDATORIOS_PAYLOAD_ENABLED` debe permanecer en `false` hasta revisar en Meta Business Manager el índice real de los botones de las cuatro plantillas de recordatorio y probar primero con un teléfono incluido en `LISTA_ESPERA_TELEFONOS_PILOTO`. Al cambiarlo, reinicia con `pm2 restart bot-meta --update-env`. Las respuestas de cancelar y no asistencia siguen pasando por documento y confirmación explícita.
+
+La plantilla interna de escalamiento queda desactivada mientras `NOMBRE_PLANTILLA_AVISO_ESCALAMIENTO` esté vacío. Después de crearla y aprobarla en Meta (Utility, `es_CO`, cuatro variables), configura el nombre y reinicia el proceso. Si falla el envío de plantilla, el bot intenta una vez el mensaje de texto libre.

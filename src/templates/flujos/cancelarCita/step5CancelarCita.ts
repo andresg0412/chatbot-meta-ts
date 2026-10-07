@@ -2,6 +2,7 @@ import { addKeyword, EVENTS } from '@builderbot/bot';
 import { step6CancelarCita } from './step6CancelarCita';
 import { sanitizeString } from '../../../utils/sanitize';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
+import { aplicarFiltroCaptura } from '../filtroCaptura';
 import { registrarActividadBot } from '../../../services/apiService';
 import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion, flujoDesdeSeleccionMenu } from '../../../utils/trazabilidad';
 
@@ -15,7 +16,12 @@ const step5CancelarCita = addKeyword(EVENTS.ACTION)
     })
     .addAnswer('Por favor, escribe el *NÚMERO* de la cita que deseas cancelar 🗓️: (Ejemplo: 1)',
         { capture: true },
-        async (ctx, { state, flowDynamic, gotoFlow }) => {
+        async (ctx, fns) => {
+            const { state, flowDynamic, gotoFlow, endFlow } = fns;
+            const filtro = await aplicarFiltroCaptura(ctx, { flowDynamic, endFlow }, {
+                paso: 'cancelar.s05_lista_citas', reintentar: () => gotoFlow(step5CancelarCita),
+            });
+            if (filtro) return filtro.salida;
             const esperaSeleccionCita = state.getMyState().esperaSeleccionCita;
             if (!esperaSeleccionCita) {
                 trackNoEntendido(ctx.from, 'cancelar.s05_lista_citas');

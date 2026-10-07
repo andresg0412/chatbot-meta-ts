@@ -2,6 +2,7 @@ import { addKeyword, EVENTS } from '@builderbot/bot';
 import { datosinicialesComunes4 } from './datosinicialesComunes4';
 import { sanitizeString, isValidDocumentNumber } from '../../../utils/sanitize';
 import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
+import { aplicarFiltroCaptura } from '../filtroCaptura';
 import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion, flujoDesdeSeleccionMenu } from '../../../utils/trazabilidad';
 
 const datosinicialesComunes3 = addKeyword(EVENTS.ACTION)
@@ -10,7 +11,12 @@ const datosinicialesComunes3 = addKeyword(EVENTS.ACTION)
     })
     .addAnswer('Ahora, por favor digita tu número de documento 🔢:',
         { capture: true },
-        async (ctx, { state, gotoFlow, flowDynamic }) => {
+        async (ctx, fns) => {
+            const { state, gotoFlow, flowDynamic, endFlow } = fns;
+            const filtro = await aplicarFiltroCaptura(ctx, { flowDynamic, endFlow }, {
+                paso: 'comun.c03_documento', reintentar: () => gotoFlow(datosinicialesComunes3),
+            });
+            if (filtro) return filtro.salida;
             const numeroDoc = sanitizeString(ctx.body, 20);
             if (!isValidDocumentNumber(numeroDoc)) {
                 trackNoEntendido(ctx.from, 'comun.c03_documento', 1, { flujo: flujoDesdeSeleccionMenu(state.getMyState()?.flujoSeleccionadoMenu) });

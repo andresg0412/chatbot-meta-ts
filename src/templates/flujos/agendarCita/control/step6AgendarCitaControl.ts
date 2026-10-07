@@ -3,6 +3,7 @@ import { step7AgendarCitaControl } from './step7AgendarCitaControl';
 import { sanitizeString } from '../../../../utils/sanitize';
 import { hayAgendamientoEnCurso, MENSAJE_CONVERSACION_TERMINADA } from '../../../../utils/estadoConversacion';
 import { checkSessionTimeout } from '../../../../utils/proactiveSessionTimeout';
+import { aplicarFiltroCaptura } from '../../filtroCaptura';
 import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion } from '../../../../utils/trazabilidad';
 
 
@@ -16,7 +17,12 @@ const step6AgendarCitaControl = addKeyword(EVENTS.ACTION)
     .addAnswer(
         'Por favor, ingresa el número de documento:',
         { capture: true },
-        async (ctx, { state, gotoFlow }) => {
+        async (ctx, fns) => {
+            const { state, gotoFlow, flowDynamic, endFlow } = fns;
+            const filtro = await aplicarFiltroCaptura(ctx, { flowDynamic, endFlow }, {
+                paso: 'agendar.ct06_documento', reintentar: () => gotoFlow(step6AgendarCitaControl),
+            });
+            if (filtro) return filtro.salida;
             await state.update({ numeroDocumentoPaciente: ctx.body });
             return gotoFlow(step7AgendarCitaControl);
         }

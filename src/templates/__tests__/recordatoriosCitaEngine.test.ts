@@ -96,11 +96,12 @@ function crearBot(recordatoriosBotones: boolean) {
     let numero = recordatoriosBotones ? 573100000000 : 573200000000;
     const listo = createBot({ flow: construirTemplates(recordatoriosBotones), provider: provider as any, database: new MemoryDB() });
     const nuevoNumero = () => String(numero++);
-    async function enviar(from: string, textos: string[]): Promise<Enviado[]> {
+    async function enviar(from: string, textos: Array<string | { body: string; payload?: string }>): Promise<Enviado[]> {
         await listo;
         const desde = provider.enviados.length;
-        for (const body of textos) {
-            provider.emit('message', { from, body, name: 'Prueba' });
+        for (const entrada of textos) {
+            const mensaje = typeof entrada === 'string' ? { body: entrada } : entrada;
+            provider.emit('message', { from, ...mensaje, name: 'Prueba' });
             await esperarQuietud(provider);
         }
         return provider.enviados.slice(desde).filter((m) => m.to === from);
@@ -118,7 +119,7 @@ const bot = crearBot(true);
 beforeEach(() => {
     jest.clearAllMocks();
     unaCita();
-    mockedApi.responderRecordatorio.mockImplementation(async (_c: string, _d: string, respuesta: string, citaId?: string) =>
+    mockedApi.responderRecordatorio.mockImplementation(async (_c: string, _d: string | undefined, respuesta: string, citaId?: string) =>
         ok({
             cita_id: citaId, agenda_id: citaId, agenda_id_externa: citaId === CITA_B.cita_id ? CITA_B.agenda_id_externa : CITA_A.agenda_id_externa,
             fecha_cita: citaId === CITA_B.cita_id ? CITA_B.fecha_cita : CITA_A.fecha_cita,
@@ -129,6 +130,51 @@ beforeEach(() => {
 });
 
 describe('Confirmo asistencia', () => {
+    it('payload válido confirma sin pedir documento ni consultar por documento', async () => {
+        const from = bot.nuevoNumero();
+        const salida = textos(await bot.enviar(from, [{ body: 'Confirmo asistencia', payload: 'LEREC:A9897918:C' }]));
+        expect(mockedApi.consultarCitasRecordatorio).not.toHaveBeenCalled();
+        expect(mockedApi.responderRecordatorio).toHaveBeenCalledWith(from, '', 'confirma', CITA_A.cita_id, 'payload');
+        expect(salida.some((texto) => /quedó confirmada/.test(texto))).toBe(true);
+    });
+
+    it('payload válido registra la respuesta con via=payload', async () => {
+        const from = bot.nuevoNumero();
+        await bot.enviar(from, [{ body: 'Confirmo asistencia', payload: 'LEREC:A9897918:C' }]);
+        expect(mockedApi.registrarActividadBot).toHaveBeenCalledWith('recordatorio_respuesta', from,
+            expect.objectContaining({ accion: 'confirma', via: 'payload' }));
+    });
+
+    it.each([
+        ['ilegible', 'LEREC:xyz'],
+        ['de otro botón (cancelar)', 'LEREC:A9897918:X'],
+        ['vacío', ''],
+    ])('payload %s → camino de siempre: pide el documento y confirma con él', async (_nombre, payload) => {
+        const from = bot.nuevoNumero();
+        const salida = textos(await bot.enviar(from, [{ body: 'Confirmo asistencia', payload }, '1234567890']));
+        expect(salida[0]).toMatch(/digita tu número de documento/);
+        expect(mockedApi.responderRecordatorio).toHaveBeenCalledTimes(1);
+        expect(mockedApi.responderRecordatorio).toHaveBeenCalledWith(from, '1234567890', 'confirma', CITA_A.cita_id);
+        expect(mockedApi.registrarActividadBot).toHaveBeenCalledWith('recordatorio_respuesta', from,
+            expect.objectContaining({ via: 'documento' }));
+    });
+
+    it('payload rechazado por el backend (PAYLOAD_NO_VALIDO) → pide el documento y confirma con él', async () => {
+        mockedApi.responderRecordatorio.mockResolvedValueOnce({ ok: false, causa: 'PAYLOAD_NO_VALIDO' });
+        const from = bot.nuevoNumero();
+        const salida = textos(await bot.enviar(from, [{ body: 'Confirmo asistencia', payload: 'LEREC:A9897918:C' }, '1234567890']));
+        expect(mockedApi.responderRecordatorio).toHaveBeenNthCalledWith(1, from, '', 'confirma', CITA_A.cita_id, 'payload');
+        expect(mockedApi.responderRecordatorio).toHaveBeenNthCalledWith(2, from, '1234567890', 'confirma', CITA_A.cita_id);
+        expect(salida.some((texto) => /quedó confirmada/.test(texto))).toBe(true);
+    });
+
+    it('el payload de "Necesito cancelar" no cancela sin documento ni confirmación', async () => {
+        const from = bot.nuevoNumero();
+        const salida = textos(await bot.enviar(from, [{ body: 'Necesito cancelar', payload: 'LEREC:A9897918:X' }]));
+        expect(mockedApi.responderRecordatorio).not.toHaveBeenCalled();
+        expect(salida[0]).toMatch(/digita tu número de documento/);
+    });
+
     it('1 cita → confirma directo con cita_id y dice cuál', async () => {
         const from = bot.nuevoNumero();
         const salida = textos(await bot.enviar(from, ['Confirmo asistencia', '1234567890']));
@@ -166,7 +212,7 @@ describe('Confirmo asistencia', () => {
         const salida = textos(await bot.enviar(bot.nuevoNumero(), ['Confirmo asistencia', '1234567890', '1234567891']));
         expect(mockedApi.consultarCitasRecordatorio).toHaveBeenCalledTimes(2);
         expect(salida).toContain(MENSAJE_DOCUMENTO_REINTENTO);
-        expect(salida).toContain(MENSAJE_DOCUMENTO_FINAL);
+        expect(salida[salida.length - 1]).toMatch(/nuestros asesores no están disponibles|escríbenos en ese horario/);
         expect(mockedApi.responderRecordatorio).not.toHaveBeenCalled();
     });
 

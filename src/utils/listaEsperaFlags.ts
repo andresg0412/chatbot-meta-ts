@@ -27,6 +27,11 @@ export function isRecordatoriosBotonesEnabled(): boolean {
     return process.env.RECORDATORIOS_BOTONES_ENABLED === 'true';
 }
 
+/** Payloads de confirmación de recordatorios; apagado por defecto hasta validar los índices en Meta. */
+export function isRecordatoriosPayloadEnabled(): boolean {
+    return process.env.RECORDATORIOS_PAYLOAD_ENABLED === 'true';
+}
+
 /**
  * Campañas de invitación a la lista de espera (regularización y continua), ver
  * proyecto-ips/docs/features/2026-10-04-campanas-invitacion-lista-espera-implementacion.md, 6.2/6.5.

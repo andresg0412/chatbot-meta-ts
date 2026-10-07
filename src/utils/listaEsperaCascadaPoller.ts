@@ -204,6 +204,13 @@ async function procesarAccionEscalar(accion: AccionEscalar): Promise<void> {
     }
 
     const canalEscalamiento = process.env.CANAL_ESCALAMIENTO_LISTA_ESPERA;
+    const motivoPlantilla: Record<string, string> = {
+        antelacion_critica: 'poca antelación',
+        fila_agotada: 'nadie respondió',
+        sin_candidatos: 'sin candidatos',
+        cascada_maxima: 'límite de cascada alcanzado',
+        fuera_de_horario_antelacion_critica: 'poca antelación',
+    };
     // Runbook B6: un aviso no entregado (canal vacío, error de Graph API o webhook 'failed', p. ej.
     // ventana de 24h cerrada) queda registrado en chat_stats como 'aviso_asesor_fallido'. Respecto del
     // backend se mantiene el comportamiento de siempre: se confirma el escalamiento tras el intento
@@ -212,7 +219,16 @@ async function procesarAccionEscalar(accion: AccionEscalar): Promise<void> {
         tipo: 'escalamiento_lista_espera',
         canal: canalEscalamiento,
         referencia: `cupo:${accion.cupo_liberado_id}`,
-        mensaje: construirMensajeEscalamiento(accion)
+        mensaje: construirMensajeEscalamiento(accion),
+        plantilla: {
+            nombre: process.env.NOMBRE_PLANTILLA_AVISO_ESCALAMIENTO ?? '',
+            variables: [
+                accion.profesional,
+                formatearFechaLarga(accion.fecha_cita),
+                formatearHoraHHMM(accion.hora_cita),
+                motivoPlantilla[accion.motivo] ?? 'requiere revisión',
+            ],
+        },
     });
     if (!canalEscalamiento) {
         console.error(

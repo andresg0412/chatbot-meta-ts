@@ -21,7 +21,7 @@
 // Metadata registrada: tipo de aviso, referencia (teléfono del paciente enmascarado o id del cupo),
 // error resumido. Nunca el texto del aviso ni contenido del paciente.
 
-import { enviarMensajeTextoMeta, registrarActividadBot } from '../services/apiService';
+import { enviarMensajeTextoMeta, enviarPlantillaAvisoAsesor, registrarActividadBot } from '../services/apiService';
 import { claveComparacionTelefono, enmascararTelefono } from './telefono';
 
 export type TipoAvisoAsesor = 'crisis' | 'escalamiento_lista_espera';
@@ -79,6 +79,7 @@ export async function enviarAvisoAsesor(params: {
     canal: string | undefined | null;
     mensaje: string;
     referencia: string;
+    plantilla?: { nombre: string; variables: string[] };
 }): Promise<boolean> {
     const canal = (params.canal ?? '').trim();
     if (!canal) {
@@ -88,9 +89,22 @@ export async function enviarAvisoAsesor(params: {
         return false;
     }
 
-    const resultado = await enviarMensajeTextoMeta(canal, params.mensaje);
+    const nombrePlantilla = (params.plantilla?.nombre ?? '').trim();
+    let resultado = nombrePlantilla
+        ? await enviarPlantillaAvisoAsesor(canal, nombrePlantilla, params.plantilla?.variables ?? [])
+        : await enviarMensajeTextoMeta(canal, params.mensaje);
+    if (!resultado.exito && nombrePlantilla) {
+        // La plantilla nueva puede no estar aprobada aún o tener parámetros rechazados. Conservamos
+        // el envío actual como respaldo; solo el fallo de ambos intentos se registra como no entregado.
+        console.warn(`[avisoAsesor] Falló plantilla de aviso (${nombrePlantilla}); se usará texto libre una vez.`);
+        resultado = await enviarMensajeTextoMeta(canal, params.mensaje);
+    }
     if (!resultado.exito) {
-        await registrarFallo({ tipo: params.tipo, referencia: params.referencia, canal }, 'envio', resultado.error ?? {});
+        const error = 'error' in resultado ? resultado.error : {
+            code: ('errorCode' in resultado ? resultado.errorCode : undefined) ?? 'send_failed',
+            mensaje: ('errorTitulo' in resultado ? resultado.errorTitulo : undefined) ?? 'No se pudo enviar el aviso',
+        };
+        await registrarFallo({ tipo: params.tipo, referencia: params.referencia, canal }, 'envio', error ?? {});
         return false;
     }
 

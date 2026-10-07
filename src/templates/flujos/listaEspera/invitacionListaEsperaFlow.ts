@@ -38,7 +38,7 @@ import type { InvitacionPorDocumento, ResponderInvitacionRequest } from '../../.
 import { sanitizeString, isValidDocumentNumber } from '../../../utils/sanitize';
 import { closeUserSession, renovarActividadSesion } from '../../../utils/proactiveSessionManager';
 import { MENSAJE_CONVERSACION_TERMINADA } from '../../../utils/estadoConversacion';
-import { MAX_REINTENTOS_DOCUMENTO, MENSAJE_DOCUMENTO_FINAL } from '../../../utils/mensajesConfirmacion';
+import { MAX_REINTENTOS_DOCUMENTO } from '../../../utils/mensajesConfirmacion';
 import { esFilaNinguna, indiceDesdeIdFila, MAX_CITAS_EN_LISTA } from '../../../utils/mensajesRecordatorio';
 import * as M from '../../../utils/mensajesInvitacionListaEspera';
 import { parsearPayloadInvitacion, campanaDeInvitacion } from '../../../utils/invitacionPayload';
@@ -200,7 +200,7 @@ async function ejecutarRespuesta(ctx: any, fns: Fns): Promise<any> {
     const via: 'payload' | 'documento' = st.invitacionVia === 'payload' ? 'payload' : 'documento';
     const elegida: InvitacionPorDocumento | undefined = st.invitacionElegida;
 
-    if (!invitacionId || !accion || !documento) {
+    if (!invitacionId || !accion || (accion === 'A' && !documento) || (accion === 'R' && via !== 'payload' && !documento)) {
         await terminar(ctx, state);
         return endFlow(MENSAJE_CONVERSACION_TERMINADA);
     }
@@ -210,7 +210,7 @@ async function ejecutarRespuesta(ctx: any, fns: Fns): Promise<any> {
         celular: ctx.from,
         respuesta: accion === 'A' ? 'acepta' : 'rechaza',
         via,
-        documento,
+        ...(documento ? { documento } : {}),
         ...(accion === 'A' ? { consentimiento_texto: M.construirConsentimientoInvitacion(st.invitacionTextoBoton) } : {}),
     };
 
@@ -236,6 +236,7 @@ async function ejecutarRespuesta(ctx: any, fns: Fns): Promise<any> {
         const { code, cause } = resultado;
 
         if (code === 403 && cause === 'DOCUMENTO_NO_COINCIDE') {
+            trackPaso(ctx.from, PASO_DOCUMENTO, 'invalido', { metadata: { cause: 'DOCUMENTO_NO_COINCIDE' } });
             trackIdentificacion(ctx.from, documento, 'no_encontrado', PASO_DOCUMENTO);
             const intentos = Number(st.invitacionIntentosDoc) || 0;
             await registrarActividad(ctx, { resultado: 'documento_no_coincide', via });
@@ -248,9 +249,23 @@ async function ejecutarRespuesta(ctx: any, fns: Fns): Promise<any> {
                     ...(via === 'documento' ? { invitacionId: undefined, invitacionElegida: undefined } : {}),
                 });
             }
+            const enHorario = isWorkingHours();
+            trackFin(ctx.from, 'agente', enHorario ? 'derivado_agente' : 'fuera_horario', {
+                paso: PASO_DOCUMENTO, metadata: { motivo: 'documento_no_encontrado' },
+            });
+            await registrarActividad(ctx, { resultado: enHorario ? 'derivado_agente' : 'fuera_horario', via });
             await terminar(ctx, state);
-            await flowDynamic(MENSAJE_DOCUMENTO_FINAL);
+            const numeroAsesor = process.env.NUMERO_ASESOR_HUMANO || '573158070460';
+            await flowDynamic(enHorario
+                ? M.mensajeInvitacionAgente(numeroAsesor)
+                : M.MENSAJE_INVITACION_AGENTE_FUERA_HORARIO);
             return endFlow();
+        }
+
+        // Compatibilidad durante el despliegue gradual: el backend anterior exigía documento
+        // también para rechazar. Conservar el payload elegido y reintentar con captura.
+        if (code === 400 && cause === 'DOCUMENTO_REQUERIDO' && accion === 'R' && via === 'payload' && !documento) {
+            return pedirDocumento(ctx, fns, { invitacionDocumento: undefined });
         }
 
         let mensaje: string;
@@ -356,6 +371,7 @@ async function entrada(ctx: any, fns: Fns, accionBoton: AccionInvitacion): Promi
             invitacionIntentosDoc: 0,
         });
 
+        if (invitacionId && accionBoton === 'R') return ejecutarRespuesta(ctx, fns);
         return pedirDocumento(ctx, fns);
     } catch (error) {
         return errorInesperado(ctx, fns, error);

@@ -130,6 +130,14 @@ describe('responderRecordatorio', () => {
         }, { timeout: TIMEOUT_BACKEND_RECORDATORIOS_MS });
     });
 
+    it('payload de confirmación omite documento y envía via=payload', async () => {
+        post.mockResolvedValueOnce({ data: { code: 200, data: { accion: 'confirma', persistido: true } } });
+        await responderRecordatorio('573001234567', '', 'confirma', 'A9897918', 'payload');
+        expect(post).toHaveBeenCalledWith(expect.any(String), {
+            celular: '573001234567', respuesta: 'confirma', cita_id: 'A9897918', via: 'payload',
+        }, { timeout: TIMEOUT_BACKEND_RECORDATORIOS_MS });
+    });
+
     it('200 del contrato TB-05 (ya_cancelada) se devuelve completo', async () => {
         const data = { cita_id: 'A9897918', agenda_id_externa: 5206177, fecha_cita: '2026-10-10', hora_cita: '07:50',
             profesional: 'Ana Pérez', estado_resultado: 'ya_cancelada', accion: 'no_asistira', agenda_id: 'A9897918', persistido: true };
