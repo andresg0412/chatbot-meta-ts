@@ -29,6 +29,8 @@
     "**/*.test.ts",
     "**/*.spec.ts",
     "**e2e**",
+    "src/templates/flujos/ejemplos/**",
+    "src/templates/flujos/reprogramarCita/utilsReprogramarCita.ts",
     "**mock**"
   ]
 }

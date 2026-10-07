@@ -38,7 +38,7 @@ import { pasoAgenteFlow } from '../flujos/pasoAgente';
 import { pqrsFlow } from '../flujos/pasoAgente/enviarpqrs';
 import { multimediaFlow } from '../flujos/multimediaFlow';
 import { ofertaCupoAceptaDocumentoFlow, ofertaCupoRechazaDocumentoFlow, retiroListaEsperaFlow, invitacionAceptaFlow, invitacionRechazaFlow, invitacionAgenteFlow } from '../flujos/listaEspera';
-import { confirmoAsistenciaFlow, necesitoCancelarFlow, noPodreAsistirFlow, botonesConfirmarCancelacionFlow } from '../flujos/recordatorios';
+import { confirmoAsistenciaFlow, necesitoCancelarFlow, noPodreAsistirFlow, botonesConfirmarCancelacionFlow, reprogramarRecordatorioFlow } from '../flujos/recordatorios';
 import { ID_FILA_NINGUNA, idFilaCita, MAX_CITAS_EN_LISTA, PREFIJO_ID_FILA_CITA } from '../../utils/mensajesRecordatorio';
 
 type FlowLike = { toJson: () => any[] };
@@ -68,9 +68,11 @@ const nombres = new Map<string, string>([
     [keyRef(necesitoCancelarFlow), 'necesitoCancelarFlow'],
     [keyRef(noPodreAsistirFlow), 'noPodreAsistirFlow'],
     [keyRef(botonesConfirmarCancelacionFlow), 'botonesConfirmarCancelacionFlow'],
+    [keyRef(reprogramarRecordatorioFlow), 'reprogramarRecordatorioFlow'],
 ]);
 
 const flujosNuevosExactos: FlowLike[] = [
+    reprogramarRecordatorioFlow,
     retiroListaEsperaFlow,
     confirmoAsistenciaFlow,
     necesitoCancelarFlow,
@@ -122,6 +124,7 @@ describe('Enrutamiento de keywords con el algoritmo real de @builderbot (runbook
     describe('botones nuevos → flujo nuevo (coincidencia exacta)', () => {
         it.each([
             ['Confirmo asistencia', 'confirmoAsistenciaFlow'],
+            ['Reprogramar', 'reprogramarRecordatorioFlow'],
             ['Necesito cancelar', 'necesitoCancelarFlow'],
             ['No podré asistir', 'noPodreAsistirFlow'],
             ['Sí, lo tomo', 'ofertaCupoAceptaDocumentoFlow'],
@@ -170,7 +173,7 @@ describe('Enrutamiento de keywords con el algoritmo real de @builderbot (runbook
             ['Ya finalicé mi proceso', 'respuestaCampahnaFinalizado'],
             ['Agendar cita', 'step1AgendarCita'],
             ['280525002', 'step1AgendarCita'],
-            ['Reprogramar', 'step1Reprogramar'],
+            ['reprogramar', 'step1Reprogramar'],
             ['280525003', 'step1Reprogramar'],
             ['280525005', 'pasoAgenteFlow'],
             ['PQRS', 'pqrsFlow'],
@@ -202,7 +205,7 @@ describe('Enrutamiento de keywords con el algoritmo real de @builderbot (runbook
             'Confirmo', 'Confirmar', 'Confirmar cita', 'confirmar', 'confirmo asistencia', 'Cancelar', 'cancelar',
             'Cancelo', 'cancelo', 'quiero cancelar mi cita', 'necesito cancelar', '4', '3', '5', '6', '280525001',
             '280525002', '280525003', '280525004', '280525005', '280525006', '280525011', '280525017',
-            'Agendar cita', 'agendar', 'Reprogramar', 'reprogramar cita', 'PQRS', 'quejas', 'chatear con agente',
+            'Agendar cita', 'agendar', 'reprogramar', 'reprogramar cita', 'PQRS', 'quejas', 'chatear con agente',
             'Hablar con asistente', 'Salir', 'salir', 'Exit', 'exit', 'En otro momento', 'Ya finalicé mi proceso',
             'Servicios', 'Convenios', 'Tarifas', 'Formas de pago', 'Ubicación', 'Horarios', 'Canales de atención',
             'Sí, avísame', 'no, gracias', 'No gracias', 'Acepto', 'No acepto', 'hola', 'buenas tardes', 'hoy no puedo ir',
@@ -262,7 +265,7 @@ describe('TBOT-03: botones de recordatorio con RECORDATORIOS_BOTONES_ENABLED apa
         expect(flujosSinBotones).toContain(ofertaCupoAceptaDocumentoFlow);
         expect(flujosSinBotones).toContain(retiroListaEsperaFlow);
         expect(flujosSinBotones).not.toContain(botonesConfirmarCancelacionFlow);
-        expect(FLUJOS_BOTONES_RECORDATORIO).toHaveLength(4);
+        expect(FLUJOS_BOTONES_RECORDATORIO).toHaveLength(5);
         expect(flujosSinBotones.length).toBe((flujosRegistrados as FlowLike[]).length - FLUJOS_BOTONES_RECORDATORIO.length);
     });
 

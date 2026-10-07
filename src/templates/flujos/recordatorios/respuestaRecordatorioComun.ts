@@ -64,6 +64,7 @@ import {
     KW_NO_PODRE_ASISTIR,
     OPCIONES_REGEX,
     TEXTO_BOTON_SI_CANCELAR,
+    KW_REPROGRAMAR_RECORDATORIO,
 } from '../keywordsBotones';
 import {
     trackRespuestaCampana,
@@ -78,12 +79,15 @@ import type { PasoId } from '../../../constants/pasosTrazabilidad';
 import { parsearPayloadRecordatorio } from '../../../utils/recordatorioPayload';
 import { step1CencelarCita } from '../cancelarCita/step1CancelarCita';
 import { welcomeFlow } from '../../welcomeFlow';
+import { consultarCitasPorDocumento } from '../../../utils/consultarCitasPorDocumento';
+import { instanteBogota } from '../../../utils/fechaHora';
+import { stepConfirmaReprogramar } from '../reprogramarCita/stepConfirmaReprogramar';
 
 // ---------------------------------------------------------------------------
 // Configuración por botón
 // ---------------------------------------------------------------------------
 
-export type BotonRecordatorio = 'confirmo' | 'necesito_cancelar' | 'no_podre_asistir';
+export type BotonRecordatorio = 'confirmo' | 'necesito_cancelar' | 'no_podre_asistir' | 'reprogramar';
 
 interface ConfigBoton {
     boton: BotonRecordatorio;
@@ -97,6 +101,11 @@ interface ConfigBoton {
 }
 
 const CONFIG: Record<BotonRecordatorio, ConfigBoton> = {
+    reprogramar: {
+        boton: 'reprogramar', accion: 'no_asistira', paso: 'recordatorio.confirma_cancelar',
+        promptDocumento: 'Para reprogramar tu cita, por favor digita tu número de documento 🔢:',
+        resultadoCampana: 'cancelar', reintentaDocumento: false,
+    },
     confirmo: {
         boton: 'confirmo',
         accion: 'confirma',
@@ -141,6 +150,7 @@ const CADUCIDAD_TURNO_MS = 2 * 60 * 1000;
 export const CLAVES_RECORDATORIO: readonly string[] = [
     'recordatorioBoton',
     'recordatorioViaPayload',
+    'recordatorioCitaPayload',
     'numeroDocRecordatorio',
     'recordatorioCitas',
     'recordatorioCita',
@@ -205,7 +215,7 @@ function configDe(state: any): ConfigBoton | undefined {
 
 async function registrarRespuesta(ctx: any, cfg: ConfigBoton, extra: Record<string, unknown>): Promise<void> {
     await registrarActividadBot('recordatorio_respuesta', ctx.from, {
-        accion: cfg.accion,
+        accion: cfg.boton === 'reprogramar' ? 'reprograma' : cfg.accion,
         // Solo es 'payload' si la respuesta se resolvió sin documento (ver crearFlujoEntrada); un payload
         // presente en un botón que igual pide documento (cancelar) cuenta como 'documento'.
         via: ctx?.__viaPayload === true ? 'payload' : 'documento',
@@ -218,7 +228,7 @@ async function registrarRespuesta(ctx: any, cfg: ConfigBoton, extra: Record<stri
  * Palabras globales y turno, en este orden, al inicio de cada captura. Devuelve `undefined` si el
  * callback debe seguir (y en ese caso ya tomó el turno); si no, lo que el callback debe retornar.
  */
-async function filtrarEntrada(ctx: any, fns: Fns): Promise<{ salida: any } | undefined> {
+async function filtrarEntrada(ctx: any, fns: Fns, confirmaCancelacion = false): Promise<{ salida: any } | undefined> {
     const { state, endFlow } = fns;
     if (esPalabraSalir(ctx.body)) {
         // Igual que exitFlow (welcomeFlow.ts), que no alcanza a responder: este callback corre primero.
@@ -227,7 +237,9 @@ async function filtrarEntrada(ctx: any, fns: Fns): Promise<{ salida: any } | und
         closeUserSession(ctx.from, 'salir');
         return { salida: endFlow(MENSAJE_SALIR) };
     }
-    if (esBotonDeOtraPlantilla(ctx.body)) {
+    const reprogramarEnConfirmacion = confirmaCancelacion && ctx.body?.trim() === 'Reprogramar'
+        && parsearPayloadRecordatorio(ctx?.payload)?.accion !== 'R';
+    if (esBotonDeOtraPlantilla(ctx.body) && !reprogramarEnConfirmacion) {
         // Se retorna sin gotoFlow/endFlow/flowDynamic: @builderbot sigue con el flujo de ese botón. Con
         // una llamada en curso no se toca el state (la termina y limpia ese mismo callback).
         if (!turnoTomado(state)) {
@@ -278,9 +290,31 @@ async function mostrarConfirmacion(ctx: any, fns: Fns, cita: CitaRecordatorio): 
 async function elegirCita(ctx: any, fns: Fns, cfg: ConfigBoton, cita: CitaRecordatorio): Promise<any> {
     const { state } = fns;
     await state.update({ recordatorioCita: cita, recordatorioIntentosConfirmacion: 0 });
+    if (cfg.boton === 'reprogramar') return iniciarReprogramacion(ctx, fns, cfg, cita);
     if (cfg.accion === 'confirma') return ejecutarRespuesta(ctx, fns, cfg, cita);
     trackPaso(ctx.from, PASO_CONFIRMACION, 'mostrado');
     return mostrarConfirmacion(ctx, fns, cita);
+}
+
+/** Solo prepara la cita para el flujo de movimiento. No confirma ni cancela en Globho. */
+async function iniciarReprogramacion(ctx: any, fns: Fns, cfg: ConfigBoton, cita: CitaRecordatorio): Promise<any> {
+    const numeroDoc = estado(fns.state).numeroDocRecordatorio;
+    const citas = numeroDoc ? await consultarCitasPorDocumento('', numeroDoc) : [];
+    const completa = citas.find((c: any) => String(c.agenda_id) === cita.cita_id
+        || (cita.agenda_id_externa != null && String(c.agenda_id_externa) === String(cita.agenda_id_externa)));
+    const instante = completa ? instanteBogota(completa.fecha_cita, completa.hora_cita) : null;
+    if (!completa || instante === null || instante <= Date.now()) {
+        await terminar(ctx, fns.state);
+        await fns.flowDynamic(M.MENSAJE_CITA_NO_DISPONIBLE);
+        return fns.endFlow();
+    }
+    await registrarRespuesta(ctx, cfg, { accion: 'reprograma', resultado: 'reprogramar', cita_id: cita.cita_id });
+    trackPaso(ctx.from, PASO_CONFIRMACION, 'ok', { metadata: { opcion: 'reprogramar' } });
+    await limpiarClavesRecordatorio(fns.state);
+    await fns.state.update({ citaSeleccionadaProgramada: completa, numeroDocumentoPaciente: numeroDoc,
+        flujoSeleccionadoMenu: 'reprogramarCita' });
+    await fns.flowDynamic('Vamos a buscar una nueva fecha. Tu cita actual se conserva mientras eliges.');
+    return fns.gotoFlow(stepConfirmaReprogramar);
 }
 
 async function sinCita(ctx: any, fns: Fns, cfg: ConfigBoton, consulta: ResultadoCitasRecordatorio): Promise<any> {
@@ -482,6 +516,12 @@ function crearFlujoAccion(cfg: ConfigBoton) {
             trackIdentificacion(ctx.from, numeroDoc, consulta.ok ? 'encontrado' : 'no_encontrado', cfg.paso);
 
             const citas = consulta.ok ? consulta.citas : [];
+            const objetivo = estado(state).recordatorioCitaPayload;
+            if (cfg.boton === 'reprogramar' && objetivo) {
+                const elegida = citas.find(c => c.cita_id === objetivo);
+                if (elegida) return elegirCita(ctx, fns, cfg, elegida);
+                return sinCita(ctx, fns, cfg, { ok: true, origen: 'recordatorio', citas: [] });
+            }
             if (citas.length === 0) return sinCita(ctx, fns, cfg, consulta);
             if (citas.length === 1) return elegirCita(ctx, fns, cfg, citas[0]);
             return mostrarLista(ctx, fns, citas, { recordatorioIntentosSeleccion: 0 });
@@ -514,7 +554,10 @@ function crearFlujoEntrada(cfg: ConfigBoton, keyword: string) {
             // campana null: el bot no sabe a qué recordatorio responde.
             trackRespuestaCampana(ctx.from, null, cfg.resultadoCampana, cfg.paso);
             const payload = parsearPayloadRecordatorio(ctx?.payload);
-            const accionEsperada = cfg.accion === 'confirma' ? 'C' : cfg.boton === 'necesito_cancelar' ? 'X' : 'N';
+            const accionEsperada = cfg.boton === 'reprogramar' ? 'R' : cfg.accion === 'confirma' ? 'C' : cfg.boton === 'necesito_cancelar' ? 'X' : 'N';
+            if (payload?.accion === 'R' && cfg.boton === 'reprogramar') {
+                await state.update({ recordatorioCitaPayload: payload.citaId });
+            }
             if (payload && payload.accion === accionEsperada && cfg.accion === 'confirma') {
                 tomarTurno(state);
                 ctx.__viaPayload = true;
@@ -591,7 +634,7 @@ const seleccionCitaRecordatorioFlow = addKeyword(EVENTS.ACTION).addAction({ capt
 });
 
 /** Normaliza la respuesta a la confirmación: 'si' | 'no' | null. */
-function respuestaConfirmacion(texto: unknown): 'si' | 'no' | null {
+function respuestaConfirmacion(texto: unknown): 'si' | 'no' | 'reprogramar' | null {
     if (typeof texto !== 'string') return null;
     const limpio = texto
         .normalize('NFD')
@@ -602,12 +645,13 @@ function respuestaConfirmacion(texto: unknown): 'si' | 'no' | null {
         .trim();
     if (limpio === 'si cancelar' || limpio === 'si') return 'si';
     if (limpio === 'no mantener' || limpio === 'no') return 'no';
+    if (limpio === 'reprogramar') return 'reprogramar';
     return null;
 }
 
 /** Paso 3b: "Sí, cancelar" / "No, mantener". Captura sola: último paso de su flujo. */
 const confirmacionCancelarRecordatorioFlow = addKeyword(EVENTS.ACTION).addAction({ capture: true }, async (ctx, fns) => {
-    const filtro = await filtrarEntrada(ctx, fns);
+    const filtro = await filtrarEntrada(ctx, fns, true);
     if (filtro) return filtro.salida;
     const { state, flowDynamic, endFlow, gotoFlow } = fns;
     try {
@@ -618,6 +662,7 @@ const confirmacionCancelarRecordatorioFlow = addKeyword(EVENTS.ACTION).addAction
             return endFlow(MENSAJE_CONVERSACION_TERMINADA);
         }
         const respuesta = respuestaConfirmacion(ctx.body);
+        if (respuesta === 'reprogramar') return iniciarReprogramacion(ctx, fns, cfg, cita);
         if (respuesta === 'si') {
             trackPaso(ctx.from, PASO_CONFIRMACION, 'ok', { metadata: { confirma: true } });
             return ejecutarRespuesta(ctx, fns, cfg, cita);
@@ -665,6 +710,7 @@ const botonesConfirmarCancelacionFlow = addKeyword(KW_BOTONES_CONFIRMAR_CANCELAC
     });
 
 const FLUJOS_ACCION: Record<BotonRecordatorio, any> = {
+    reprogramar: crearFlujoAccion(CONFIG.reprogramar),
     confirmo: crearFlujoAccion(CONFIG.confirmo),
     necesito_cancelar: crearFlujoAccion(CONFIG.necesito_cancelar),
     no_podre_asistir: crearFlujoAccion(CONFIG.no_podre_asistir),
@@ -672,10 +718,14 @@ const FLUJOS_ACCION: Record<BotonRecordatorio, any> = {
 
 // Coincidencia exacta anclada (runbook B1): ver templates/flujos/keywordsBotones.ts.
 const FLUJOS_ENTRADA: Record<BotonRecordatorio, any> = {
+    reprogramar: crearFlujoEntrada(CONFIG.reprogramar, KW_REPROGRAMAR_RECORDATORIO),
     confirmo: crearFlujoEntrada(CONFIG.confirmo, KW_CONFIRMO_ASISTENCIA),
     necesito_cancelar: crearFlujoEntrada(CONFIG.necesito_cancelar, KW_NECESITO_CANCELAR),
     no_podre_asistir: crearFlujoEntrada(CONFIG.no_podre_asistir, KW_NO_PODRE_ASISTIR),
 };
+
+const reprogramarRecordatorioFlow = FLUJOS_ENTRADA.reprogramar;
+const reprogramarRecordatorioAccionFlow = FLUJOS_ACCION.reprogramar;
 
 export {
     FLUJOS_ENTRADA,
@@ -683,4 +733,6 @@ export {
     seleccionCitaRecordatorioFlow,
     confirmacionCancelarRecordatorioFlow,
     botonesConfirmarCancelacionFlow,
+    reprogramarRecordatorioFlow,
+    reprogramarRecordatorioAccionFlow,
 };

@@ -139,6 +139,8 @@ import {
     seleccionCitaRecordatorioFlow,
     confirmacionCancelarRecordatorioFlow,
     botonesConfirmarCancelacionFlow,
+    reprogramarRecordatorioFlow,
+    reprogramarRecordatorioAccionFlow,
 } from './flujos/recordatorios'
 import { isRecordatoriosBotonesEnabled } from '../utils/listaEsperaFlags';
 
@@ -157,6 +159,7 @@ const flujosRegistradosCompletos = [
     confirmoAsistenciaFlow,
     necesitoCancelarFlow,
     noPodreAsistirFlow,
+    reprogramarRecordatorioFlow,
     // "Sí, cancelar" / "No, mantener" fuera de su captura: antes de step1CencelarCita ('cancelar').
     botonesConfirmarCancelacionFlow,
     ofertaCupoAceptaDocumentoFlow,
@@ -247,6 +250,7 @@ const flujosRegistradosCompletos = [
     invitacionSeleccionFlow,
     invitacionRechazoPayloadFlow,
     confirmoAsistenciaAccionFlow,
+    reprogramarRecordatorioAccionFlow,
     necesitoCancelarAccionFlow,
     noPodreAsistirAccionFlow,
     seleccionCitaRecordatorioFlow,
@@ -281,6 +285,7 @@ const flujosRegistradosCompletos = [
 // siempre (p. ej. "Necesito cancelar" → cancelar cita guiado). Se evalúa al arrancar: cambiar el flag
 // exige `pm2 restart bot-meta --update-env`, igual que el resto de interruptores.
 export const FLUJOS_BOTONES_RECORDATORIO = [
+    reprogramarRecordatorioFlow,
     confirmoAsistenciaFlow,
     necesitoCancelarFlow,
     noPodreAsistirFlow,

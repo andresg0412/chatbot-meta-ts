@@ -90,7 +90,8 @@ let bot: any;
 let api: any;
 let numero = 573000002000;
 const inicio = ['hola', 'Acepto'];
-const nuevoNumero = () => String(numero++);
+const numerosPrueba: string[] = [];
+const nuevoNumero = () => { const n = String(numero++); numerosPrueba.push(n); return n; };
 
 async function enviar(from: string, entradas: string[]): Promise<Enviado[]> {
     const desde = provider.enviados.length;
@@ -119,6 +120,10 @@ beforeAll(async () => {
 afterAll(() => {
     jest.restoreAllMocks();
     process.env = { ...ENV_ORIGINAL };
+});
+
+afterEach(() => {
+    for (const n of numerosPrueba.splice(0)) require('../../utils/proactiveSessionManager').closeUserSession(n);
 });
 
 beforeEach(() => {
@@ -212,5 +217,36 @@ describe('motor real - fase 1', () => {
         expect(salida.join('\n')).toMatch(/No encontr[eé] ese convenio/i);
         expect(salida).toContain('[lista] Selecciona por favor tu convenio');
         expect(salida.join('\n')).not.toMatch(/pol[ií]tica de datos personales/i);
+    });
+});
+
+
+describe('Fase 4: seleccion de horas y paginas en el motor',()=>{
+    const ruta=[...inicio,'Reprogramar cita','doc_cc','1111111','1','Si','1'];
+    const horas=['08:00','08:40','09:20','10:00','10:40','11:20','12:00'].map(HORA);
+    it('segunda pagina 6/7; 3 elige la hora de la primera pagina',async()=>{
+        api.consultarCitasFecha.mockResolvedValueOnce(horas);
+        const from=nuevoNumero();
+        const pagina=textos(await enviar(from,[...ruta,'6'])).join(' ');
+        expect(pagina).toMatch(/\*6\*\. 11:20/);
+        expect(pagina).toMatch(/\*7\*\. 12:00/);
+        const elegida=textos(await enviar(from,['3'])).join(' ');
+        expect(elegida).toContain('09:20');
+        expect(bot.stateHandler.getMyState(from)().citaSeleccionadaHora.horacita).toBe('09:20');
+    });
+    it('una hora escrita puede elegir una hora en una pagina aun no mostrada',async()=>{
+        api.consultarCitasFecha.mockResolvedValueOnce(horas);
+        const from=nuevoNumero();
+        const salida=textos(await enviar(from,[...ruta,'12:00 pm'])).join(' ');
+        expect(salida).toContain('12:00');
+        expect(bot.stateHandler.getMyState(from)().citaSeleccionadaHora.horacita).toBe('12:00');
+        expect(api.reagendarCita).not.toHaveBeenCalled();
+    });
+    it('hora ambigua no elige cita ni mueve la original',async()=>{
+        api.consultarCitasFecha.mockResolvedValueOnce([HORA('02:20'),HORA('14:20')]);
+        const from=nuevoNumero();
+        await enviar(from,[...ruta,'2:20']);
+        expect(bot.stateHandler.getMyState(from)().citaSeleccionadaHora).toBeUndefined();
+        expect(api.reagendarCita).not.toHaveBeenCalled();
     });
 });

@@ -231,3 +231,23 @@ it('enviarMensajeTextoMeta devuelve el error resumido de Meta sin lanzar', async
     expect(r).toEqual({ exito: false, error: { http_status: 400, code: 131047, mensaje: 'more than 24 hours' } });
     expect(JSON.stringify(r)).not.toContain('SENSIBLE');
 });
+
+
+it.each([enviarPlantillaConfirmacion,enviarPlantillaRecordatorio24h,enviarPlantillaRecordatorio])(
+    'Fase 4: flag de plantillas v2 agrega R al final conservando indices existentes',async enviar=>{
+        process.env.RECORDATORIOS_BOTONES_ENABLED='true';
+        process.env.RECORDATORIOS_PAYLOAD_ENABLED='true';
+        process.env.RECORDATORIOS_REPROGRAMAR_ENABLED='true';
+        await enviar({...cita,cita_id:'A1B2C3D4'});
+        const botones=llamadaMeta().template.components.filter((c:any)=>c.type==='button');
+        expect(botones.map((b:any)=>b.parameters[0].payload)).toEqual(['LEREC:A1B2C3D4:C','LEREC:A1B2C3D4:X','LEREC:A1B2C3D4:N','LEREC:A1B2C3D4:R']);
+        expect(botones.map((b:any)=>b.index)).toEqual(['0','1','2','3']);
+    }
+);
+it('Fase 4: recordatorio 2h nunca agrega Reprogramar',async()=>{
+    process.env.RECORDATORIOS_BOTONES_ENABLED='true';
+    process.env.RECORDATORIOS_PAYLOAD_ENABLED='true';
+    process.env.RECORDATORIOS_REPROGRAMAR_ENABLED='true';
+    await enviarPlantillaDiaria({...cita,cita_id:'A1B2C3D4'});
+    expect(llamadaMeta().template.components.filter((c:any)=>c.type==='button')).toHaveLength(3);
+});

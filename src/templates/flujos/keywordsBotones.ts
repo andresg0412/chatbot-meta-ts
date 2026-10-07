@@ -34,13 +34,15 @@ export const KW_NO_PODRE_ASISTIR = '/^\\s*No podré asistir\\s*$/';
 /** Texto de los botones con los que el paciente confirma o descarta la cancelación (TBOT-03). ≤ 20 caracteres. */
 export const TEXTO_BOTON_SI_CANCELAR = 'Sí, cancelar';
 export const TEXTO_BOTON_NO_MANTENER = 'No, mantener';
+export const TEXTO_BOTON_REPROGRAMAR = 'Reprogramar';
+export const KW_REPROGRAMAR_RECORDATORIO = '/^\\s*Reprogramar\\s*$/';
 
 /**
  * Botones "Sí, cancelar" / "No, mantener" fuera de la captura que los espera (doble toque, botón de una
  * conversación ya cerrada). Sin esta keyword, "Sí, cancelar" caería por subcadena en el flujo guiado de
  * cancelar ('cancelar'). Ver templates/flujos/recordatorios/respuestaRecordatorioComun.ts.
  */
-export const KW_BOTONES_CONFIRMAR_CANCELACION = '/^\\s*(Sí, cancelar|No, mantener)\\s*$/';
+export const KW_BOTONES_CONFIRMAR_CANCELACION = '/^\\s*(Sí, cancelar|No, mantener|Reprogramar)\\s*$/';
 
 /** Botón "Sí, lo tomo" (oferta de cupo, Fase 2). */
 export const KW_SI_LO_TOMO = '/^\\s*Sí, lo tomo\\s*$/';

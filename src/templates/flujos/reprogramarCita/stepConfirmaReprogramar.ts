@@ -1,13 +1,4 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
-import {
-    obtenerDuracionCitaEspecialidad,
-    obtenerCitasDisponiblesPorProfesional,
-    obtenerCitasDisponiblesPrimeraVez,
-    obtenerCitasDisponiblesControl,
-    agruparCitasPorFecha,
-    getNextDateForDay,
-    formatDate
-} from './utilsReprogramarCita';
 import { stepSeleccionaFechaReprogramar } from './stepSeleccionaFechaReprogramar';
 import { metricError } from '../../../utils/metrics';
 import { consultarFechasCitasDisponibles } from '~/services/apiService';

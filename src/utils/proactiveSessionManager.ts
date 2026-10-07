@@ -12,6 +12,7 @@ import { randomUUID } from 'crypto';
 import { registrarActividadBot } from '../services/apiService';
 import {
   registrarProveedorSesion,
+  reiniciarIntentosNoEntendido,
   trackEvento,
   DisparadorSesion,
   MotivoFinSesion,
@@ -143,7 +144,8 @@ async function closeSessionProactively(userId: string, motivo: MotivoFinSesion =
   emitirSesionFin(userId, session, motivoPorInactividad(session, motivo));
   limpiarEstadoConversacion(userId);
   // Sin await: la estadística nunca bloquea (registrarActividadBot ya no espera al backend).
-  registrarActividadBot('chat_abandonado', userId, {}, {
+  reiniciarIntentosNoEntendido(userId);
+  registrarActividadBot('chat_abandonado', userId, session.finNegocio ? { post_fin: true } : {}, {
     sesion_id: session.sesionId ?? null,
     flujo: session.ultimoFlujo ?? null,
     paso: session.ultimoPaso ?? null,
@@ -276,6 +278,7 @@ export function isSessionExpired(userId: string): boolean {
  * @param motivo - motivo real del cierre (default 'completado')
  */
 export function closeUserSession(userId: string, motivo: MotivoFinSesion = 'completado'): void {
+  reiniciarIntentosNoEntendido(userId);
   const session = userSessions[userId];
   if (session) {
     // Cancelar timer si existe
@@ -315,7 +318,8 @@ export function expirarSesionPorInactividad(userId: string): boolean {
   saveUserSessions();
   emitirSesionFin(userId, session, motivoPorInactividad(session, 'timeout'));
   limpiarEstadoConversacion(userId);
-  registrarActividadBot('chat_abandonado', userId, {}, {
+  reiniciarIntentosNoEntendido(userId);
+  registrarActividadBot('chat_abandonado', userId, session.finNegocio ? { post_fin: true } : {}, {
     sesion_id: session.sesionId ?? null,
     flujo: session.ultimoFlujo ?? null,
     paso: session.ultimoPaso ?? null,

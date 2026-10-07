@@ -1,5 +1,5 @@
-export type AccionPayloadRecordatorio = 'C' | 'X' | 'N';
-export const REGEX_PAYLOAD_RECORDATORIO = /^LEREC:([A-Za-z0-9]{8}):([CXN])$/;
+export type AccionPayloadRecordatorio = 'C' | 'X' | 'N' | 'R';
+export const REGEX_PAYLOAD_RECORDATORIO = /^LEREC:([A-Za-z0-9]{8}):([CXNR])$/;
 
 export function construirPayloadRecordatorio(citaId: string, accion: AccionPayloadRecordatorio): string {
     const payload = `LEREC:${citaId}:${accion}`;

@@ -12,6 +12,8 @@ import {
     trackEventoLegado,
     trackIdentificacion,
     trackPaso,
+    trackNoEntendido,
+    reiniciarIntentosNoEntendido,
     trackErrorBackend,
     registrarFalloBackend,
     flushTrazabilidad,
@@ -388,5 +390,35 @@ describe('registrarActividadBot (legado)', () => {
         const [envio, confirmacion] = _estadoParaPruebas().cola;
         expect(envio.sesion_id).toBeUndefined();
         expect(confirmacion.sesion_id).toBe('SES-1');
+    });
+});
+
+
+describe('Fase 4: intentos consecutivos por telefono y paso', () => {
+    const intentos = () => _estadoParaPruebas().cola.filter(e => e.tipo_evento === 'msg_no_entendido').map(e => e.metadata?.intento);
+    it('tres errores seguidos registran 1, 2, 3; ok reinicia solo ese paso', () => {
+        trackNoEntendido('TEL', 'agendar.s10_selecciona_hora');
+        trackNoEntendido('TEL', 'agendar.s10_selecciona_hora');
+        trackNoEntendido('TEL', 'agendar.s10_selecciona_hora');
+        trackNoEntendido('TEL', 'agendar.s09_selecciona_fecha');
+        trackPaso('TEL', 'agendar.s10_selecciona_hora', 'ok');
+        trackNoEntendido('TEL', 'agendar.s10_selecciona_hora');
+        trackNoEntendido('TEL', 'agendar.s09_selecciona_fecha');
+        expect(intentos()).toEqual([1, 2, 3, 1, 1, 2]);
+    });
+    it('respeta el intento explicito y a otro telefono; reinicia todas las claves del cierre', () => {
+        trackNoEntendido('TEL', 'agendar.s10_selecciona_hora', 7);
+        trackNoEntendido('OTRO', 'agendar.s10_selecciona_hora');
+        trackNoEntendido('TEL', 'agendar.s09_selecciona_fecha');
+        reiniciarIntentosNoEntendido('TEL');
+        trackNoEntendido('TEL', 'agendar.s10_selecciona_hora');
+        trackNoEntendido('TEL', 'agendar.s09_selecciona_fecha');
+        trackNoEntendido('OTRO', 'agendar.s10_selecciona_hora');
+        expect(intentos()).toEqual([7, 1, 1, 1, 1, 2]);
+    });
+    it('el limite de memoria elimina la clave mas antigua', () => {
+        for (let i = 0; i < 5001; i++) trackNoEntendido(`TEL${i}`, 'agendar.s10_selecciona_hora');
+        trackNoEntendido('TEL0', 'agendar.s10_selecciona_hora');
+        expect(intentos().slice(-1)).toEqual([1]);
     });
 });

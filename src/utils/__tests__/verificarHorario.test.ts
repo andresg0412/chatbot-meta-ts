@@ -1,71 +1,18 @@
-const RealDate = Date;
+import { isWorkingHours } from '../verificarHorario';
 
-import { isWorkingHours, WORKING_HOURS } from '../verificarHorario';
-
-describe('isWorkingHours', () => {
-  it('debe retornar false en fin de semana', () => {
-    const realDate = Date;
-    global.Date = class extends Date {
-      constructor() {
-        super();
-        return new realDate('2025-06-01T10:00:00'); // Domingo
-      }
-    } as any;
-    expect(isWorkingHours()).toBe(false);
-    global.Date = realDate;
-  });
-
-  it('debe retornar true en horario laboral', () => {
-    const realDate = Date;
-    global.Date = class extends Date {
-      constructor() {
-        super();
-        return new realDate('2025-06-03T09:00:00'); // Martes 9am
-      }
-    } as any;
-    expect(isWorkingHours()).toBe(true);
-    global.Date = realDate;
-  });
-
-  it('debe retornar false fuera de horario laboral', () => {
-    const realDate = Date;
-    global.Date = class extends Date {
-      constructor() {
-        super();
-        return new realDate('2025-06-03T20:00:00'); // Martes 8pm
-      }
-    } as any;
-    expect(isWorkingHours()).toBe(false);
-    global.Date = realDate;
-  });
-
-  it('debe retornar false si es un día laboral pero antes del horario', () => {
-    global.Date = class extends RealDate {
-      constructor() {
-        super();
-        return new RealDate('2025-06-03T07:00:00'); // Martes 7am
-      }
-    } as any;
-    expect(isWorkingHours()).toBe(false);
-  });
-
-  it('debe retornar false si es un día laboral pero justo al final del horario', () => {
-    global.Date = class extends RealDate {
-      constructor() {
-        super();
-        return new RealDate('2025-06-03T18:00:00'); // Martes 6pm
-      }
-    } as any;
-    expect(isWorkingHours()).toBe(false);
-  });
-
-  it('debe retornar true si es justo al inicio del horario', () => {
-    global.Date = class extends RealDate {
-      constructor() {
-        super();
-        return new RealDate('2025-06-03T08:00:00'); // Martes 8am
-      }
-    } as any;
-    expect(isWorkingHours()).toBe(true);
+describe('isWorkingHours: limites vigentes 07:00-19:00 Bogota', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+  it.each([
+    ['domingo', '2026-10-04T10:00:00-05:00', false],
+    ['dia laboral', '2026-10-06T09:00:00-05:00', true],
+    ['antes de abrir', '2026-10-06T06:59:00-05:00', false],
+    ['al abrir', '2026-10-06T07:00:00-05:00', true],
+    ['antes de cerrar', '2026-10-06T18:59:00-05:00', true],
+    ['al cerrar', '2026-10-06T19:00:00-05:00', false],
+    ['fuera del horario', '2026-10-06T20:00:00-05:00', false],
+  ])('%s', (_caso, instante, esperado) => {
+    jest.setSystemTime(new Date(instante));
+    expect(isWorkingHours()).toBe(esperado);
   });
 });
