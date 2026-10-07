@@ -49,10 +49,13 @@ function usarVarianteConBotones(telefonoPaciente: unknown): boolean {
  * Orden documentado por etiqueta de plantilla: 0 confirmar, 1 necesito cancelar, 2 no podré asistir.
  * Verificar estos índices en Meta Business Manager antes de activar RECORDATORIOS_PAYLOAD_ENABLED.
  */
-function componentesPayloadRecordatorio(citaId: string | undefined): any[] {
+function componentesPayloadRecordatorio(citaId: string | undefined, permiteReprogramar = true): any[] {
     if (!isRecordatoriosPayloadEnabled() || !citaId) return [];
     try {
-        return (['C', 'X', 'N'] as const).map((accion, indice) => ({
+        const acciones = ['C', 'X', 'N'] as Array<'C' | 'X' | 'N' | 'R'>;
+        // Solo activar junto con las tres plantillas v2 aprobadas: R se agrega al final (índice 3).
+        if (permiteReprogramar && process.env.RECORDATORIOS_REPROGRAMAR_ENABLED === 'true') acciones.push('R');
+        return acciones.map((accion, indice) => ({
             type: 'button', sub_type: 'quick_reply', index: String(indice),
             parameters: [{ type: 'payload', payload: construirPayloadRecordatorio(citaId, accion) }],
         }));
@@ -612,7 +615,7 @@ export async function enviarPlantillaDiaria(cita: AgendaPendienteResponse, campa
                 ]
             }
         };
-        if (usarBotones) body.template.components.push(...componentesPayloadRecordatorio(cita.cita_id));
+        if (usarBotones) body.template.components.push(...componentesPayloadRecordatorio(cita.cita_id, false));
         const response = await axios.post(url, body, {
             headers: {
                 'Authorization': `Bearer ${process.env.jwtToken}`,

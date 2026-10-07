@@ -3,7 +3,7 @@ import { leerNumeroOpcion, pareceHora } from '../seleccionNumerica';
 describe('leerNumeroOpcion', () => {
     it.each([
         ['2', 2], [' 2. ', 2], ['2)', 2], ['12', 12],
-        ['2:20', null], ['2 pm', null], ['123', null], ['2 por favor', null],
+        ['2:20', null], ['2 pm', null], ['123', 123], ['1234567', null], ['2 por favor', null],
     ])('%p -> %p', (texto, esperado) => {
         expect(leerNumeroOpcion(texto)).toBe(esperado);
     });

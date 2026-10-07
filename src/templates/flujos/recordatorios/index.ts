@@ -5,4 +5,6 @@ export {
     seleccionCitaRecordatorioFlow,
     confirmacionCancelarRecordatorioFlow,
     botonesConfirmarCancelacionFlow,
+    reprogramarRecordatorioFlow,
+    reprogramarRecordatorioAccionFlow,
 } from './respuestaRecordatorioComun';

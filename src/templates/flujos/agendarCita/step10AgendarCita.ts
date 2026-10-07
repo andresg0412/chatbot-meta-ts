@@ -5,7 +5,7 @@ import { checkSessionTimeout } from '../../../utils/proactiveSessionTimeout';
 import { registrarActividadBot } from '../../../services/apiService';
 import { trackNoEntendido, trackPaso } from '../../../utils/trazabilidad';
 import { aplicarFiltroCaptura } from '../filtroCaptura';
-import { leerNumeroOpcion, mensajeRangoValido, pareceHora } from '../../../utils/seleccionNumerica';
+import { leerNumeroOpcion, mensajeRangoValido, pareceHora, indiceHoraEscrita } from '../../../utils/seleccionNumerica';
 import { derivarAAsesorSinOpciones } from '../../../utils/derivarAsesor';
 
 const step10AgendarCita = addKeyword(EVENTS.ACTION)
@@ -25,10 +25,12 @@ const step10AgendarCita = addKeyword(EVENTS.ACTION)
 
             try {
                 const { citasFechaSeleccionada, pasoSeleccionHora } = state.getMyState();
-                const mostrarHoras = citasFechaSeleccionada.slice(pasoSeleccionHora.inicio, pasoSeleccionHora.fin);
+                const fin = Math.min(citasFechaSeleccionada.length, pasoSeleccionHora.fin);
                 const tieneMas = citasFechaSeleccionada.length > pasoSeleccionHora.fin;
-                const maximo = mostrarHoras.length + (tieneMas ? 1 : 0);
-                const seleccion = leerNumeroOpcion(ctx.body);
+                const maximo = fin + (tieneMas ? 1 : 0);
+                const numero = leerNumeroOpcion(ctx.body);
+                const indiceEscrito = numero === null && pareceHora(ctx.body) ? indiceHoraEscrita(ctx.body, citasFechaSeleccionada) : null;
+                const seleccion = numero ?? (indiceEscrito === null ? null : indiceEscrito + 1);
                 if (seleccion === null) {
                     trackNoEntendido(ctx.from, 'agendar.s10_selecciona_hora');
                     const prefijo = pareceHora(ctx.body)
@@ -37,23 +39,23 @@ const step10AgendarCita = addKeyword(EVENTS.ACTION)
                     await flowDynamic(`${prefijo} ${mensajeRangoValido(maximo)}`);
                     return gotoFlow(step10AgendarCita);
                 }
-                if (seleccion < 1 || seleccion > maximo) {
+                if (seleccion < 1 || (indiceEscrito === null && seleccion > maximo)) {
                     trackNoEntendido(ctx.from, 'agendar.s10_selecciona_hora');
                     await flowDynamic(`Opción inválida. ${mensajeRangoValido(maximo)}`);
                     return gotoFlow(step10AgendarCita);
                 }
-                if (seleccion === mostrarHoras.length + 1 && tieneMas) {
+                if (indiceEscrito === null && seleccion === fin + 1 && tieneMas) {
                     const nuevoInicio = pasoSeleccionHora.fin;
                     const nuevoFin = Math.min(citasFechaSeleccionada.length, pasoSeleccionHora.fin + 5);
                     const nuevasHoras = citasFechaSeleccionada.slice(nuevoInicio, nuevoFin);
                     await flowDynamic(construirMensajeHorasDisponibles(
-                        nuevasHoras, citasFechaSeleccionada.length, nuevoFin, '*Más citas disponibles*:'
+                        nuevasHoras, citasFechaSeleccionada.length, nuevoFin, '*Más citas disponibles*:', nuevoInicio
                     ));
                     await state.update({ pasoSeleccionHora: { inicio: nuevoInicio, fin: nuevoFin } });
                     return gotoFlow(step10AgendarCita);
                 }
 
-                const citaSeleccionadaHora = mostrarHoras[seleccion - 1];
+                const citaSeleccionadaHora = citasFechaSeleccionada[seleccion - 1];
                 trackPaso(ctx.from, 'agendar.s10_selecciona_hora', 'ok');
                 await state.update({ citaSeleccionadaHora, agendarErroresSeguidos: 0 });
                 return gotoFlow(step11AgendarCita);

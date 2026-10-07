@@ -9,7 +9,7 @@
 import type { CitaRecordatorio } from '../services/apiService';
 import { extraerFechaISO, formatearFechaLarga, formatearHoraHHMM } from './fechaHora';
 import { numeroAsesorHumano } from './mensajesMovimientoCita';
-import { TEXTO_BOTON_SI_CANCELAR, TEXTO_BOTON_NO_MANTENER } from '../templates/flujos/keywordsBotones';
+import { TEXTO_BOTON_SI_CANCELAR, TEXTO_BOTON_NO_MANTENER, TEXTO_BOTON_REPROGRAMAR } from '../templates/flujos/keywordsBotones';
 
 export type AccionRecordatorio = 'confirma' | 'no_asistira';
 
@@ -164,7 +164,7 @@ export function mensajeConfirmarCancelacion(cita: DatosCita): string {
     return `${lineas.join('\n')}\n\n¿Confirmas que deseas cancelarla?`;
 }
 
-export const BOTONES_CONFIRMAR_CANCELACION = [{ body: TEXTO_BOTON_SI_CANCELAR }, { body: TEXTO_BOTON_NO_MANTENER }];
+export const BOTONES_CONFIRMAR_CANCELACION = [{ body: TEXTO_BOTON_SI_CANCELAR }, { body: TEXTO_BOTON_NO_MANTENER }, { body: TEXTO_BOTON_REPROGRAMAR }];
 
 // ---------------------------------------------------------------------------
 // Textos fijos
@@ -185,7 +185,7 @@ export const MENSAJE_SELECCION_REINTENTO = 'Por favor selecciona una de las cita
 export const MENSAJE_SELECCION_FINAL =
     'No recibimos una selección válida, así que no hicimos ningún cambio en tus citas. Si necesitas ayuda, escribe *hola*.';
 export const MENSAJE_CONFIRMACION_REINTENTO =
-    `Por favor responde con uno de los botones: *${TEXTO_BOTON_SI_CANCELAR}* o *${TEXTO_BOTON_NO_MANTENER}*.`;
+    `Por favor responde con uno de los botones: *${TEXTO_BOTON_SI_CANCELAR}*, *${TEXTO_BOTON_NO_MANTENER}* o *${TEXTO_BOTON_REPROGRAMAR}*.`;
 export const MENSAJE_CONFIRMACION_FINAL =
     'No recibimos una respuesta válida, así que no hicimos ningún cambio en tu cita. Si necesitas ayuda, escribe *hola*.';
 /** 409 RESPUESTA_EN_PROCESO: otra respuesta a esta cita sigue en curso; no se invita a repetir. */

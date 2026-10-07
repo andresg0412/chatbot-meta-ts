@@ -407,6 +407,17 @@ export function flujoDesdeSeleccionMenu(flujoSeleccionadoMenu: unknown): string 
 /** Flujos de navegación: pasar por ellos no cambia si la sesión ya tuvo un final de negocio. */
 const FLUJOS_NAVEGACION = new Set(['inicio', 'politicas', 'menu', 'comun', 'legado']);
 
+const intentosNoEntendido = new Map<string, number>();
+const MAX_CLAVES_INTENTOS = 5000;
+
+/** Una sesión nueva empieza sin los intentos de la conversación anterior. */
+export function reiniciarIntentosNoEntendido(telefono: string): void {
+    const prefijo = `${telefono}|`;
+    for (const clave of intentosNoEntendido.keys()) {
+        if (clave.startsWith(prefijo)) intentosNoEntendido.delete(clave);
+    }
+}
+
 /** `flujo_paso`: el paciente llegó a un paso del catálogo. Actualiza último flujo/paso de la sesión. */
 export function trackPaso(
     origen: OrigenTelefono,
@@ -416,6 +427,7 @@ export function trackPaso(
 ): void {
     try {
         const telefono = telefonoDe(origen);
+        if (telefono && resultado === 'ok') intentosNoEntendido.delete(`${telefono}|${paso}`);
         const flujo = flujoDeEvento(paso, telefono, opciones?.flujo);
         const definicion = obtenerPaso(paso);
         const reabreSesion = !!definicion && !definicion.es_final && !FLUJOS_NAVEGACION.has(definicion.flujo);
@@ -442,11 +454,18 @@ export function trackPaso(
 export function trackNoEntendido(
     origen: OrigenTelefono,
     paso: PasoId | string | null | undefined,
-    intento: number = 1,
+    intento?: number,
     opciones?: { flujo?: string; contexto?: string }
 ): void {
     try {
         const telefono = telefonoDe(origen);
+        if (!isTrazabilidadV2Enabled()) return;
+        const clave = `${telefono ?? ''}|${paso ?? ''}`;
+        const numeroIntento = intento ?? (intentosNoEntendido.get(clave) ?? 0) + 1;
+        intentosNoEntendido.set(clave, numeroIntento);
+        if (intentosNoEntendido.size > MAX_CLAVES_INTENTOS) {
+            intentosNoEntendido.delete(intentosNoEntendido.keys().next().value!);
+        }
         const flujo = paso ? flujoDeEvento(paso, telefono, opciones?.flujo) : opciones?.flujo ?? null;
         trackEvento({
             tipo_evento: 'msg_no_entendido',
@@ -454,7 +473,7 @@ export function trackNoEntendido(
             flujo,
             paso: paso ?? null,
             origen: 'usuario',
-            metadata: { intento, ...(opciones?.contexto ? { contexto: opciones.contexto } : {}) },
+            metadata: { intento: numeroIntento, ...(opciones?.contexto ? { contexto: opciones.contexto } : {}) },
         });
     } catch {
         /* nunca lanza */
@@ -967,6 +986,7 @@ export function _resetParaPruebas(opciones?: { rutaSpool?: string }): void {
     fallosConsecutivos = 0;
     noAntesDe = 0;
     fallosBackend.clear();
+    intentosNoEntendido.clear();
     if (intervalo) clearInterval(intervalo);
     intervalo = null;
     if (opciones?.rutaSpool) rutaSpool = opciones.rutaSpool;

@@ -24,9 +24,9 @@ const step9AgendarCita = addKeyword(EVENTS.ACTION)
 
             try {
                 const { fechasOrdenadas, pasoSeleccionFecha } = state.getMyState();
-                const mostrarFechas = fechasOrdenadas.slice(pasoSeleccionFecha.inicio, pasoSeleccionFecha.fin);
+                const fin = Math.min(fechasOrdenadas.length, pasoSeleccionFecha.fin);
                 const tieneMas = fechasOrdenadas.length > pasoSeleccionFecha.fin;
-                const maximo = mostrarFechas.length + (tieneMas ? 1 : 0);
+                const maximo = fin + (tieneMas ? 1 : 0);
                 const seleccion = leerNumeroOpcion(ctx.body);
                 if (seleccion === null) {
                     trackNoEntendido(ctx.from, 'agendar.s09_selecciona_fecha');
@@ -41,18 +41,18 @@ const step9AgendarCita = addKeyword(EVENTS.ACTION)
                     await flowDynamic(`Opción inválida. ${mensajeRangoValido(maximo)}`);
                     return gotoFlow(step9AgendarCita);
                 }
-                if (seleccion === mostrarFechas.length + 1 && tieneMas) {
+                if (seleccion === fin + 1 && tieneMas) {
                     const nuevoInicio = pasoSeleccionFecha.fin;
                     const nuevoFin = Math.min(fechasOrdenadas.length, pasoSeleccionFecha.fin + 3);
                     const nuevasFechas = fechasOrdenadas.slice(nuevoInicio, nuevoFin);
                     await flowDynamic(construirMensajeFechasDisponibles(
-                        nuevasFechas, fechasOrdenadas.length, nuevoFin, '*Más fechas con citas disponibles*:'
+                        nuevasFechas, fechasOrdenadas.length, nuevoFin, '*Más fechas con citas disponibles*:', nuevoInicio
                     ));
                     await state.update({ pasoSeleccionFecha: { inicio: nuevoInicio, fin: nuevoFin } });
                     return gotoFlow(step9AgendarCita);
                 }
 
-                const fechaSeleccionadaAgendar = mostrarFechas[seleccion - 1];
+                const fechaSeleccionadaAgendar = fechasOrdenadas[seleccion - 1];
                 trackPaso(ctx.from, 'agendar.s09_selecciona_fecha', 'ok');
                 const myState = state.getMyState();
                 const tipoConsulta = myState.tipoConsultaPaciente;
@@ -81,7 +81,7 @@ const step9AgendarCita = addKeyword(EVENTS.ACTION)
                     await flowDynamic('Ese día ya no tiene horarios libres. Elige otra fecha:');
                     const paginaActual = fechasOrdenadas.slice(pasoSeleccionFecha.inicio, pasoSeleccionFecha.fin);
                     await flowDynamic(construirMensajeFechasDisponibles(
-                        paginaActual, fechasOrdenadas.length, pasoSeleccionFecha.fin, '*Fechas con citas disponibles*:'
+                        paginaActual, fechasOrdenadas.length, pasoSeleccionFecha.fin, '*Fechas con citas disponibles*:', pasoSeleccionFecha.inicio
                     ));
                     return gotoFlow(step9AgendarCita);
                 }

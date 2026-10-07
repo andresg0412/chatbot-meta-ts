@@ -40,6 +40,7 @@ jest.mock('../../services/apiService', () => {
         confirmarCitaCampahna: jest.fn(async () => ({ ok: true, estado: 'confirmada' })),
         consultarListaEsperaPorDocumento: jest.fn(async () => ({ ok: true, encontrado: false, inscripciones: [] })),
         consultarCitasProximasPaciente: jest.fn(async () => []),
+        consultarFechasCitasDisponibles: jest.fn(async () => ['2099-01-12']),
     };
 });
 
@@ -253,7 +254,7 @@ describe.each([
         const salida = await bot.enviar(from, [boton, '1234567890']);
         const pregunta = salida.find((m) => m.botones);
         expect(pregunta?.texto).toBe('Vas a cancelar esta cita:\n📅 10 de octubre de 2026\n🕐 07:50\n👤 Ana Pérez\n\n¿Confirmas que deseas cancelarla?');
-        expect(pregunta?.botones).toEqual(['Sí, cancelar', 'No, mantener']);
+        expect(pregunta?.botones).toEqual(['Sí, cancelar', 'No, mantener', 'Reprogramar']);
         for (const titulo of pregunta!.botones!) expect(titulo.length).toBeLessThanOrEqual(M.LIMITES_META.tituloBoton);
         expect(mockedApi.responderRecordatorio).not.toHaveBeenCalled();
     });
@@ -462,6 +463,53 @@ describe('RECORDATORIOS_BOTONES_ENABLED apagado', () => {
         await apagado.enviar(apagado.nuevoNumero(), ['Confirmo asistencia', '1234567890']);
         await apagado.enviar(apagado.nuevoNumero(), ['No podré asistir', '1234567890']);
         expect(mockedApi.consultarCitasRecordatorio).not.toHaveBeenCalled();
+        expect(mockedApi.responderRecordatorio).not.toHaveBeenCalled();
+    });
+});
+
+
+describe('Fase 4: conservar la cita al reprogramar desde recordatorio', () => {
+    const completa = {
+        agenda_id: CITA_A.cita_id, agenda_id_externa: CITA_A.agenda_id_externa,
+        fecha_cita: '2099-01-10', hora_cita: '07:50', estado_agenda: 'Pendiente',
+        profesional_id: 'PR000001', nombre_profesional: 'Ana', especialidad: 'Psicologia',
+        catalogo: 'CONSULTA DE CONTROL', pacientes_id: 'PA000001',
+    };
+    it('cancelar -> documento -> Reprogramar consulta fechas del mismo profesional sin cancelar', async () => {
+        mockedApi.consultarCitasProximasPaciente.mockResolvedValueOnce([completa]);
+        const from=bot.nuevoNumero();
+        const salida=textos(await bot.enviar(from,['Necesito cancelar','12345678','Reprogramar']));
+        expect(mockedApi.consultarFechasCitasDisponibles).toHaveBeenCalledWith('Control','Psicologia','PR000001');
+        expect(mockedApi.responderRecordatorio).not.toHaveBeenCalled();
+        expect(programarTickCascadaRetrasado).not.toHaveBeenCalled();
+        expect(salida.join(' ')).toMatch(/cita actual se conserva/);
+    });
+    it('boton directo R identifica esa cita por documento y pasa al mismo flujo', async () => {
+        dosCitas();
+        mockedApi.consultarCitasProximasPaciente.mockResolvedValueOnce([completa]);
+        const from=bot.nuevoNumero();
+        await bot.enviar(from,[{body:'Reprogramar',payload:`LEREC:${CITA_A.cita_id}:R`},'12345678']);
+        expect(mockedApi.consultarFechasCitasDisponibles).toHaveBeenCalledWith('Control','Psicologia','PR000001');
+        expect(mockedApi.responderRecordatorio).not.toHaveBeenCalled();
+    });
+    it('R de otra cita no mueve una distinta aunque el documento tenga citas', async () => {
+        const from=bot.nuevoNumero();
+        await bot.enviar(from,[{body:'Reprogramar',payload:'LEREC:DEADBEEF:R'},'12345678']);
+        expect(mockedApi.consultarFechasCitasDisponibles).not.toHaveBeenCalled();
+        expect(mockedApi.responderRecordatorio).not.toHaveBeenCalled();
+    });
+    it('otro botón R durante una confirmación no reutiliza la cita anterior', async () => {
+        const from = bot.nuevoNumero();
+        await bot.enviar(from, ['Necesito cancelar', '12345678']);
+        const salida = textos(await bot.enviar(from, [{ body: 'Reprogramar', payload: 'LEREC:DEADBEEF:R' }]));
+        expect(salida.join(' ')).toMatch(/digita tu número de documento/);
+        expect(mockedApi.consultarCitasProximasPaciente).not.toHaveBeenCalled();
+        expect(mockedApi.responderRecordatorio).not.toHaveBeenCalled();
+    });
+    it('catalogo solo asesor no consulta fechas ni cancela', async () => {
+        mockedApi.consultarCitasProximasPaciente.mockResolvedValueOnce([{...completa,catalogo:'INTERVENCION EN CRISIS SOD'}]);
+        await bot.enviar(bot.nuevoNumero(),['Necesito cancelar','12345678','Reprogramar']);
+        expect(mockedApi.consultarFechasCitasDisponibles).not.toHaveBeenCalled();
         expect(mockedApi.responderRecordatorio).not.toHaveBeenCalled();
     });
 });

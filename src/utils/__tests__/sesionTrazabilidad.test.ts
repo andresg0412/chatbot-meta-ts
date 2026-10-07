@@ -207,3 +207,31 @@ it('renovarActividadSesion: sin_sesion → abre; activa → renueva sin cerrar; 
     mgr.closeUserSession(TEL);
     expect(mgr.renovarActividadSesion(TEL)).toBe('sin_sesion');
 });
+
+
+it.each(['timer', 'entrada'] as const)('post_fin solo en abandonos con final de negocio (%s)', (cierre) => {
+    const { mgr, traza, api } = cargar();
+    mgr.updateUserActivity(TEL, 'welcome');
+    traza.trackFin(TEL, 'conocer_ips', 'informativo');
+    if (cierre === 'timer') jest.advanceTimersByTime(UNA_HORA + 1);
+    else mgr.expirarSesionPorInactividad(TEL);
+    const abandonos = api.registrarActividadBot.mock.calls.filter((c: any[]) => c[0] === 'chat_abandonado');
+    expect(abandonos).toHaveLength(1);
+    expect(abandonos[0][2]).toEqual({ post_fin: true });
+    expect(eventos(traza, 'sesion_fin')[0].resultado).toBe('completado');
+});
+
+it.each(['explicito', 'timer', 'entrada'] as const)('cada cierre reinicia todos los intentos (%s)', (cierre) => {
+    const { mgr, traza } = cargar();
+    mgr.updateUserActivity(TEL, 'welcome');
+    traza.trackNoEntendido(TEL, 'agendar.s10_selecciona_hora');
+    traza.trackNoEntendido(TEL, 'agendar.s10_selecciona_hora');
+    traza.trackNoEntendido(TEL, 'agendar.s09_selecciona_fecha');
+    if (cierre === 'timer') jest.advanceTimersByTime(UNA_HORA + 1);
+    else if (cierre === 'entrada') mgr.expirarSesionPorInactividad(TEL);
+    else mgr.closeUserSession(TEL);
+    mgr.updateUserActivity(TEL, 'welcome');
+    traza.trackNoEntendido(TEL, 'agendar.s10_selecciona_hora');
+    traza.trackNoEntendido(TEL, 'agendar.s09_selecciona_fecha');
+    expect(eventos(traza, 'msg_no_entendido').map((e: any) => e.metadata.intento)).toEqual([1, 2, 1, 1, 1]);
+});

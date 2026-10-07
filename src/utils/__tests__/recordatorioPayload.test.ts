@@ -5,6 +5,7 @@ describe('payload de recordatorio', () => {
         ['C', 'LEREC:A1B2C3D4:C'],
         ['X', 'LEREC:A1B2C3D4:X'],
         ['N', 'LEREC:A1B2C3D4:N'],
+        ['R', 'LEREC:A1B2C3D4:R'],
     ] as const)('construye y lee acción %s', (accion, payload) => {
         expect(construirPayloadRecordatorio('A1B2C3D4', accion)).toBe(payload);
         expect(parsearPayloadRecordatorio(payload)).toEqual({ citaId: 'A1B2C3D4', accion });
