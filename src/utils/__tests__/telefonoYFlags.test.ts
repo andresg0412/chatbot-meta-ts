@@ -9,6 +9,9 @@ import {
     isCascadaEnabled,
     isRecordatoriosBotonesEnabled,
     isRecordatoriosPayloadEnabled,
+    isOfertaPayloadEnabled,
+    isPreguntaPostRechazoEnabled,
+    obtenerCanalAlertaCrisis,
 } from '../listaEsperaFlags';
 
 const ENV_ORIGINAL = { ...process.env };
@@ -88,6 +91,8 @@ describe('interruptores: default apagado, solo "true" enciende', () => {
         ['LISTA_ESPERA_CASCADA_ENABLED', isCascadaEnabled],
         ['RECORDATORIOS_BOTONES_ENABLED', isRecordatoriosBotonesEnabled],
         ['RECORDATORIOS_PAYLOAD_ENABLED', isRecordatoriosPayloadEnabled],
+        ['LISTA_ESPERA_OFERTA_PAYLOAD_ENABLED', isOfertaPayloadEnabled],
+        ['LISTA_ESPERA_PREGUNTA_POST_RECHAZO', isPreguntaPostRechazoEnabled],
     ];
     it.each(casos)('%s', (variable, fn) => {
         delete process.env[variable];
@@ -98,5 +103,17 @@ describe('interruptores: default apagado, solo "true" enciende', () => {
         expect(fn()).toBe(false);
         process.env[variable] = 'true';
         expect(fn()).toBe(true);
+    });
+});
+
+describe('ALERTA_CRISIS_CANAL', () => {
+    it('default whatsapp; solo "email" (sin importar mayúsculas ni espacios) cambia al correo', () => {
+        delete process.env.ALERTA_CRISIS_CANAL;
+        expect(obtenerCanalAlertaCrisis()).toBe('whatsapp');
+        process.env.ALERTA_CRISIS_CANAL = ' EMAIL ';
+        expect(obtenerCanalAlertaCrisis()).toBe('email');
+        process.env.ALERTA_CRISIS_CANAL = 'correo';
+        expect(obtenerCanalAlertaCrisis()).toBe('whatsapp');
+        delete process.env.ALERTA_CRISIS_CANAL;
     });
 });

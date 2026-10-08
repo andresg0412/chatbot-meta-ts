@@ -50,6 +50,22 @@ export const KW_SI_LO_TOMO = '/^\\s*Sí, lo tomo\\s*$/';
 /** Botón "No puedo" (oferta de cupo, Fase 2). */
 export const KW_NO_PUEDO = '/^\\s*No puedo\\s*$/';
 
+// Confirmación de un toque de la oferta de cupo (D1) y pregunta de seguir en la lista tras rechazar (D10):
+// proyecto-ips/docs/features/2026-10-07-lista-espera-aceptacion-y-escalamientos.md. Son botones de SESIÓN (sin
+// plantilla), ≤ 20 caracteres. Se eligieron textos que no contienen palabras de los flujos viejos ("confirmar",
+// "cancelar", "cita"…), porque @builderbot busca esas keywords por subcadena.
+
+/** Botón que confirma adelantar la cita con el cupo ofrecido. */
+export const TEXTO_BOTON_CONFIRMAR_OFERTA = 'Sí, adelantar';
+/** Botón que descarta el cupo en la confirmación (cuenta como rechazo). */
+export const TEXTO_BOTON_NO_CONFIRMAR_OFERTA = 'No, dejar así';
+export const KW_CONFIRMAR_OFERTA = '/^\\s*Sí, adelantar\\s*$/';
+export const KW_NO_CONFIRMAR_OFERTA = '/^\\s*No, dejar así\\s*$/';
+
+/** Pregunta tras rechazar una oferta. "No, gracias" se atiende dentro de su captura (ver ofertaCupoRespuestaFlow). */
+export const TEXTO_BOTON_SEGUIR_LISTA = 'Sí, seguir';
+export const TEXTO_BOTON_SALIR_LISTA = 'No, gracias';
+
 /**
  * Comando de retiro de la lista de espera (B5). Texto que se indica al paciente:
  * "Retirar lista de espera". Acepta, sin distinguir mayúsculas y con o sin tildes/puntuación final:

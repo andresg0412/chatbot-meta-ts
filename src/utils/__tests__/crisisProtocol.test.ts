@@ -1,6 +1,7 @@
 // Runbook B4 (CRISIS_PROTOCOL_ENABLED) y B8 (persistencia de la lista negra por crisis).
 jest.mock('../../services/apiService', () => ({
     registrarActividadBot: jest.fn(async () => true),
+    registrarAlertaCrisisPorCorreo: jest.fn(async () => ({ registrada: true, correoConfigurado: true, intentos: 1 })),
 }));
 jest.mock('../avisoAsesor', () => ({
     enviarAvisoAsesor: jest.fn(async () => true),
@@ -81,6 +82,76 @@ it('encendido con mensaje normal → no hace nada', () => {
     createCrisisInterceptor(() => bot, sendRaw)({ from: '573001234567', body: 'Agendar cita' });
     expect(bot.dynamicBlacklist.add).not.toHaveBeenCalled();
     expect(obtenerBloqueadosPorCrisis()).toEqual([]);
+});
+
+describe('D7: alerta de crisis solo por correo (ALERTA_CRISIS_CANAL=email)', () => {
+    const esperarMicrotareas = () => new Promise((resolve) => setTimeout(resolve, 20));
+
+    it('default (whatsapp): el aviso de siempre y NO se llama al backend de correo', () => {
+        process.env.CRISIS_PROTOCOL_ENABLED = 'true';
+        delete process.env.ALERTA_CRISIS_CANAL;
+        createCrisisInterceptor(() => bot, sendRaw)(mensajeRiesgo);
+        expect(mockedAviso.enviarAvisoAsesor).toHaveBeenCalledTimes(1);
+        expect(mockedApi.registrarAlertaCrisisPorCorreo).not.toHaveBeenCalled();
+    });
+
+    it('email: registra la alerta con el teléfono y NO envía el WhatsApp al asesor', async () => {
+        process.env.CRISIS_PROTOCOL_ENABLED = 'true';
+        process.env.ALERTA_CRISIS_CANAL = 'email';
+        createCrisisInterceptor(() => bot, sendRaw)(mensajeRiesgo);
+        await esperarMicrotareas();
+        expect(mockedApi.registrarAlertaCrisisPorCorreo).toHaveBeenCalledWith('573001234567');
+        expect(mockedAviso.enviarAvisoAsesor).not.toHaveBeenCalled();
+    });
+
+    it('email: el bloqueo del bot, el mensaje de contención y el registro de evento NO cambian', async () => {
+        process.env.CRISIS_PROTOCOL_ENABLED = 'true';
+        process.env.ALERTA_CRISIS_CANAL = 'email';
+        createCrisisInterceptor(() => bot, sendRaw)(mensajeRiesgo);
+        // síncrono, antes de cualquier await
+        expect(blacklist.has('573001234567')).toBe(true);
+        expect(obtenerBloqueadosPorCrisis()).toEqual(['573001234567']);
+        expect(sendRaw).toHaveBeenCalledWith('573001234567', expect.stringContaining('Línea 123'));
+        await esperarMicrotareas();
+        expect(mockedApi.registrarActividadBot).toHaveBeenCalledWith('crisis_detectada', '573001234567', { accion: 'flujo_bloqueado' });
+    });
+
+    it('email: no depende de CANAL_ESCALAMIENTO_CRISIS (ya no hace falta el número de WhatsApp)', async () => {
+        process.env.CRISIS_PROTOCOL_ENABLED = 'true';
+        process.env.ALERTA_CRISIS_CANAL = 'email';
+        delete process.env.CANAL_ESCALAMIENTO_CRISIS;
+        createCrisisInterceptor(() => bot, sendRaw)(mensajeRiesgo);
+        await esperarMicrotareas();
+        expect(mockedApi.registrarAlertaCrisisPorCorreo).toHaveBeenCalledTimes(1);
+        expect(mockedAviso.enviarAvisoAsesor).not.toHaveBeenCalled();
+    });
+
+    it('email: si el backend no recibe la alerta tras los reintentos, queda registrado un aviso_crisis_fallido', async () => {
+        process.env.CRISIS_PROTOCOL_ENABLED = 'true';
+        process.env.ALERTA_CRISIS_CANAL = 'email';
+        mockedApi.registrarAlertaCrisisPorCorreo.mockResolvedValueOnce({ registrada: false, correoConfigurado: null, intentos: 3 });
+        createCrisisInterceptor(() => bot, sendRaw)(mensajeRiesgo);
+        await esperarMicrotareas();
+        expect(mockedApi.registrarActividadBot).toHaveBeenCalledWith('aviso_crisis_fallido', '573001234567', { canal: 'email', intentos: 3 });
+        // El número sigue bloqueado aunque la alerta no haya llegado.
+        expect(blacklist.has('573001234567')).toBe(true);
+    });
+
+    it('email: ni la alerta ni los logs llevan el texto del mensaje del paciente', async () => {
+        process.env.CRISIS_PROTOCOL_ENABLED = 'true';
+        process.env.ALERTA_CRISIS_CANAL = 'email';
+        createCrisisInterceptor(() => bot, sendRaw)(mensajeRiesgo);
+        await esperarMicrotareas();
+        expect(JSON.stringify(mockedApi.registrarAlertaCrisisPorCorreo.mock.calls)).not.toContain('no quiero vivir');
+    });
+
+    it('email con el protocolo apagado no hace nada', async () => {
+        delete process.env.CRISIS_PROTOCOL_ENABLED;
+        process.env.ALERTA_CRISIS_CANAL = 'email';
+        createCrisisInterceptor(() => bot, sendRaw)(mensajeRiesgo);
+        await esperarMicrotareas();
+        expect(mockedApi.registrarAlertaCrisisPorCorreo).not.toHaveBeenCalled();
+    });
 });
 
 describe('crisisBlacklistStore (B8)', () => {

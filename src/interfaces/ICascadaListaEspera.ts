@@ -19,6 +19,10 @@ export interface AccionOfertar {
     // backend). El bot pone Math.round(valor/60) en {{5}} de la plantilla y hace eco del valor en
     // segundos a confirmar-envio. Si no es un entero > 0, el bot no envía y marca fallo 'ventana_invalida'.
     ventana_respuesta_segundos: number;
+    // Id de la oferta ('en_cola') que se va a enviar. Va en el payload de los botones de la plantilla
+    // ('LEOFE:<oferta_id>:A|R|G') cuando LISTA_ESPERA_OFERTA_PAYLOAD_ENABLED está encendido. Opcional: un
+    // backend anterior no lo manda y la plantilla sale sin payload.
+    oferta_id?: string;
 }
 
 export interface AccionEscalar {
@@ -47,6 +51,8 @@ export interface AccionNotificarPausa {
     paciente_id: string;
     nombre_paciente: string;
     telefono_paciente: string | null; // el backend puede enviar 57XXXXXXXXXX, 10 dígitos, o null si no es contactable
+    /** Días tras los que el backend reactiva la pausa solo; ausente si la reactivación está desactivada. */
+    reactivacion_dias?: number;
 }
 
 export type AccionCascada = AccionOfertar | AccionEscalar | AccionNotificarPausa;

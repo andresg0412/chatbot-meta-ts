@@ -7,6 +7,8 @@ import { abrirOSostenerSesion } from '../../../utils/proactiveSessionTimeout';
 import { registrarActividadBot } from '../../../services/apiService';
 import { trackPaso, trackFin } from '../../../utils/trazabilidad';
 import { OPCIONES_REGEX } from '../keywordsBotones';
+import { parsearPayloadOferta } from '../../../utils/ofertaPayload';
+import { registrarSolicitudAgenteOfertaCupo } from '../../../services/apiService';
 
 
 const NUMERO_ASESOR = process.env.NUMERO_ASESOR_HUMANO || '573158070460';
@@ -15,6 +17,13 @@ const NUMERO_ASESOR = process.env.NUMERO_ASESOR_HUMANO || '573158070460';
 const pasoAgenteFlow = addKeyword('/^\\s*5\\s*$|280525005|chatear con agente|hablar con (una )?asistente|^\\s*hablar con (un )?agente\\s*$/i', OPCIONES_REGEX)
     .addAction(async (ctx, ctxFn) => {
         try {
+            // D1-bis: el botón "Hablar con un agente" de la oferta de cupo trae 'LEOFE:<oferta_id>:G'. Solo se
+            // anota la solicitud (la oferta sigue vigente y, si vence, no cuenta como "sin respuesta"); nunca
+            // retrasa ni cambia la atención del asesor.
+            const payloadOferta = parsearPayloadOferta(ctx.payload);
+            if (payloadOferta?.accion === 'G') {
+                void registrarSolicitudAgenteOfertaCupo(payloadOferta.ofertaId, ctx.from).catch(() => undefined);
+            }
             // T-04: entrada por keyword sin welcomeFlow. Fuera de horario se vuelve al menú, que antes
             // terminaba en silencio sin sesión. Se abre (o renueva) antes de guardar claves.
             abrirOSostenerSesion(ctx.from);

@@ -93,6 +93,10 @@ export const CATALOGO_PASOS = [
     { paso: 'lista_espera.invitacion_documento', flujo: 'lista_espera', orden: 1, es_final: false },
     { paso: 'lista_espera.invitacion_selecciona', flujo: 'lista_espera', orden: 2, es_final: false },
     { paso: 'lista_espera.invitacion_respuesta', flujo: 'lista_espera', orden: 3, es_final: true },
+    // Oferta de cupo con un toque (D1) y pregunta de seguir en la lista tras rechazar (D10), iguales a la semilla
+    // de `catalogo_pasos` de la migración 040 (proyecto-ips).
+    { paso: 'lista_espera.oferta_confirmacion', flujo: 'lista_espera', orden: 2, es_final: false },
+    { paso: 'lista_espera.post_rechazo', flujo: 'lista_espera', orden: 3, es_final: true },
     { paso: 'legado.entrada', flujo: 'legado', orden: 0, es_final: false },
 ] as const satisfies ReadonlyArray<PasoTrazabilidad>;
 

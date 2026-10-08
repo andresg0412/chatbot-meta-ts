@@ -27,6 +27,31 @@ export function isRecordatoriosBotonesEnabled(): boolean {
     return process.env.RECORDATORIOS_BOTONES_ENABLED === 'true';
 }
 
+/**
+ * Responder a la oferta de cupo con el id que viaja en los botones de la plantilla (D1 de
+ * proyecto-ips/docs/features/2026-10-07-lista-espera-aceptacion-y-escalamientos.md): "Sí, lo tomo" pide una
+ * confirmación de un toque en vez del documento. Apagado por defecto hasta probar con el teléfono piloto que
+ * el id coincide con el botón tocado. Apagado, la oferta sale y se responde exactamente como antes.
+ */
+export function isOfertaPayloadEnabled(): boolean {
+    return process.env.LISTA_ESPERA_OFERTA_PAYLOAD_ENABLED === 'true';
+}
+
+/** Pregunta "¿Quieres seguir en la lista de espera?" tras rechazar una oferta (D10). Apagado por defecto. */
+export function isPreguntaPostRechazoEnabled(): boolean {
+    return process.env.LISTA_ESPERA_PREGUNTA_POST_RECHAZO === 'true';
+}
+
+/**
+ * Canal de la alerta del protocolo de crisis (D7 de proyecto-ips/docs/features/
+ * 2026-10-07-lista-espera-aceptacion-y-escalamientos.md). 'whatsapp' (default): el aviso de siempre al número de
+ * CANAL_ESCALAMIENTO_CRISIS. 'email': la alerta sale SOLO por correo desde el backend (con el teléfono completo) y
+ * ya no se manda el WhatsApp. El bloqueo del bot para ese número no cambia con ninguno de los dos.
+ */
+export function obtenerCanalAlertaCrisis(): 'whatsapp' | 'email' {
+    return (process.env.ALERTA_CRISIS_CANAL ?? '').trim().toLowerCase() === 'email' ? 'email' : 'whatsapp';
+}
+
 /** Payloads de confirmación de recordatorios; apagado por defecto hasta validar los índices en Meta. */
 export function isRecordatoriosPayloadEnabled(): boolean {
     return process.env.RECORDATORIOS_PAYLOAD_ENABLED === 'true';
