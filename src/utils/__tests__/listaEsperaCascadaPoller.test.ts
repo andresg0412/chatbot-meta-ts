@@ -35,6 +35,7 @@ const ofertar = (telefono: string | null, ventana: any = 600): AccionCascada => 
     tipo: 'ofertar',
     cupo_liberado_id: 'CUPO0001',
     lista_espera_id: 'LE000001',
+    oferta_id: 'OFERTA01',
     paciente_id: 'PAC00001',
     nombre_paciente: 'Nombre Paciente Real',
     telefono_paciente: telefono,
@@ -129,7 +130,7 @@ describe('cascada encendida', () => {
     ])('oferta a %s se envía normalizada a %s y se confirma', async (entrada, esperado) => {
         await tick([ofertar(entrada)]);
         expect(mockedApi.enviarPlantillaOfertaCupo).toHaveBeenCalledWith(
-            'Nombre Paciente Real', esperado, 'Profesional X', '2026-10-05', '14:00:00', 10
+            'Nombre Paciente Real', esperado, 'Profesional X', '2026-10-05', '14:00:00', 10, 'OFERTA01'
         );
         expect(mockedApi.confirmarEnvioOfertaCupo).toHaveBeenCalledWith('CUPO0001', 'LE000001', 'wamid.1', 600);
     });
@@ -164,7 +165,7 @@ describe('cascada encendida', () => {
     it('ventana de 900 s → la plantilla recibe 15 minutos y confirmar-envio recibe 900 (eco)', async () => {
         await tick([ofertar('3001234567', 900)]);
         expect(mockedApi.enviarPlantillaOfertaCupo).toHaveBeenCalledWith(
-            'Nombre Paciente Real', '573001234567', 'Profesional X', '2026-10-05', '14:00:00', 15
+            'Nombre Paciente Real', '573001234567', 'Profesional X', '2026-10-05', '14:00:00', 15, 'OFERTA01'
         );
         expect(mockedApi.confirmarEnvioOfertaCupo).toHaveBeenCalledWith('CUPO0001', 'LE000001', 'wamid.1', 900);
     });
@@ -203,6 +204,15 @@ describe('cascada encendida', () => {
         expect(sendRaw).toHaveBeenCalledWith('573001234567', expect.stringContaining('saliste de la lista de espera'));
     });
 
+    it('notificar_pausa con reactivación automática → el aviso dice que se reactiva solo, sin pedir reinscribirse', async () => {
+        await tick([{ ...pausa, reactivacion_dias: 7 } as AccionCascada]);
+        const texto = sendRaw.mock.calls[0][1] as string;
+        expect(texto).toContain('7 días');
+        expect(texto).toContain('automáticamente');
+        expect(texto).not.toContain('volver a inscribirte');
+        expect(texto).not.toContain('saliste de la lista');
+    });
+
     describe('lista piloto (B7)', () => {
         beforeEach(() => {
             process.env.LISTA_ESPERA_TELEFONOS_PILOTO = '573110000000';
@@ -218,7 +228,7 @@ describe('cascada encendida', () => {
         it('número piloto (10 dígitos vs 57...) → sí envía', async () => {
             await tick([ofertar('3110000000')]);
             expect(mockedApi.enviarPlantillaOfertaCupo).toHaveBeenCalledWith(
-                expect.any(String), '573110000000', expect.any(String), expect.any(String), expect.any(String), expect.any(Number)
+                expect.any(String), '573110000000', expect.any(String), expect.any(String), expect.any(String), expect.any(Number), 'OFERTA01'
             );
         });
 

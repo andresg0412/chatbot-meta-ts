@@ -4,10 +4,11 @@ import { IPaciente } from '../interfaces/IPacienteIn';
 import { IReagendarCita, IAgendaResponse, ICrearCita } from '../interfaces/IReagendarCita';
 import { AgendaPendienteResponse, AgendaProgramadaResponse } from '../interfaces/IReagendarCita';
 import { AccionCascada } from '../interfaces/ICascadaListaEspera';
-import { isRecordatoriosBotonesEnabled as flagRecordatoriosBotones, isRecordatoriosPayloadEnabled, esTelefonoPiloto } from '../utils/listaEsperaFlags';
+import { isRecordatoriosBotonesEnabled as flagRecordatoriosBotones, isRecordatoriosPayloadEnabled, isOfertaPayloadEnabled, esTelefonoPiloto } from '../utils/listaEsperaFlags';
 import { formatearFechaLarga, formatearHoraHHMM } from '../utils/fechaHora';
 import { destinoPlantillaWhatsApp, enmascararTelefono, normalizarTelefonoWhatsApp } from '../utils/telefono';
 import { construirPayloadInvitacion } from '../utils/invitacionPayload';
+import { construirPayloadOferta, esOfertaIdValido } from '../utils/ofertaPayload';
 import { construirPayloadRecordatorio } from '../utils/recordatorioPayload';
 import { limpiarParametroPlantilla } from '../utils/parametroPlantilla';
 import { fechaBogotaHoy } from '../utils/fechaHora';
@@ -1117,20 +1118,33 @@ export async function enviarPlantillaUsuariosConAsistencia(cita: AgendaPendiente
 export const TIMEOUT_BACKEND_CASCADA_MS = 20000;
 
 export interface ResultadoIntencionOfertaCupo {
-    estado: 'vigente' | 'rechazada' | 'vencida' | 'sin_oferta' | 'ambigua';
+    // 'oferta_no_encontrada' y 'celular_distinto' solo llegan cuando se mandó `oferta_id` (D1): el flujo cae al
+    // documento. 'ya_respondida': la oferta ya tenía respuesta (doble toque tardío).
+    estado:
+        | 'vigente' | 'rechazada' | 'vencida' | 'sin_oferta' | 'ambigua'
+        | 'oferta_no_encontrada' | 'celular_distinto' | 'ya_respondida';
     expira_at?: string | null;
     prorrogada?: boolean;
     estado_cupo?: string;
+    /** Con `oferta_id` y 'vigente' (acepta): la oferta y los datos del cupo para el mensaje de confirmación. */
+    oferta_id?: string;
+    cupo?: { profesional: string | null; fecha_cita: string; hora_cita: string };
+    /** Con 'rechazada': la inscripción, para la pregunta de seguir en la lista (D10). */
+    lista_espera_id?: string;
 }
 
-/** Registra el toque de un botón de oferta. Nunca bloquea el flujo por un error de red. */
+/**
+ * Registra el toque de un botón de oferta. Nunca bloquea el flujo por un error de red. Con `ofertaId` (el que
+ * viajó en el payload del botón, D1) el backend identifica la oferta exacta.
+ */
 export async function registrarIntencionOfertaCupo(
     celular: string,
-    respuesta: 'acepta' | 'rechaza'
+    respuesta: 'acepta' | 'rechaza',
+    ofertaId?: string
 ): Promise<{ ok: true; data: ResultadoIntencionOfertaCupo } | { ok: false }> {
     try {
         const url = `${API_BACKEND_URL}/chatbot/listaespera/cascada/oferta/intencion`;
-        const response = await axios.post(url, { celular, respuesta }, { timeout: 4000 });
+        const response = await axios.post(url, { celular, respuesta, ...(ofertaId ? { oferta_id: ofertaId } : {}) }, { timeout: 4000 });
         const data = response.data?.data;
         if (!data || typeof data.estado !== 'string') return { ok: false };
         return { ok: true, data };
@@ -1192,7 +1206,8 @@ export async function enviarPlantillaOfertaCupo(
     profesional: string,
     fechaCita: string,
     horaCita: string,
-    minutosVentana: number
+    minutosVentana: number,
+    ofertaId?: string
 ): Promise<ResultadoEnvioMeta> {
     const trazar = (resultado: ResultadoEnvioMeta): ResultadoEnvioMeta => {
         trackEnvioWhatsApp({
@@ -1213,6 +1228,31 @@ export async function enviarPlantillaOfertaCupo(
         const horaFormateada = formatearHoraHHMM(horaCita);
 
         const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
+        const componentes: any[] = [
+            {
+                "type": "body",
+                "parameters": [
+                    { "type": "text", "text": limpiarParametroPlantilla(nombrePaciente) },
+                    { "type": "text", "text": limpiarParametroPlantilla(profesional) },
+                    { "type": "text", "text": limpiarParametroPlantilla(fechaFormateada) },
+                    { "type": "text", "text": limpiarParametroPlantilla(horaFormateada) },
+                    { "type": "text", "text": String(minutosVentana) }
+                ]
+            }
+        ];
+        // D1: con LISTA_ESPERA_OFERTA_PAYLOAD_ENABLED cada botón lleva el id de ESTA oferta, por posición
+        // (0 "Sí, lo tomo" → A, 1 "No puedo" → R, 2 "Hablar con un agente" → G). Apagado, o sin un id con el
+        // formato del contrato, la plantilla sale exactamente como antes (sin componentes de botón).
+        if (isOfertaPayloadEnabled() && esOfertaIdValido(ofertaId)) {
+            (['A', 'R', 'G'] as const).forEach((accion, indice) => {
+                componentes.push({
+                    "type": "button",
+                    "sub_type": "quick_reply",
+                    "index": String(indice),
+                    "parameters": [{ "type": "payload", "payload": construirPayloadOferta(ofertaId, accion) }]
+                });
+            });
+        }
         const body = {
             "messaging_product": "whatsapp",
             "to": `${telefonoPaciente}`,
@@ -1222,18 +1262,7 @@ export async function enviarPlantillaOfertaCupo(
                 "language": {
                     "code": "es_CO"
                 },
-                "components": [
-                    {
-                        "type": "body",
-                        "parameters": [
-                            { "type": "text", "text": limpiarParametroPlantilla(nombrePaciente) },
-                            { "type": "text", "text": limpiarParametroPlantilla(profesional) },
-                            { "type": "text", "text": limpiarParametroPlantilla(fechaFormateada) },
-                            { "type": "text", "text": limpiarParametroPlantilla(horaFormateada) },
-                            { "type": "text", "text": String(minutosVentana) }
-                        ]
-                    }
-                ]
+                "components": componentes
             }
         };
         const response = await axios.post(url, body, {
@@ -1385,9 +1414,27 @@ export async function responderOfertaCupo(
     celular: string,
     respuesta: 'acepta' | 'rechaza'
 ): Promise<ResultadoRespuestaOfertaCupo> {
+    return enviarRespuestaOfertaCupo({ documento, celular, respuesta });
+}
+
+/**
+ * Respuesta SIN documento (D1): con `ofertaId` (el del payload del botón) o, sin él, la confirmación por celular
+ * (el backend resuelve la única oferta vigente que ya tiene la intención de aceptar). Mismas respuestas y
+ * errores que `responderOfertaCupo`, más 403 CELULAR_NO_COINCIDE, 404 OFERTA_NOT_FOUND, 409 OFERTA_AMBIGUA y
+ * 409 CONFIRMACION_REQUERIDA. En 'rechaza' `data.lista_espera_id` trae la inscripción (D10).
+ */
+export async function responderOfertaCupoSinDocumento(
+    celular: string,
+    respuesta: 'acepta' | 'rechaza',
+    ofertaId?: string
+): Promise<ResultadoRespuestaOfertaCupo> {
+    return enviarRespuestaOfertaCupo({ celular, respuesta, ...(ofertaId ? { oferta_id: ofertaId } : {}) });
+}
+
+async function enviarRespuestaOfertaCupo(cuerpo: Record<string, string>): Promise<ResultadoRespuestaOfertaCupo> {
     try {
         const url = `${API_BACKEND_URL}/chatbot/listaespera/cascada/respuesta`;
-        const response = await axios.post(url, { documento, celular, respuesta });
+        const response = await axios.post(url, cuerpo);
         return { ok: true, code: response.data?.code ?? response.status, data: response.data?.data };
     } catch (error: any) {
         registrarFalloBackend('/chatbot/listaespera/cascada/respuesta', error);
@@ -1405,6 +1452,71 @@ export async function responderOfertaCupo(
             return resultado;
         }
         console.error('Error respondiendo oferta de cupo:', error);
+        return { ok: false };
+    }
+}
+
+/**
+ * D7: pide al backend que envíe por correo la alerta del protocolo de crisis (con el teléfono completo, sin el texto del
+ * paciente). El backend la guarda en su bandeja y la reintenta; aquí se reintenta la entrega de la petición. Devuelve
+ * `registrada` (el backend la tiene), `correo_configurado` y los intentos hechos. Nunca lanza.
+ */
+export async function registrarAlertaCrisisPorCorreo(
+    telefono: string,
+    opciones: { intentos?: number; esperaMs?: number } = {}
+): Promise<{ registrada: boolean; correoConfigurado: boolean | null; intentos: number }> {
+    const maximo = Math.max(1, opciones.intentos ?? 3);
+    const esperaBase = opciones.esperaMs ?? 2000;
+    for (let intento = 1; intento <= maximo; intento++) {
+        try {
+            const url = `${API_BACKEND_URL}/chatbot/notificaciones/crisis`;
+            const response = await axios.post(url, { telefono }, { timeout: 8000 });
+            return {
+                registrada: true,
+                correoConfigurado: typeof response.data?.data?.correo_configurado === 'boolean' ? response.data.data.correo_configurado : null,
+                intentos: intento
+            };
+        } catch (error: any) {
+            console.error(`[crisis] No se pudo registrar la alerta por correo (intento ${intento}/${maximo}):`, error?.response?.status ?? error?.message ?? error);
+            // Un 4xx (teléfono inválido) no mejora reintentando.
+            const status = error?.response?.status;
+            if (status && status >= 400 && status < 500 && status !== 429) return { registrada: false, correoConfigurado: null, intentos: intento };
+            if (intento < maximo) await new Promise((resolve) => setTimeout(resolve, esperaBase * intento));
+        }
+    }
+    return { registrada: false, correoConfigurado: null, intentos: maximo };
+}
+
+/** D1-bis: el paciente tocó "Hablar con un agente" en la oferta. La oferta sigue vigente; nunca bloquea el flujo. */
+export async function registrarSolicitudAgenteOfertaCupo(ofertaId: string, celular: string): Promise<boolean> {
+    try {
+        const url = `${API_BACKEND_URL}/chatbot/listaespera/cascada/oferta/solicita-agente`;
+        const response = await axios.post(url, { oferta_id: ofertaId, celular }, { timeout: 4000 });
+        return response.data?.data?.registrado === true;
+    } catch (error: any) {
+        console.error('Error registrando la solicitud de agente de una oferta:', error?.message ?? error);
+        return false;
+    }
+}
+
+export interface ResultadoPostRechazo {
+    estado: 'continua' | 'retirada' | 'no_activa' | 'no_encontrada' | 'celular_distinto';
+}
+
+/** D10: tras rechazar una oferta, si el paciente sigue en la lista ('sigue') o sale ('sale'). */
+export async function registrarDecisionPostRechazoOfertaCupo(
+    listaEsperaId: string,
+    celular: string,
+    decision: 'sigue' | 'sale'
+): Promise<{ ok: true; data: ResultadoPostRechazo } | { ok: false }> {
+    try {
+        const url = `${API_BACKEND_URL}/chatbot/listaespera/cascada/oferta/post-rechazo`;
+        const response = await axios.post(url, { lista_espera_id: listaEsperaId, celular, decision }, { timeout: 4000 });
+        const data = response.data?.data;
+        if (!data || typeof data.estado !== 'string') return { ok: false };
+        return { ok: true, data };
+    } catch (error: any) {
+        console.error('Error registrando la decisión posterior al rechazo de una oferta:', error?.message ?? error);
         return { ok: false };
     }
 }
@@ -1774,6 +1886,18 @@ export interface ReservarInvitacionesData {
     motivo_fin: MotivoFinReservaInvitacion | null;
 }
 
+/** D12. `POST /reservar-recordatorios`: un único recordatorio por invitación a quien no respondió. */
+export interface ReservarRecordatoriosInvitacionesRequest {
+    campana_tipo: CampanaTipoInvitacion;
+    lote: number;
+    solo_telefonos: string[];
+}
+
+export interface ReservarRecordatoriosInvitacionesData {
+    invitaciones: InvitacionReservada[];
+    motivo_fin: 'recordatorio_desactivado' | 'sin_candidatas' | null;
+}
+
 /** E3. `motivo` solo en los fallos que no vienen de Meta. */
 export interface RegistrarEnvioInvitacionRequest {
     invitacion_id: string;
@@ -1900,6 +2024,13 @@ export async function reservarInvitaciones(
     body: ReservarInvitacionesRequest
 ): Promise<ResultadoBackendInvitacion<ReservarInvitacionesData>> {
     return llamarBackendInvitaciones<ReservarInvitacionesData>('post', 'reservar', { ...body });
+}
+
+/** D12 `POST /reservar-recordatorios`. La reserva ya cuenta como el único recordatorio de esa invitación. */
+export async function reservarRecordatoriosInvitaciones(
+    body: ReservarRecordatoriosInvitacionesRequest
+): Promise<ResultadoBackendInvitacion<ReservarRecordatoriosInvitacionesData>> {
+    return llamarBackendInvitaciones<ReservarRecordatoriosInvitacionesData>('post', 'reservar-recordatorios', { ...body });
 }
 
 /** E3 `POST /registrar-envio`. Idempotente en el backend. */

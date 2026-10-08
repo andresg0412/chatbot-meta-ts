@@ -69,6 +69,10 @@ Revisa ahí especialmente:
 - `exec mode` → debe decir **`fork_mode`**, nunca `cluster_mode` (el bot mantiene sesiones y colas en memoria; con más de un proceso se duplicarían respuestas y campañas).
 - `restarts` → un número que sube solo indica que el proceso se está cayendo y reiniciando repetidamente.
 
+## Logs con fecha y hora
+
+`ecosystem.config.js` define `log_date_format: 'YYYY-MM-DD HH:mm:ss Z'` y cada línea de `pm2 logs` empieza con fecha y hora. Solo aplica tras un reinicio completo (un `pm2 restart` no relee el archivo), con el procedimiento de la sección siguiente.
+
 ## Reinicio completo desde cero (si `pm2 restart` no basta)
 
 ```bash
@@ -119,5 +123,16 @@ pm2 save
 ## Payload de confirmación de recordatorios (Fase 3)
 
 `RECORDATORIOS_PAYLOAD_ENABLED` debe permanecer en `false` hasta revisar en Meta Business Manager el índice real de los botones de las cuatro plantillas de recordatorio y probar primero con un teléfono incluido en `LISTA_ESPERA_TELEFONOS_PILOTO`. Al cambiarlo, reinicia con `pm2 restart bot-meta --update-env`. Las respuestas de cancelar y no asistencia siguen pasando por documento y confirmación explícita.
+
+## Oferta de cupo con un toque (lista de espera, Fase 2)
+
+Detalle completo en `proyecto-ips/docs/features/2026-10-07-lista-espera-aceptacion-y-escalamientos.md` (sección 6).
+
+- `LISTA_ESPERA_OFERTA_PAYLOAD_ENABLED=false` (default): la oferta sale y se responde como siempre (documento). Encender solo tras probar con un teléfono piloto (`LISTA_ESPERA_TELEFONOS_PILOTO`) que el id del payload coincide con el botón tocado: orden de la plantilla `cita_disponible_lista_espera` = 0 *Sí, lo tomo*, 1 *No puedo*, 2 *Hablar con un agente*.
+- Encendido, "Sí, lo tomo" muestra los datos del cupo con los botones *Sí, adelantar* / *No, dejar así*. Si algo falla con el id (sin payload, ilegible, oferta no encontrada, celular distinto, varias ofertas, error del backend) el bot pide el documento; el motivo queda en `chat_stats` como `resultado='fallback_documento'` (`metadata.motivo`). Un pico de `sin_payload` indica que Meta no está mandando el id.
+- `LISTA_ESPERA_PREGUNTA_POST_RECHAZO=false` (default): con `true`, tras rechazar pregunta si sigue en la lista (*Sí, seguir* / *No, gracias*).
+- Requiere el backend de la Fase 2 (migración 040, `LISTA_ESPERA_PRORROGA_ACEPTACION_MIN=10`). Un backend anterior no manda `oferta_id` en la acción y la plantilla sale sin payload.
+- `ALERTA_CRISIS_CANAL=whatsapp` (default): con `email`, la alerta de crisis sale solo por correo desde el backend (teléfono completo, nunca el texto del paciente) y ya no se manda el WhatsApp al asesor. Antes de encenderlo, probar el correo desde el droplet: `docker-compose exec backend node dist/scripts/enviar-correo-prueba.js`. Si el backend no recibe la alerta tras 3 intentos, el bot lo deja en el log (`ALERTA DE CRISIS NO REGISTRADA`) y en `chat_stats` como `aviso_crisis_fallido`; el número queda bloqueado de todos modos.
+- Recordatorio único de invitación (D12): `LISTA_ESPERA_INVITACION_RECORDATORIO_LIMITE` (default 50 por ejecución). El backend lo activa con `LISTA_ESPERA_INVITACION_RECORDATORIO_HORAS` (default 0 = apagado).
 
 La plantilla interna de escalamiento queda desactivada mientras `NOMBRE_PLANTILLA_AVISO_ESCALAMIENTO` esté vacío. Después de crearla y aprobarla en Meta (Utility, `es_CO`, cuatro variables), configura el nombre y reinicia el proceso. Si falla el envío de plantilla, el bot intenta una vez el mensaje de texto libre.

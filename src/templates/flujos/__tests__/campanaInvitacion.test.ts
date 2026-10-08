@@ -6,6 +6,7 @@
 jest.mock('../../../services/apiService', () => ({
     previsualizarInvitaciones: jest.fn(),
     reservarInvitaciones: jest.fn(),
+    reservarRecordatoriosInvitaciones: jest.fn(),
     registrarEnvioInvitacion: jest.fn(),
     finalizarSinRespuestaInvitaciones: jest.fn(),
     finalizarEjecucionInvitacion: jest.fn(),
@@ -77,6 +78,10 @@ beforeEach(() => {
         ok: true, code: 200, data: { invitacion_id: body.invitacion_id, estado: body.exito ? 'enviada' : 'error', ya_registrado: false },
     }));
     mockedApi.finalizarEjecucionInvitacion.mockResolvedValue({ ok: true, code: 200, data: {} });
+    // D12: por defecto el backend no tiene recordatorios (desactivado), como en producción hoy.
+    mockedApi.reservarRecordatoriosInvitaciones.mockResolvedValue({
+        ok: true, code: 200, data: { invitaciones: [], motivo_fin: 'recordatorio_desactivado' },
+    } as any);
     mockedApi.enviarPlantillaInvitacionListaEspera.mockImplementation(async (i: any) => ({ exito: true, mensajeWaId: `wamid.${i.invitacion_id}` }));
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
     jest.spyOn(console, 'warn').mockImplementation(() => undefined);
@@ -457,5 +462,125 @@ describe('POST /v1/campaigns/lista-espera-continua', () => {
         await executeListaEsperaContinuaCampaign({ body: { modo_previsualizacion: true } }, res2);
         expect(res2.status).toBe(200);
         expect(mockedApi.previsualizarInvitaciones).toHaveBeenCalledWith({ campana_tipo: 'continua', fecha_desde: null, fecha_hasta: null });
+    });
+});
+
+
+describe('D12: recordatorio único de la invitación', () => {
+    const recordatorios = (invitaciones: any[], motivo_fin: any = null) =>
+        ({ ok: true as const, code: 200, data: { invitaciones, motivo_fin } });
+    const campanaVacia = () => mockedApi.reservarInvitaciones.mockResolvedValueOnce(reservaOk([], 'sin_candidatas'));
+
+    it('con el backend desactivado (default) pregunta una vez, no envía nada y la campaña termina igual', async () => {
+        campanaVacia();
+        const resumen = await ejecutarCampanaInvitacion('regularizacion', PARAMS);
+
+        expect(mockedApi.reservarRecordatoriosInvitaciones).toHaveBeenCalledTimes(1);
+        expect(resumen).toMatchObject({ estado: 'finalizada', motivo_fin: 'sin_candidatas', recordatorios_enviados: 0, recordatorios_errores: 0 });
+        expect(mockedApi.enviarPlantillaInvitacionListaEspera).not.toHaveBeenCalled();
+    });
+
+    it('reenvía la misma plantilla a quien reservó el backend, con la campaña y la lista piloto, sin registrar-envio', async () => {
+        process.env.LISTA_ESPERA_TELEFONOS_PILOTO = '3001234567';
+        campanaVacia();
+        mockedApi.reservarRecordatoriosInvitaciones
+            .mockResolvedValueOnce(recordatorios([inv('IN000001'), inv('IN000002')]))
+            .mockResolvedValueOnce(recordatorios([], 'sin_candidatas'));
+
+        const resumen = await ejecutarCampanaInvitacion('regularizacion', PARAMS);
+
+        expect(mockedApi.reservarRecordatoriosInvitaciones).toHaveBeenNthCalledWith(1, { campana_tipo: 'regularizacion', lote: 2, solo_telefonos: ['573001234567'] });
+        expect(mockedApi.enviarPlantillaInvitacionListaEspera).toHaveBeenCalledTimes(2);
+        expect(mockedApi.enviarPlantillaInvitacionListaEspera).toHaveBeenCalledWith(expect.objectContaining({ invitacion_id: 'IN000001' }), 'uuid-ejecucion', 'le_invit_reg');
+        // La reserva del backend ya es el tope de 1 por cita: no hay segundo registro de envío.
+        expect(mockedApi.registrarEnvioInvitacion).not.toHaveBeenCalled();
+        // No se mezclan con los contadores de la campaña.
+        expect(resumen).toMatchObject({ reservadas: 0, enviadas: 0, errores: 0, recordatorios_enviados: 2, recordatorios_errores: 0 });
+        expect(campanaDeInvitacion('IN000001')).toBe('le_invit_reg');
+    });
+
+    it('respeta el tope por ejecución (LISTA_ESPERA_INVITACION_RECORDATORIO_LIMITE): los pendientes se reparten en varios días', async () => {
+        process.env.LISTA_ESPERA_INVITACION_RECORDATORIO_LIMITE = '3';
+        campanaVacia();
+        mockedApi.reservarRecordatoriosInvitaciones
+            .mockResolvedValueOnce(recordatorios([inv('IN000001'), inv('IN000002')]))
+            .mockResolvedValueOnce(recordatorios([inv('IN000003')]))
+            .mockResolvedValue(recordatorios([inv('IN000004'), inv('IN000005')]));
+
+        const resumen = await ejecutarCampanaInvitacion('regularizacion', PARAMS);
+
+        expect(resumen.recordatorios_enviados).toBe(3);
+        // La segunda llamada pide solo lo que falta (3 - 2 = 1), nunca más que el tope.
+        expect(mockedApi.reservarRecordatoriosInvitaciones).toHaveBeenNthCalledWith(2, expect.objectContaining({ lote: 1 }));
+        expect(mockedApi.reservarRecordatoriosInvitaciones).toHaveBeenCalledTimes(2);
+    });
+
+    it('tope 0 desactiva los recordatorios en el bot: ni siquiera llama al backend', async () => {
+        process.env.LISTA_ESPERA_INVITACION_RECORDATORIO_LIMITE = '0';
+        campanaVacia();
+        await ejecutarCampanaInvitacion('regularizacion', PARAMS);
+        expect(mockedApi.reservarRecordatoriosInvitaciones).not.toHaveBeenCalled();
+    });
+
+    it('un número bloqueado por crisis no recibe el recordatorio', async () => {
+        (obtenerBloqueadosPorCrisis as jest.Mock).mockReturnValue(['573009998877']);
+        campanaVacia();
+        mockedApi.reservarRecordatoriosInvitaciones
+            .mockResolvedValueOnce(recordatorios([inv('IN000001', '573009998877'), inv('IN000002')]))
+            .mockResolvedValueOnce(recordatorios([], 'sin_candidatas'));
+
+        const resumen = await ejecutarCampanaInvitacion('regularizacion', PARAMS);
+
+        expect(mockedApi.enviarPlantillaInvitacionListaEspera).toHaveBeenCalledTimes(1);
+        expect(mockedApi.enviarPlantillaInvitacionListaEspera).toHaveBeenCalledWith(expect.objectContaining({ invitacion_id: 'IN000002' }), expect.anything(), expect.anything());
+        expect(resumen).toMatchObject({ recordatorios_enviados: 1, bloqueadas_crisis: 1 });
+    });
+
+    it('un envío fallido se cuenta como error de recordatorio y no se reintenta', async () => {
+        campanaVacia();
+        mockedApi.enviarPlantillaInvitacionListaEspera.mockResolvedValue({ exito: false, errorCode: '131047' } as any);
+        mockedApi.reservarRecordatoriosInvitaciones
+            .mockResolvedValueOnce(recordatorios([inv('IN000001')]))
+            .mockResolvedValueOnce(recordatorios([], 'sin_candidatas'));
+
+        const resumen = await ejecutarCampanaInvitacion('regularizacion', PARAMS);
+
+        expect(resumen).toMatchObject({ recordatorios_enviados: 0, recordatorios_errores: 1, estado: 'finalizada' });
+        expect(mockedApi.enviarPlantillaInvitacionListaEspera).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+        ['fuera del horario de contacto (409)', { ok: false, code: 409, cause: 'FUERA_DE_HORARIO_CONTACTO' }],
+        ['backend anterior sin el endpoint (404)', { ok: false, code: 404, cause: 'NOT_FOUND' }],
+        ['error del backend (500)', { ok: false, code: 500, cause: 'INTERNAL_SERVER_ERROR' }],
+    ])('%s: se detiene sin afectar el resultado de la campaña', async (_nombre, respuesta) => {
+        campanaVacia();
+        mockedApi.reservarRecordatoriosInvitaciones.mockResolvedValue(respuesta as any);
+
+        const resumen = await ejecutarCampanaInvitacion('regularizacion', PARAMS);
+
+        expect(resumen).toMatchObject({ estado: 'finalizada', motivo_fin: 'sin_candidatas', recordatorios_enviados: 0 });
+        expect(mockedApi.reservarRecordatoriosInvitaciones).toHaveBeenCalledTimes(1);
+        expect(mockedApi.finalizarEjecucionInvitacion).toHaveBeenCalledWith(expect.objectContaining({ estado: 'finalizada' }));
+    });
+
+    it('una excepción inesperada al recordar tampoco afecta a la campaña', async () => {
+        campanaVacia();
+        mockedApi.reservarRecordatoriosInvitaciones.mockRejectedValue(new Error('boom'));
+        const resumen = await ejecutarCampanaInvitacion('regularizacion', PARAMS);
+        expect(resumen).toMatchObject({ estado: 'finalizada', motivo_fin: 'sin_candidatas' });
+    });
+
+    it('si la campaña se abortó (interruptor apagado a mitad), no envía recordatorios', async () => {
+        mockedApi.reservarInvitaciones.mockImplementationOnce(async () => {
+            process.env.LISTA_ESPERA_INVITACION_ENABLED = 'false';
+            return reservaOk([inv('IN000001')]);
+        });
+        mockedApi.reservarInvitaciones.mockResolvedValue(reservaOk([]));
+
+        const resumen = await ejecutarCampanaInvitacion('regularizacion', PARAMS);
+
+        expect(resumen.estado).toBe('abortada');
+        expect(mockedApi.reservarRecordatoriosInvitaciones).not.toHaveBeenCalled();
     });
 });

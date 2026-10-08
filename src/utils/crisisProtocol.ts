@@ -19,8 +19,8 @@
 // El desbloqueo del número (tras la intervención humana) se hace hoy con el endpoint que ya existe:
 // POST /v1/blacklist { number, intent: 'remove' }.
 
-import { registrarActividadBot } from '../services/apiService';
-import { isCrisisProtocolEnabled } from './listaEsperaFlags';
+import { registrarActividadBot, registrarAlertaCrisisPorCorreo } from '../services/apiService';
+import { isCrisisProtocolEnabled, obtenerCanalAlertaCrisis } from './listaEsperaFlags';
 import { registrarBloqueoPorCrisis } from './crisisBlacklistStore';
 import { enviarAvisoAsesor } from './avisoAsesor';
 import { enmascararTelefono } from './telefono';
@@ -121,6 +121,23 @@ export function createCrisisInterceptor(getBot: () => CrisisCapableBot | undefin
         'Si sientes que estás en peligro inmediato, por favor comunícate ya con la Línea 123 o con la Línea de Salud Mental 106, disponibles las 24 horas.'
       ).catch((err) => console.error('[crisisProtocol] Error enviando mensaje de contención al usuario:', err));
 
+      // D7: con ALERTA_CRISIS_CANAL=email la alerta sale SOLO por correo, enviada por el backend (con el teléfono
+      // completo y sin el texto del mensaje). Ya no se manda el WhatsApp al asesor: ese canal fallaba por la ventana
+      // de 24 h de Meta. El backend guarda la alerta en su bandeja y la reintenta; aquí solo se entrega la petición.
+      if (obtenerCanalAlertaCrisis() === 'email') {
+        registrarAlertaCrisisPorCorreo(from)
+          .then((resultado) => {
+            if (!resultado.registrada) {
+              console.error(`[crisisProtocol] ALERTA DE CRISIS NO REGISTRADA por correo para ${enmascararTelefono(from)} tras ${resultado.intentos} intentos: nadie fue avisado automáticamente.`);
+              return registrarActividadBot('aviso_crisis_fallido', from, { canal: 'email', intentos: resultado.intentos }).catch(() => false);
+            }
+            if (resultado.correoConfigurado === false) {
+              console.error(`[crisisProtocol] La alerta de crisis de ${enmascararTelefono(from)} quedó en la bandeja del backend, pero el correo NO está configurado allí: no se enviará hasta configurarlo.`);
+            }
+            return undefined;
+          })
+          .catch((err) => console.error('[crisisProtocol] Error registrando la alerta de crisis por correo:', err));
+      } else {
       // Escalamiento a un humano. Canal PLACEHOLDER (env CANAL_ESCALAMIENTO_CRISIS) — pendiente de
       // definir con el cliente cuál debe ser el canal real (ver pregunta 3 del documento de análisis).
       const canalEscalamiento = process.env.CANAL_ESCALAMIENTO_CRISIS;
@@ -143,6 +160,7 @@ export function createCrisisInterceptor(getBot: () => CrisisCapableBot | undefin
         console.error('[crisisProtocol] CANAL_ESCALAMIENTO_CRISIS no está configurado en .env — no se pudo notificar a un humano automáticamente.');
         // Runbook B6: también queda registrado en chat_stats (fase 'canal_no_configurado').
         enviarAvisoAsesor({ tipo: 'crisis', canal: '', referencia: `tel:${enmascararTelefono(from)}`, mensaje: '' }).catch(() => undefined);
+      }
       }
 
       // Registro de evento — solo metadata, nunca el texto del mensaje (no persistir contenido

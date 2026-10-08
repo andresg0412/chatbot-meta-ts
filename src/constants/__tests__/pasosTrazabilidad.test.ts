@@ -10,8 +10,14 @@ describe('catálogo de pasos de trazabilidad', () => {
 
     // 67 de la tabla 11.3 + 2 de TB-05/TBOT-03 (recordatorio.selecciona_cita y recordatorio.confirma_cancelar)
     // + 3 de la invitación a la lista de espera (migración 034).
-    it('tiene los 72 pasos (67 de la tabla 11.3 + 2 de TB-05/TBOT-03 + 3 de la invitación)', () => {
-        expect(CATALOGO_PASOS).toHaveLength(72);
+    it('tiene los 74 pasos (67 de la tabla 11.3 + 2 de TB-05/TBOT-03 + 3 de la invitación + 2 de la oferta de un toque)', () => {
+        expect(CATALOGO_PASOS).toHaveLength(74);
+    });
+
+    // Semilla de `catalogo_pasos` de la migración 040 (proyecto-ips, oferta de cupo con un toque, D1/D10).
+    it('pasos de la oferta de un toque idénticos a la migración 040', () => {
+        expect(obtenerPaso('lista_espera.oferta_confirmacion')).toEqual({ paso: 'lista_espera.oferta_confirmacion', flujo: 'lista_espera', orden: 2, es_final: false });
+        expect(obtenerPaso('lista_espera.post_rechazo')).toEqual({ paso: 'lista_espera.post_rechazo', flujo: 'lista_espera', orden: 3, es_final: true });
     });
 
     // Semilla de `catalogo_pasos` de la migración 034 (proyecto-ips/docs/features/

@@ -24,6 +24,8 @@ import {
     KW_REPROGRAMAR_RECORDATORIO,
     KW_SI_LO_TOMO,
     KW_NO_PUEDO,
+    KW_CONFIRMAR_OFERTA,
+    KW_NO_CONFIRMAR_OFERTA,
     KW_RETIRAR_LISTA_ESPERA,
     KW_SI_DESEO_INGRESAR,
     KW_NO_GRACIAS_INVITACION,
@@ -50,6 +52,9 @@ const BOTONES_ANCLADOS: RegExp[] = [
     KW_REPROGRAMAR_RECORDATORIO,
     KW_SI_LO_TOMO,
     KW_NO_PUEDO,
+    // Confirmación de un toque de la oferta de cupo (D1).
+    KW_CONFIRMAR_OFERTA,
+    KW_NO_CONFIRMAR_OFERTA,
     KW_RETIRAR_LISTA_ESPERA,
     // Invitación a la lista de espera (2026-10-04-campanas-invitacion-lista-espera-implementacion.md, 6.6).
     KW_SI_DESEO_INGRESAR,

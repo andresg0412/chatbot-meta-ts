@@ -112,7 +112,8 @@ async function procesarAccionOfertar(accion: AccionOfertar): Promise<void> {
             accion.profesional,
             accion.fecha_cita,
             accion.hora_cita,
-            minutosVentana
+            minutosVentana,
+            accion.oferta_id
         );
 
         if (resultado.exito) {
@@ -246,6 +247,28 @@ async function procesarAccionEscalar(accion: AccionEscalar): Promise<void> {
     }
 }
 
+/**
+ * Aviso de pausa de la lista de espera. Con `reactivacion_dias` (el backend reactiva la pausa solo, D5) el
+ * paciente sabe que se le volverá a avisar sin hacer nada; sin él (backend anterior o reactivación apagada)
+ * se conserva el texto de siempre. Sin términos clínicos (regla de privacidad de la lista de espera).
+ */
+export function construirMensajePausa(accion: Pick<AccionNotificarPausa, 'nombre_paciente' | 'reactivacion_dias'>): string {
+    const dias = Number(accion.reactivacion_dias);
+    if (Number.isFinite(dias) && dias > 0) {
+        return (
+            `Hola ${accion.nombre_paciente}, como no pudimos contactarte en los últimos días, pausamos por ahora tus ` +
+            'avisos para adelantar tu cita. En unos ' + `${Math.floor(dias)} días los activaremos de nuevo automáticamente, ` +
+            'siempre que tu cita siga vigente; no tienes que hacer nada. ¡Gracias por tu comprensión! 😊'
+        );
+    }
+    return (
+        `Hola ${accion.nombre_paciente}, por falta de respuesta saliste de la lista de espera para ` +
+        'adelantar tu cita. Si quieres volver a inscribirte, agenda o consulta tu cita nuevamente y ' +
+        'acepta la opción de avisos cuando se libere un espacio con el profesional que te atiende. ' +
+        '¡Gracias por tu comprensión! 😊'
+    );
+}
+
 async function procesarAccionNotificarPausa(accion: AccionNotificarPausa, sendRaw: SendRawMessage): Promise<void> {
     // No requiere confirmación de vuelta al backend: el backend ya dejó la inscripción en 'pausada'.
     const telefonoLog = enmascararTelefono(accion.telefono_paciente);
@@ -268,13 +291,7 @@ async function procesarAccionNotificarPausa(accion: AccionNotificarPausa, sendRa
     }
 
     try {
-        await sendRaw(
-            telefonoDestino,
-            `Hola ${accion.nombre_paciente}, por falta de respuesta saliste de la lista de espera para ` +
-            'adelantar tu cita. Si quieres volver a inscribirte, agenda o consulta tu cita nuevamente y ' +
-            'acepta la opción de avisos cuando se libere un espacio con el profesional que te atiende. ' +
-            '¡Gracias por tu comprensión! 😊'
-        );
+        await sendRaw(telefonoDestino, construirMensajePausa(accion));
     } catch (error: any) {
         console.error(`[listaEsperaCascadaPoller] Error notificando pausa de lista de espera a tel ${telefonoLog}:`, error?.message ?? error);
     }

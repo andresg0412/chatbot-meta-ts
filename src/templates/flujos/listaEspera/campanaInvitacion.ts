@@ -11,6 +11,11 @@
 //      filtro de crisis → `registrar-envio {exito:false, motivo:'bloqueado_crisis'}`, o envío de la
 //      plantilla → `registrar-envio` con el resultado; pausa `LISTA_ESPERA_INVITACION_PAUSA_MS`.
 //   5. `ejecuciones/finalizar` (E8) + `campana_ejecucion{fin}`.
+// Después del bucle (paso 4b, D12 de docs/features/2026-10-07-lista-espera-aceptacion-y-escalamientos.md): un
+// ÚNICO recordatorio por invitación a quien no respondió. El backend decide a quién (apagado por defecto con
+// LISTA_ESPERA_INVITACION_RECORDATORIO_HORAS=0) y estampa el tope de 1 por cita al reservar; aquí solo se reenvía
+// la misma plantilla, con un tope por ejecución (`LISTA_ESPERA_INVITACION_RECORDATORIO_LIMITE`) para repartir los
+// pendientes en varios días en vez de enviarlos de golpe. Es best-effort: nunca cambia el resultado de la campaña.
 // El candado en memoria por campaña se suelta en `finally`. El bot corre en PM2 `fork` (una sola
 // instancia), así que el candado en memoria basta; el backend además serializa `reservar` con un
 // advisory lock y sus índices únicos impiden duplicados.
@@ -22,6 +27,7 @@ import {
     finalizarSinRespuestaInvitaciones,
     registrarEnvioInvitacion,
     reservarInvitaciones,
+    reservarRecordatoriosInvitaciones,
     enviarPlantillaInvitacionListaEspera,
 } from '../../../services/apiService';
 import type {
@@ -76,6 +82,14 @@ export function pausaInvitacionMs(): number {
     return enteroEnv('LISTA_ESPERA_INVITACION_PAUSA_MS', PAUSA_DEFAULT_MS, 0, 10 * 60 * 1000);
 }
 
+/**
+ * `LISTA_ESPERA_INVITACION_RECORDATORIO_LIMITE` (default 50, 0..300): recordatorios como máximo por ejecución.
+ * 0 los desactiva en el bot. El backend también tiene su interruptor (RECORDATORIO_HORAS).
+ */
+export function limiteRecordatorios(): number {
+    return enteroEnv('LISTA_ESPERA_INVITACION_RECORDATORIO_LIMITE', 50, 0, LIMITE_MAXIMO_INVITACION);
+}
+
 /** Lista piloto en formato de envío `57XXXXXXXXXX` (vacía = sin restricción). */
 export function telefonosPilotoFormato57(): string[] {
     return obtenerTelefonosPiloto().map((clave) => `57${clave}`);
@@ -120,6 +134,9 @@ export interface ResumenEjecucionInvitacion {
     enviadas: number;
     errores: number;
     bloqueadas_crisis: number;
+    /** D12: recordatorios enviados / con error en esta ejecución (no suman a `enviadas` ni `errores`). */
+    recordatorios_enviados: number;
+    recordatorios_errores: number;
 }
 
 const dormir = (ms: number) => (ms > 0 ? new Promise<void>((r) => setTimeout(r, ms)) : Promise.resolve());
@@ -141,6 +158,8 @@ export async function ejecutarCampanaInvitacion(
         enviadas: 0,
         errores: 0,
         bloqueadas_crisis: 0,
+        recordatorios_enviados: 0,
+        recordatorios_errores: 0,
     };
     if (enCurso.has(tipo)) return resumen;
     enCurso.add(tipo);
@@ -238,6 +257,11 @@ export async function ejecutarCampanaInvitacion(
             }
         }
 
+        // Paso 4b (D12): el recordatorio único. Solo si la campaña no se abortó.
+        if (estadoFin === 'finalizada') {
+            await enviarRecordatorios(tipo, campana, campanaEjecucionId, nombrePlantilla, resumen, lote, pausaMs, soloTelefonos);
+        }
+
         resumen.estado = estadoFin;
         resumen.motivo_fin = motivoFin;
         return resumen;
@@ -278,6 +302,72 @@ export async function ejecutarCampanaInvitacion(
         } finally {
             enCurso.delete(tipo);
         }
+    }
+}
+
+/**
+ * D12: reserva y reenvía el único recordatorio a quien no respondió. Best-effort: cualquier fallo se registra y se
+ * sigue, sin afectar el resultado de la campaña. Una invitación bloqueada por crisis no se recuerda (la reserva ya
+ * consumió su único recordatorio, que es lo más seguro para esa persona).
+ */
+async function enviarRecordatorios(
+    tipo: CampanaTipoInvitacion,
+    campana: CampanaTraza,
+    campanaEjecucionId: string | undefined,
+    nombrePlantilla: string,
+    resumen: ResumenEjecucionInvitacion,
+    lote: number,
+    pausaMs: number,
+    soloTelefonos: string[]
+): Promise<void> {
+    try {
+        const limite = limiteRecordatorios();
+        if (limite <= 0) return;
+        const maxVueltas = Math.ceil(limite / lote) + 2;
+        let procesados = 0;
+        for (let vuelta = 0; vuelta < maxVueltas && procesados < limite; vuelta++) {
+            if (!isInvitacionListaEsperaEnabled() || !esBotHabilitado()) break;
+            const reserva = await reservarRecordatoriosInvitaciones({
+                campana_tipo: tipo,
+                lote: Math.min(lote, limite - procesados),
+                solo_telefonos: soloTelefonos,
+            });
+            if (reserva.ok === false) {
+                // 409 fuera de horario, backend anterior (404) u otro error: se detiene sin afectar la campaña.
+                console.warn(`[invitaciones] Recordatorios de ${tipo} detenidos (status=${reserva.code}, cause=${reserva.cause}).`);
+                break;
+            }
+            const invitaciones: InvitacionReservada[] = Array.isArray(reserva.data?.invitaciones) ? reserva.data.invitaciones : [];
+            if (invitaciones.length === 0) break; // desactivado en el backend, o nadie por recordar
+
+            const bloqueados = new Set(
+                obtenerBloqueadosPorCrisis()
+                    .map((numero) => claveComparacionTelefono(numero))
+                    .filter((clave): clave is string => !!clave)
+            );
+            for (const inv of invitaciones) {
+                procesados += 1;
+                if (!inv?.invitacion_id) continue;
+                const clave = claveComparacionTelefono(inv.telefono);
+                if (clave && bloqueados.has(clave)) {
+                    resumen.bloqueadas_crisis += 1;
+                    continue;
+                }
+                anotarCampanaDeInvitacion(inv.invitacion_id, campana);
+                const envio = await enviarPlantillaInvitacionListaEspera(inv, campanaEjecucionId, campana);
+                if (envio.exito) resumen.recordatorios_enviados += 1;
+                else resumen.recordatorios_errores += 1;
+                await dormir(pausaMs);
+            }
+        }
+        if (procesados > 0) {
+            console.log(
+                `[invitaciones] Recordatorios de ${tipo}: enviados=${resumen.recordatorios_enviados}, errores=${resumen.recordatorios_errores} ` +
+                `(plantilla ${nombrePlantilla}).`
+            );
+        }
+    } catch (error) {
+        console.error(`[invitaciones] Error enviando los recordatorios de ${tipo}:`, (error as any)?.message ?? error);
     }
 }
 

@@ -116,6 +116,10 @@ import {
     ofertaCupoAceptaDocumentoFlow,
     ofertaCupoRechazaDocumentoFlow,
     ofertaCupoAccionFlow,
+    // LISTA DE ESPERA — confirmación de un toque de la oferta (D1) y pregunta de seguir en la lista (D10)
+    ofertaCupoConfirmaFlow,
+    ofertaCupoNoConfirmaFlow,
+    ofertaPostRechazoFlow,
     // LISTA DE ESPERA — retiro voluntario por WhatsApp (runbook B5)
     retiroListaEsperaFlow,
     retiroListaEsperaAccionFlow,
@@ -164,6 +168,9 @@ const flujosRegistradosCompletos = [
     botonesConfirmarCancelacionFlow,
     ofertaCupoAceptaDocumentoFlow,
     ofertaCupoRechazaDocumentoFlow,
+    // Confirmación de un toque de la oferta de cupo ("Sí, adelantar" / "No, dejar así"), regex ancladas.
+    ofertaCupoConfirmaFlow,
+    ofertaCupoNoConfirmaFlow,
     // Invitación a la lista de espera ("Si, deseo ingresar" / "No, gracias" / "Hablar con agente"), regex ancladas.
     // proyecto-ips/docs/features/2026-10-04-campanas-invitacion-lista-espera-implementacion.md, 6.6.
     invitacionAceptaFlow,
@@ -245,6 +252,7 @@ const flujosRegistradosCompletos = [
     step23AgendarCita,
     stepListaEsperaOptIn,
     ofertaCupoAccionFlow,
+    ofertaPostRechazoFlow,
     retiroListaEsperaAccionFlow,
     invitacionDocumentoFlow,
     invitacionSeleccionFlow,
