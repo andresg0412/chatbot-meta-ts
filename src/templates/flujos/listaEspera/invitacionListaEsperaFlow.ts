@@ -10,8 +10,10 @@
 //   1. Entrada por el botón (keyword anclada). Se parsea `ctx.payload` ('LEINV:<invitacion_id>:A|R',
 //      utils/invitacionPayload.ts). Si la acción del payload no coincide con el botón, manda el texto del
 //      botón (lo que el paciente vio y tocó).
-//   2. Cualquiera de los dos botones → documento (captura) → `responder` con
-//      `consentimiento_texto`. 403 DOCUMENTO_NO_COINCIDE → un solo reintento del documento.
+//   2. Con payload, cualquiera de los dos botones → `responder` directo, SIN pedir el documento (2026-10-08,
+//      German): la identidad la valida el backend por el celular al que se envió la invitación. Aceptar manda
+//      `consentimiento_texto` (texto de la plantilla + botón tocado). Si el backend aún exige el documento
+//      (400 DOCUMENTO_REQUERIDO, despliegue gradual) se pide como antes.
 //   3. Sin payload (fallback, cualquiera de los dos botones) → documento → `por-documento`: 0 → "no
 //      encontramos"; 1 → responder sobre esa; 2 o más → lista de Meta (hasta 9 + "Ninguna de estas").
 //   La cita NUNCA se toca: `responder` solo crea/re-apunta la inscripción en lista de espera.
@@ -200,7 +202,7 @@ async function ejecutarRespuesta(ctx: any, fns: Fns): Promise<any> {
     const via: 'payload' | 'documento' = st.invitacionVia === 'payload' ? 'payload' : 'documento';
     const elegida: InvitacionPorDocumento | undefined = st.invitacionElegida;
 
-    if (!invitacionId || !accion || (accion === 'A' && !documento) || (accion === 'R' && via !== 'payload' && !documento)) {
+    if (!invitacionId || !accion || (via !== 'payload' && !documento)) {
         await terminar(ctx, state);
         return endFlow(MENSAJE_CONVERSACION_TERMINADA);
     }
@@ -262,9 +264,9 @@ async function ejecutarRespuesta(ctx: any, fns: Fns): Promise<any> {
             return endFlow();
         }
 
-        // Compatibilidad durante el despliegue gradual: el backend anterior exigía documento
-        // también para rechazar. Conservar el payload elegido y reintentar con captura.
-        if (code === 400 && cause === 'DOCUMENTO_REQUERIDO' && accion === 'R' && via === 'payload' && !documento) {
+        // Compatibilidad durante el despliegue gradual: un backend anterior exige el documento con payload
+        // (para aceptar, o también para rechazar). Conservar el payload elegido y reintentar con captura.
+        if (code === 400 && cause === 'DOCUMENTO_REQUERIDO' && via === 'payload' && !documento) {
             return pedirDocumento(ctx, fns, { invitacionDocumento: undefined });
         }
 
@@ -371,7 +373,8 @@ async function entrada(ctx: any, fns: Fns, accionBoton: AccionInvitacion): Promi
             invitacionIntentosDoc: 0,
         });
 
-        if (invitacionId && accionBoton === 'R') return ejecutarRespuesta(ctx, fns);
+        // Con el id del botón no se pide el documento (aceptar ni rechazar); sin él, el documento identifica.
+        if (invitacionId) return ejecutarRespuesta(ctx, fns);
         return pedirDocumento(ctx, fns);
     } catch (error) {
         return errorInesperado(ctx, fns, error);
