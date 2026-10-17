@@ -47,6 +47,7 @@ import { MENSAJE_DOCUMENTO_FINAL } from '../../utils/mensajesConfirmacion';
 import { ID_FILA_NINGUNA } from '../../utils/mensajesRecordatorio';
 import { MENSAJE_SALIR } from '../flujos/palabrasGlobales';
 import { stepListaEsperaOptIn, TEXTO_CONSENTIMIENTO_LISTA_ESPERA } from '../flujos/agendarCita/listaEspera/stepListaEsperaOptIn';
+import { descartarCapturaPendiente, registrarHistorialBot } from '../../utils/capturaPendiente';
 
 jest.setTimeout(30000);
 
@@ -100,9 +101,10 @@ function crearBot() {
     const provider = new FakeProvider();
     let numero = 573150000000;
     const flujos = [flujoPruebaOptin, ...construirFlujosRegistrados(true)];
-    const listo = createBot({ flow: createFlow(flujos as any), provider: provider as any, database: new MemoryDB() });
+    const db = new MemoryDB();
+    const listo = createBot({ flow: createFlow(flujos as any), provider: provider as any, database: db });
     const nuevoNumero = () => String(numero++);
-    type Entrada = string | { body: string; payload?: string };
+    type Entrada = string | { body: string; payload?: string; type?: string };
     async function enviar(from: string, entradas: Entrada[]): Promise<Enviado[]> {
         await listo;
         const desde = provider.enviados.length;
@@ -113,7 +115,7 @@ function crearBot() {
         }
         return provider.enviados.slice(desde).filter((m) => m.to === from);
     }
-    return { provider, enviar, nuevoNumero };
+    return { provider, enviar, nuevoNumero, db, listo };
 }
 
 const textos = (salida: Enviado[]) => salida.map((m) => m.texto);
@@ -438,5 +440,71 @@ describe('captura del opt-in de agendar (C11 y T7)', () => {
         await bot.enviar(from, [KW_PRUEBA_OPTIN]);
         const fin = textos(await bot.enviar(from, [NO]));
         expect(fin).toEqual(['Entendido, no te inscribiremos en la lista de espera. ¡Gracias por confiar en nosotros! 😊']);
+    });
+});
+
+// Bug 2026-10-16 (celular 3123778400): el paciente agendó por el bot, no contestó el opt-in y dos días
+// después tocó "Si, deseo ingresar" en la invitación. La captura del opt-in recibió el botón y respondió
+// "no te inscribiremos". Los botones de plantilla llegan como `type: 'button'` con payload.
+describe('opt-in pendiente + botón de una plantilla (bug 2026-10-16)', () => {
+    const NO_INSCRIBE = 'Entendido, no te inscribiremos en la lista de espera. ¡Gracias por confiar en nosotros! 😊';
+    const botonPlantilla = (body: string, payload: string) => ({ body, payload, type: 'button' });
+
+    it('"Si, deseo ingresar" de la invitación dentro de la sesión → inscribe por la invitación, no responde el opt-in', async () => {
+        const from = bot.nuevoNumero();
+        await bot.enviar(from, [KW_PRUEBA_OPTIN]);
+        const salida = textos(await bot.enviar(from, [botonPlantilla(SI, `LEINV:${ID}:A`)]));
+        expect(salida).not.toContain(NO_INSCRIBE);
+        expect(mockedApi.responderInvitacion).toHaveBeenCalledWith(expect.objectContaining({ invitacion_id: ID, respuesta: 'acepta', via: 'payload' }));
+        expect(salida.join(' ')).toMatch(/Quedaste inscrito en la lista de espera/);
+        expect(mockedApi.registrarOptinListaEspera).not.toHaveBeenCalled();
+        expect(mockedApi.inscribirListaEspera).not.toHaveBeenCalled();
+    });
+
+    it('"No, gracias" de la invitación (con payload) → rechazo de la invitación, no del opt-in', async () => {
+        const from = bot.nuevoNumero();
+        await bot.enviar(from, [KW_PRUEBA_OPTIN]);
+        await bot.enviar(from, [botonPlantilla(NO, `LEINV:${ID}:R`)]);
+        expect(mockedApi.responderInvitacion).toHaveBeenCalledWith({ invitacion_id: ID, celular: from, respuesta: 'rechaza', via: 'payload' });
+        expect(mockedApi.registrarOptinListaEspera).not.toHaveBeenCalled();
+    });
+
+    it('sesión cerrada por inactividad (pregunta descartada) → el botón de la invitación inscribe', async () => {
+        const from = bot.nuevoNumero();
+        registrarHistorialBot(bot.db as any);
+        try {
+            await bot.enviar(from, [KW_PRUEBA_OPTIN]);
+            expect(descartarCapturaPendiente(from)).toBeGreaterThan(0);
+            const salida = textos(await bot.enviar(from, [botonPlantilla(SI, `LEINV:${ID}:A`)]));
+            expect(salida).not.toContain(NO_INSCRIBE);
+            expect(mockedApi.responderInvitacion).toHaveBeenCalledWith(expect.objectContaining({ respuesta: 'acepta', via: 'payload' }));
+            expect(salida.join(' ')).toMatch(/Quedaste inscrito en la lista de espera/);
+        } finally {
+            registrarHistorialBot(null);
+        }
+    });
+
+    it('pregunta vencida (state ya limpio) + un saludo → conversación nueva, sin "no te inscribiremos"', async () => {
+        const from = bot.nuevoNumero();
+        await bot.enviar(from, [KW_PRUEBA_OPTIN]);
+        const instancia: any = await bot.listo;
+        instancia.stateHandler.clear(from)();
+        await instancia.stateHandler.updateState({ from })({ celular: from });
+        const salida = textos(await bot.enviar(from, ['hola']));
+        expect(salida.length).toBeGreaterThan(0);
+        expect(salida).not.toContain(NO_INSCRIBE);
+        expect(mockedApi.registrarOptinListaEspera).not.toHaveBeenCalled();
+    });
+
+    it('pregunta vencida + su propio "No, gracias" → mismo mensaje de siempre, sin registrar (no hay datos de la cita)', async () => {
+        const from = bot.nuevoNumero();
+        await bot.enviar(from, [KW_PRUEBA_OPTIN]);
+        const instancia: any = await bot.listo;
+        instancia.stateHandler.clear(from)();
+        await instancia.stateHandler.updateState({ from })({ celular: from });
+        const salida = textos(await bot.enviar(from, [NO]));
+        expect(salida).toEqual([NO_INSCRIBE]);
+        expect(mockedApi.registrarOptinListaEspera).not.toHaveBeenCalled();
+        expect(mockedApi.responderInvitacion).not.toHaveBeenCalled();
     });
 });

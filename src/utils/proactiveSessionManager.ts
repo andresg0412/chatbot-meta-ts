@@ -21,6 +21,8 @@ import {
 } from './trazabilidad';
 // TBOT-02: toda sesión que termina borra el state de @builderbot del número (ver estadoConversacion.ts).
 import { limpiarEstadoConversacion } from './estadoConversacion';
+// Los cierres por inactividad también descartan la pregunta pendiente de @builderbot (ver capturaPendiente.ts).
+import { descartarCapturaPendiente } from './capturaPendiente';
 
 // Ruta del archivo JSON para persistencia de sesiones
 const SESSIONS_DB_PATH = path.join(__dirname, 'userSessionsDB.json');
@@ -143,6 +145,7 @@ async function closeSessionProactively(userId: string, motivo: MotivoFinSesion =
   saveUserSessions();
   emitirSesionFin(userId, session, motivoPorInactividad(session, motivo));
   limpiarEstadoConversacion(userId);
+  descartarCapturaPendiente(userId);
   // Sin await: la estadística nunca bloquea (registrarActividadBot ya no espera al backend).
   reiniciarIntentosNoEntendido(userId);
   registrarActividadBot('chat_abandonado', userId, session.finNegocio ? { post_fin: true } : {}, {
@@ -435,6 +438,7 @@ export function cleanupExpiredSessions(): void {
     const session = userSessions[userId];
     if (session.isActive && (now - session.lastActivity) > SESSION_TIMEOUT_MS) {
       closeUserSession(userId, motivoPorInactividad(session, 'timeout'));
+      descartarCapturaPendiente(userId);
       hasChanges = true;
     }
   }
@@ -457,6 +461,7 @@ export function cleanupOldSessionsWithoutNotification(): void {
       emitirSesionFin(userId, session, 'timeout_12h');
       session.isActive = false;
       limpiarEstadoConversacion(userId);
+      descartarCapturaPendiente(userId);
       if (session.timerId) {
         clearTimeout(session.timerId);
         session.timerId = undefined;

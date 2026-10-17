@@ -31,6 +31,7 @@ function cargar(sesionesJson?: string) {
             timeout: require('../proactiveSessionTimeout'),
             traza: require('../trazabilidad'),
             api: require('../../services/apiService'),
+            captura: require('../capturaPendiente'),
         };
     });
     return modulos as {
@@ -38,6 +39,7 @@ function cargar(sesionesJson?: string) {
         timeout: typeof import('../proactiveSessionTimeout');
         traza: typeof import('../trazabilidad');
         api: { registrarActividadBot: jest.Mock };
+        captura: typeof import('../capturaPendiente');
     };
 }
 
@@ -234,4 +236,37 @@ it.each(['explicito', 'timer', 'entrada'] as const)('cada cierre reinicia todos 
     traza.trackNoEntendido(TEL, 'agendar.s10_selecciona_hora');
     traza.trackNoEntendido(TEL, 'agendar.s09_selecciona_fecha');
     expect(eventos(traza, 'msg_no_entendido').map((e: any) => e.metadata.intento)).toEqual([1, 2, 1, 1, 1]);
+});
+
+// Bug 2026-10-16 (celular 3123778400): la pregunta pendiente de @builderbot sobrevivía al cierre por
+// inactividad y se quedaba con un botón de plantilla que llegó días después.
+it.each(['timer', 'limpieza_12h', 'limpieza_15min'] as const)('el cierre por inactividad (%s) descarta la pregunta pendiente solo de ese número', (cierre) => {
+    const { mgr, captura } = cargar();
+    const OTRO = '573009999999';
+    const db = { listHistory: [
+        { from: TEL, keyword: 'k1', options: { capture: true } },
+        { from: OTRO, keyword: 'k2', options: { capture: true } },
+        { from: TEL, keyword: 'k3', options: { capture: true } },
+    ] as any[] };
+    captura.registrarHistorialBot(db);
+    mgr.updateUserActivity(TEL, 'welcome');
+    if (cierre === 'timer') {
+        jest.advanceTimersByTime(UNA_HORA + 1);
+    } else {
+        // Sin correr el timer (como si se hubiera perdido): la limpieza periódica cierra la sesión.
+        jest.setSystemTime(new Date(Date.now() + (cierre === 'limpieza_12h' ? 13 * UNA_HORA : UNA_HORA + 60 * 1000)));
+        if (cierre === 'limpieza_12h') mgr.cleanupOldSessionsWithoutNotification();
+        else mgr.cleanupExpiredSessions();
+    }
+    expect(db.listHistory.map((e) => e.keyword)).toEqual(['k2']);
+});
+
+it.each(['explicito', 'entrada'] as const)('un cierre %s (dentro del procesamiento de un mensaje) no toca el historial', (cierre) => {
+    const { mgr, captura } = cargar();
+    const db = { listHistory: [{ from: TEL, keyword: 'k1', options: { capture: true } }] as any[] };
+    captura.registrarHistorialBot(db);
+    mgr.updateUserActivity(TEL, 'welcome');
+    if (cierre === 'explicito') mgr.closeUserSession(TEL);
+    else mgr.expirarSesionPorInactividad(TEL);
+    expect(db.listHistory).toHaveLength(1);
 });

@@ -20,6 +20,7 @@ import { isCrisisProtocolEnabled } from './utils/listaEsperaFlags';
 import { iniciarTrazabilidad, trackEvento } from './utils/trazabilidad';
 import { crearListenerMensajeEntrante, crearMiddlewareEstadosMeta } from './utils/trazabilidadMeta';
 import { registrarAlmacenEstado } from './utils/estadoConversacion';
+import { registrarHistorialBot } from './utils/capturaPendiente';
 
 const PORT = process.env.PORT ?? 3008
 
@@ -80,6 +81,9 @@ const main = async () => {
     // TBOT-02: los cierres de sesión que ocurren fuera de un flujo (timer de 1 h, limpieza periódica)
     // borran el state de @builderbot del número a través de este almacén (ver utils/estadoConversacion.ts).
     registrarAlmacenEstado(bot.stateHandler);
+    // Esos mismos cierres por inactividad descartan la pregunta pendiente del número en el historial de
+    // @builderbot, para que no se quede con respuestas que lleguen días después (ver utils/capturaPendiente.ts).
+    registrarHistorialBot(adapterDB as any);
 
     // Runbook B8: restaurar los números bloqueados por el protocolo de crisis (persistidos en
     // src/utils/crisisBlacklistDB.json) para que un reinicio no los desbloquee sin intervención
