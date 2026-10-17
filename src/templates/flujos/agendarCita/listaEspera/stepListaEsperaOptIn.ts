@@ -4,6 +4,8 @@ import { registrarActividadBot, inscribirListaEspera, registrarOptinListaEspera 
 import { extraerFechaISO, formatearHoraHHMM } from '../../../../utils/fechaHora';
 import { TEXTO_COMANDO_RETIRO_LISTA_ESPERA } from '../../keywordsBotones';
 import { trackNoEntendido, trackPaso, trackErrorBackend, trackFin, trackIdentificacion } from '../../../../utils/trazabilidad';
+import { esBotonDeOtraPlantilla, esPalabraSalir } from '../../palabrasGlobales';
+import { welcomeFlow } from '../../../welcomeFlow';
 
 /**
  * Texto exacto de consentimiento mostrado al paciente — se envía tal cual al backend en
@@ -63,6 +65,24 @@ function registrarDecisionOptin(
 
 /** Botón de rechazo explícito de la pregunta de opt-in (mismo texto que el botón de abajo). */
 const BOTON_OPTIN_NO_GRACIAS = 'No, gracias';
+const BOTON_OPTIN_SI = 'Sí, avísame';
+
+/**
+ * Botón de una PLANTILLA (invitación, recordatorio, oferta…), no de esta pregunta. provider-meta entrega
+ * los botones de plantilla como `type: 'button'` con `payload`, y los botones de esta pregunta como
+ * `interactive` sin payload. Es la única forma de separar el "No, gracias" de la invitación del
+ * "No, gracias" de aquí: el texto es el mismo.
+ */
+function esBotonDePlantilla(ctx: any): boolean {
+    return ctx?.type === 'button' || (typeof ctx?.payload === 'string' && ctx.payload.trim() !== '');
+}
+
+/** Respuestas que sí son de esta pregunta: sus dos botones y "Salir". */
+function esRespuestaPropiaOptin(texto: unknown): boolean {
+    if (esPalabraSalir(texto)) return true;
+    const limpio = typeof texto === 'string' ? texto.trim() : '';
+    return limpio === BOTON_OPTIN_SI || limpio === BOTON_OPTIN_NO_GRACIAS;
+}
 
 const stepListaEsperaOptIn = addKeyword(EVENTS.ACTION)
     .addAnswer(
@@ -70,13 +90,29 @@ const stepListaEsperaOptIn = addKeyword(EVENTS.ACTION)
         {
             capture: true,
             buttons: [
-                { body: 'Sí, avísame' },
+                { body: BOTON_OPTIN_SI },
                 { body: BOTON_OPTIN_NO_GRACIAS },
             ],
         },
-        async (ctx, { state, flowDynamic, endFlow }) => {
+        async (ctx, { state, flowDynamic, endFlow, gotoFlow }) => {
+            // Botón de otra plantilla (caso real 2026-10-16: "Si, deseo ingresar" de la invitación cayó aquí
+            // y se respondió "no te inscribiremos"). No es la respuesta al opt-in: se suelta sin responder
+            // para que @builderbot siga con el flujo de ese botón. Es seguro porque esta es la última
+            // pregunta de su flujo. No se registra ninguna decisión del opt-in (queda como abandono, D16).
+            if (esBotonDePlantilla(ctx) && esBotonDeOtraPlantilla(ctx.body)) {
+                console.log(`[optin] ${ctx.from}: botón de plantilla en la pregunta del opt-in, se deja pasar a su flujo.`);
+                return;
+            }
+
             // TBOT-02: closeUserSession borra el state, así que los datos de la cita se leen antes.
             const datosOptin = leerDatosOptin(state);
+
+            // Pregunta vencida: la sesión ya se cerró (el state no tiene la cita) y el mensaje no es uno de
+            // los botones de esta pregunta. No se contesta "no te inscribiremos" a un saludo que llega horas
+            // o días después: se empieza una conversación nueva.
+            if (!datosOptin && !esRespuestaPropiaOptin(ctx.body)) {
+                return gotoFlow(welcomeFlow);
+            }
             if (ctx.body === 'Salir' || ctx.body === 'salir') {
                 trackPaso(ctx.from, 'agendar.lista_espera_optin', 'ok', { metadata: { acepta: false } });
                 registrarDecisionOptin(datosOptin, 'rechaza', ctx.from, null);
@@ -85,7 +121,7 @@ const stepListaEsperaOptIn = addKeyword(EVENTS.ACTION)
                 return endFlow();
             }
 
-            if (ctx.body !== 'Sí, avísame') {
+            if (ctx.body !== BOTON_OPTIN_SI) {
                 trackPaso(ctx.from, 'agendar.lista_espera_optin', 'ok', { metadata: { acepta: false } });
                 // D16 (2026-10-04-campanas-invitacion-lista-espera-implementacion.md): solo el botón "No, gracias"
                 // es un rechazo explícito que se registra (y bloquea la re-invitación). Cualquier otro texto es un
