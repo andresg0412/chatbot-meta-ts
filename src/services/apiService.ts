@@ -2189,3 +2189,104 @@ export async function enviarPlantillaInvitacionListaEspera(
         return trazar(resultadoEnvioDesdeError(error));
     }
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Cancelación automática de citas Pendiente de mañana (la dispara el cron a las 13:10 por /v1/campaigns/cancelacion-automatica).
+// Diseño: proyecto-ips/docs/features/2026-10-17-cancelacion-automatica-pendientes.md, secciones 4.5 y 5.1.
+//
+// El backend decide todo (bandera, selección, frenos, Globho, lista de espera); el bot solo orquesta estas tres llamadas.
+// No se envía nada al paciente (D2). Las tres rutas exigen el header `x-cancelacion-token`, igual al
+// CANCELACION_AUTOMATICA_TOKEN del backend. Este módulo NUNCA imprime el token.
+// ---------------------------------------------------------------------------------------------------------------
+
+export type ModoCancelacionAutomatica = 'apagado' | 'simulacion' | 'activo';
+export type OrigenCancelacionAutomatica = 'cron' | 'manual';
+export type ResultadoCitaCancelacionAutomatica = 'candidata' | 'cancelada' | 'simulada' | 'omitida' | 'error';
+
+/** Cada candidata trae solo ids y fecha/hora: el backend no devuelve nombre ni teléfono (no se avisa al paciente). */
+export interface CandidataCancelacionAutomatica {
+    agenda_id: string;
+    cita_id: number | null;
+    fecha_cita: string;
+    hora_cita: string;
+}
+
+export interface PrepararCancelacionAutomaticaData {
+    modo: ModoCancelacionAutomatica;
+    ejecucion_id: string | null;
+    fecha_objetivo: string | null;
+    candidatas: CandidataCancelacionAutomatica[];
+    omitidas: Record<string, number>;
+    /** Motivo si el backend abortó la ejecución completa (entonces `candidatas` viene vacío). */
+    abortada: string | null;
+}
+
+export interface CancelarCitaAutomaticaData {
+    modo: ModoCancelacionAutomatica;
+    resultado: ResultadoCitaCancelacionAutomatica | null;
+    motivo: string | null;
+}
+
+export interface FinalizarCancelacionAutomaticaData {
+    ejecucion_id: string;
+    fecha_objetivo: string;
+    modo: 'simulacion' | 'activo';
+    estado: 'en_curso' | 'finalizada' | 'abortada';
+    motivo_aborto: string | null;
+    total_pendientes: number;
+    total_candidatas: number;
+    total_canceladas: number;
+    total_simuladas: number;
+    total_errores: number;
+    omitidas: Record<string, number>;
+}
+
+export const HEADER_TOKEN_CANCELACION = 'x-cancelacion-token';
+/** Cada llamada dura lo que tarda UNA cita en Globho (1-3 s); 30 s deja margen sin colgar el proceso. */
+export const TIMEOUT_CANCELACION_AUTOMATICA_MS = 30_000;
+const RUTA_CANCELACION_AUTOMATICA = '/chatbot/cancelacion-automatica';
+
+/** Token compartido con el backend. Vacío = la funcionalidad no está configurada y el bot no llama al backend. */
+export function tokenCancelacionAutomatica(): string {
+    return (process.env.CANCELACION_AUTOMATICA_TOKEN ?? '').trim();
+}
+
+/**
+ * POST a una ruta de la cancelación automática. Devuelve el `data` de la respuesta o `null` si falla por cualquier
+ * motivo (sin token, sin red, 4xx/5xx): NUNCA lanza hacia el controlador. Solo se registra el estado HTTP y el
+ * `cause` del backend, jamás los headers (ahí viaja el token) ni el cuerpo.
+ */
+async function llamarBackendCancelacionAutomatica<T>(accion: 'preparar' | 'cancelar' | 'finalizar', body: Record<string, unknown>): Promise<T | null> {
+    const token = tokenCancelacionAutomatica();
+    if (!token) {
+        console.error(`[cancelacion-automatica] ${accion}: CANCELACION_AUTOMATICA_TOKEN no está configurado; no se llama al backend.`);
+        return null;
+    }
+    try {
+        const response = await axios.post(`${API_BACKEND_URL}${RUTA_CANCELACION_AUTOMATICA}/${accion}`, body, {
+            headers: { [HEADER_TOKEN_CANCELACION]: token },
+            timeout: TIMEOUT_CANCELACION_AUTOMATICA_MS,
+        });
+        return (response?.data?.data ?? null) as T | null;
+    } catch (error: any) {
+        const status = typeof error?.response?.status === 'number' ? error.response.status : 'sin_respuesta';
+        const cause = typeof error?.response?.data?.cause === 'string' ? error.response.data.cause : (error?.code ?? 'ERROR');
+        console.error(`[cancelacion-automatica] ${accion} falló (status=${status}, cause=${cause})`);
+        return null;
+    }
+}
+
+/** Aplica la bandera, selecciona las citas Pendiente de mañana que se cancelarían y abre la ejecución. */
+export async function prepararCancelacionAutomatica(origen: OrigenCancelacionAutomatica): Promise<PrepararCancelacionAutomaticaData | null> {
+    return llamarBackendCancelacionAutomatica<PrepararCancelacionAutomaticaData>('preparar', { origen });
+}
+
+/** Revalida y cancela UNA candidata (o la registra como simulada). */
+export async function cancelarCitaAutomatica(ejecucionId: string, agendaId: string): Promise<CancelarCitaAutomaticaData | null> {
+    return llamarBackendCancelacionAutomatica<CancelarCitaAutomaticaData>('cancelar', { ejecucion_id: ejecucionId, agenda_id: agendaId });
+}
+
+/** Cierra la ejecución. */
+export async function finalizarCancelacionAutomatica(ejecucionId: string): Promise<FinalizarCancelacionAutomaticaData | null> {
+    return llamarBackendCancelacionAutomatica<FinalizarCancelacionAutomaticaData>('finalizar', { ejecucion_id: ejecucionId });
+}

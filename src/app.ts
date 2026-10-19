@@ -12,6 +12,7 @@ import { executeConfirmationCampaign } from './controllers/executeCampaignContro
 import { executeRecuperacionCampaign } from './controllers/recuperacionCampaignController';
 import { executeConAsistenciaCampaign } from './controllers/conAsistenciaCampaignController';
 import { executeListaEsperaRegularizacionCampaign, executeListaEsperaContinuaCampaign } from './controllers/listaEsperaInvitacionCampaignController';
+import { executeCancelacionAutomaticaCampaign } from './controllers/cancelacionAutomaticaCampaignController';
 import { createCrisisInterceptor } from './utils/crisisProtocol';
 import { startCascadaPoller } from './utils/listaEsperaCascadaPoller';
 import { procesarNoticeProvider } from './utils/avisoAsesor';
@@ -232,6 +233,14 @@ const main = async () => {
     adapterProvider.server.post(
         '/v1/campaigns/lista-espera-continua',
         executeListaEsperaContinuaCampaign
+    )
+
+    // Cancelación automática de las citas Pendiente de mañana (cron 13:10). Responde 202 y procesa en segundo plano.
+    // La bandera vive en el backend (CANCELACION_AUTOMATICA_ENABLED): apagada, esta llamada no hace nada. No se avisa al paciente.
+    // Ver proyecto-ips/docs/features/2026-10-17-cancelacion-automatica-pendientes.md.
+    adapterProvider.server.post(
+        '/v1/campaigns/cancelacion-automatica',
+        executeCancelacionAutomaticaCampaign
     )
 
     httpServer(+PORT)
