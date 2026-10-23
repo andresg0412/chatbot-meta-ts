@@ -39,6 +39,46 @@ export function formatearFechaLarga(fecha: unknown): string {
     return utc.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
 }
 
+/**
+ * Fecha con el día de la semana, para los avisos de cita cancelada
+ * (proyecto-ips/docs/features/2026-10-23-avisos-cancelacion-paciente.md, sección 5.2):
+ *   '2026-10-24' → 'sábado, 24 de Octubre de 2026'   (conAnio = true, plantilla cita_cancelada_sin_confirmacion)
+ *   '2026-10-27' → 'martes, 27 de Octubre'           (conAnio = false, plantilla notificacion_cita_cancelada)
+ * El mes va con mayúscula inicial, como en los ejemplos aprobados; el día de la semana en minúscula y con tilde.
+ * Igual que `formatearFechaLarga`, no depende de la zona horaria del proceso. Sin forma de fecha → se devuelve tal cual.
+ */
+export function formatearFechaConDiaSemana(fecha: unknown, conAnio: boolean): string {
+    if (fecha === null || fecha === undefined || fecha === '') return '';
+    const iso = extraerFechaISO(fecha);
+    if (!iso) return String(fecha);
+    const [y, m, d] = iso.split('-').map(Number);
+    const utc = new Date(Date.UTC(y, m - 1, d));
+    if (isNaN(utc.getTime()) || utc.getUTCDate() !== d) return String(fecha);
+    // Listas fijas en vez de Intl: el texto no depende de los datos ICU con que se compiló Node en el servidor.
+    return `${DIAS_SEMANA[utc.getUTCDay()]}, ${d} de ${MESES_CAPITALIZADOS[m - 1]}${conAnio ? ` de ${y}` : ''}`;
+}
+
+const DIAS_SEMANA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+const MESES_CAPITALIZADOS = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+];
+
+/**
+ * Hora en formato de 12 horas: '14:00:00' → '2:00 pm', '09:30' → '9:30 am', '12:00' → '12:00 pm', '00:15' → '12:15 am'.
+ * Sin forma de hora válida se devuelve tal cual.
+ */
+export function formatearHora12h(hora: unknown): string {
+    if (hora === null || hora === undefined) return '';
+    const texto = String(hora).trim();
+    const match = REGEX_HORA_INICIO.exec(texto);
+    if (!match) return texto;
+    const h = Number(match[1]);
+    const min = match[2];
+    if (h > 23 || Number(min) > 59) return texto;
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${h12}:${min} ${h < 12 ? 'am' : 'pm'}`;
+}
+
 /** '14:00:00' → '14:00'; '9:05' → '09:05'. Si no tiene forma de hora se devuelve tal cual. */
 export function formatearHoraHHMM(hora: unknown): string {
     if (hora === null || hora === undefined) return '';

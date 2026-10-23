@@ -15,6 +15,7 @@ import { executeListaEsperaRegularizacionCampaign, executeListaEsperaContinuaCam
 import { executeCancelacionAutomaticaCampaign } from './controllers/cancelacionAutomaticaCampaignController';
 import { createCrisisInterceptor } from './utils/crisisProtocol';
 import { startCascadaPoller } from './utils/listaEsperaCascadaPoller';
+import { startAvisosCancelacionPoller } from './utils/avisosCancelacionPoller';
 import { procesarNoticeProvider } from './utils/avisoAsesor';
 import { obtenerBloqueadosPorCrisis, quitarBloqueoPorCrisis } from './utils/crisisBlacklistStore';
 import { isCrisisProtocolEnabled } from './utils/listaEsperaFlags';
@@ -141,6 +142,11 @@ const main = async () => {
     // sección 13.4-a. Reutiliza el mismo `sendRaw` que ya usa el protocolo de crisis.
     startCascadaPoller(sendRaw);
 
+    // Avisos de cita cancelada al paciente (cancelación automática y cancelaciones hechas en Globho). El backend decide
+    // qué se envía; sin CANCELACION_AUTOMATICA_TOKEN no se envía nada. Ver src/utils/avisosCancelacionPoller.ts y
+    // proyecto-ips/docs/features/2026-10-23-avisos-cancelacion-paciente.md.
+    startAvisosCancelacionPoller();
+
     adapterProvider.server.post(
         '/v1/messages',
         handleCtx(async (bot, req, res) => {
@@ -236,7 +242,8 @@ const main = async () => {
     )
 
     // Cancelación automática de las citas Pendiente de mañana (cron 13:10). Responde 202 y procesa en segundo plano.
-    // La bandera vive en el backend (CANCELACION_AUTOMATICA_ENABLED): apagada, esta llamada no hace nada. No se avisa al paciente.
+    // La bandera vive en el backend (CANCELACION_AUTOMATICA_ENABLED): apagada, esta llamada no hace nada. Cada cita cancelada
+    // deja un aviso al paciente que envía el poller de avisos (plantilla cita_cancelada_sin_confirmacion).
     // Ver proyecto-ips/docs/features/2026-10-17-cancelacion-automatica-pendientes.md.
     adapterProvider.server.post(
         '/v1/campaigns/cancelacion-automatica',

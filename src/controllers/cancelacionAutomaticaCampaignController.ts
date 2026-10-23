@@ -2,8 +2,10 @@
 //   POST /v1/campaigns/cancelacion-automatica   body { origen?: 'cron' | 'manual' }   (el cron lo llama a las 13:10)
 //
 // El bot SOLO orquesta; la lógica de negocio vive en el backend (bandera, selección, frenos de seguridad, Globho,
-// lista de espera). No se envía NINGÚN mensaje al paciente (decisión D2): este controlador no importa nada de
-// WhatsApp. Diseño: proyecto-ips/docs/features/2026-10-17-cancelacion-automatica-pendientes.md, secciones 1 y 5.2.
+// lista de espera). Este controlador no envía mensajes: el aviso al paciente (D2 cambió el 2026-10-23) lo deja el
+// backend en la bandeja de avisos y lo envía el poller de avisos, que aquí solo se despierta al terminar.
+// Diseño: proyecto-ips/docs/features/2026-10-17-cancelacion-automatica-pendientes.md, secciones 1 y 5.2, y
+// proyecto-ips/docs/features/2026-10-23-avisos-cancelacion-paciente.md.
 //
 // Respuestas:
 //   - body inválido ............................ 400
@@ -22,6 +24,7 @@ import {
 } from '../services/apiService';
 import type { OrigenCancelacionAutomatica } from '../services/apiService';
 import { triggerCascadaTickNow } from '../utils/listaEsperaCascadaPoller';
+import { triggerAvisosCancelacionNow } from '../utils/avisosCancelacionPoller';
 
 /** Pausa entre una cita y la siguiente, para no saturar a Globho. Configurable con CANCELACION_AUTOMATICA_PAUSA_MS. */
 export const PAUSA_MS_POR_DEFECTO = 500;
@@ -112,7 +115,11 @@ export async function ejecutarCancelacionAutomatica(origen: OrigenCancelacionAut
 
     // Las citas canceladas dejaron cupos: la cascada empieza a ofrecerlos sin esperar el sondeo de 60 s. En simulación
     // no se canceló nada, así que no hay nada que ofrecer. Es fire-and-forget y nunca lanza.
-    if (resumen.canceladas > 0) triggerCascadaTickNow();
+    // Además, el backend dejó un aviso al paciente por cada cita cancelada: se envían ya, sin esperar el sondeo.
+    if (resumen.canceladas > 0) {
+        triggerCascadaTickNow();
+        triggerAvisosCancelacionNow();
+    }
 
     console.log(
         `[cancelacion-automatica] modo=${resumen.modo} candidatas=${resumen.candidatas} canceladas=${resumen.canceladas} ` +
