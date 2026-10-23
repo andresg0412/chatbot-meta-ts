@@ -45,7 +45,10 @@ export type CampanaTraza =
     | 'oferta_cupo'
     | 'aviso_asesor'
     | 'le_invit_reg'
-    | 'le_invit_cont';
+    | 'le_invit_cont'
+    // Avisos de cita cancelada (proyecto-ips/docs/features/2026-10-23-avisos-cancelacion-paciente.md).
+    | 'aviso_cancel_auto'
+    | 'aviso_cancel_globho';
 export type ValorMetadata = string | number | boolean | null;
 export type MetadataEvento = Record<string, ValorMetadata>;
 

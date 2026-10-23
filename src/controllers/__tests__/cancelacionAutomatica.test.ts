@@ -2,13 +2,17 @@
 // Diseño: proyecto-ips/docs/features/2026-10-17-cancelacion-automatica-pendientes.md, secciones 5 y 8.
 //
 // Se usa el apiService REAL con axios simulado: así se comprueba, además de la orquestación, que todas las llamadas
-// van al backend (con el token en el header) y que NINGUNA sale hacia Meta/WhatsApp (decisión D2: no se avisa al paciente).
+// van al backend (con el token en el header) y que NINGUNA sale hacia Meta/WhatsApp desde el controlador: el aviso al
+// paciente lo envía el poller de avisos (docs/features/2026-10-23-avisos-cancelacion-paciente.md), que aquí está simulado
+// y solo se comprueba que se despierta cuando hubo cancelaciones reales.
 jest.mock('axios', () => ({ __esModule: true, default: { post: jest.fn(), get: jest.fn() } }));
 jest.mock('../../utils/listaEsperaCascadaPoller', () => ({ triggerCascadaTickNow: jest.fn() }));
+jest.mock('../../utils/avisosCancelacionPoller', () => ({ triggerAvisosCancelacionNow: jest.fn() }));
 
 import axios from 'axios';
 import { API_BACKEND_URL } from '../../services/apiService';
 import { triggerCascadaTickNow } from '../../utils/listaEsperaCascadaPoller';
+import { triggerAvisosCancelacionNow } from '../../utils/avisosCancelacionPoller';
 import {
     cancelacionAutomaticaEnCurso,
     ejecutarCancelacionAutomatica,
@@ -18,6 +22,7 @@ import {
 
 const post = (axios as any).post as jest.Mock;
 const tick = triggerCascadaTickNow as jest.Mock;
+const avisos = triggerAvisosCancelacionNow as jest.Mock;
 const ENV_ORIGINAL = { ...process.env };
 const TOKEN = 'token-secreto-de-prueba-0123456789';
 
@@ -88,6 +93,7 @@ describe('ejecutarCancelacionAutomatica', () => {
         expect(llamadasA('/cancelar')).toHaveLength(0);
         expect(llamadasA('/finalizar')).toHaveLength(0);
         expect(tick).not.toHaveBeenCalled();
+        expect(avisos).not.toHaveBeenCalled();
     });
 
     it('una candidata cancelada: la cancela, cierra la ejecución, dispara la cascada UNA vez y no envía ningún WhatsApp', async () => {
@@ -104,7 +110,9 @@ describe('ejecutarCancelacionAutomatica', () => {
         expect(post.mock.calls[1][1]).toEqual({ ejecucion_id: 'EJEC0001', agenda_id: 'AG000001' });
         expect(post.mock.calls[2][1]).toEqual({ ejecucion_id: 'EJEC0001' });
         expect(tick).toHaveBeenCalledTimes(1);
-        // D2: nada hacia Meta/WhatsApp.
+        // El aviso al paciente lo envía el poller de avisos, que se despierta una sola vez al terminar.
+        expect(avisos).toHaveBeenCalledTimes(1);
+        // El controlador en sí no llama a Meta/WhatsApp.
         for (const [url] of post.mock.calls) expect(String(url)).not.toMatch(/graph\.facebook\.com|messages/);
         expect((axios as any).get).not.toHaveBeenCalled();
     });
@@ -144,6 +152,7 @@ describe('ejecutarCancelacionAutomatica', () => {
 
         expect(r).toMatchObject({ modo: 'simulacion', simuladas: 2, canceladas: 0 });
         expect(tick).not.toHaveBeenCalled();
+        expect(avisos).not.toHaveBeenCalled(); // en simulación no se cancela ni se avisa
     });
 
     it('cuenta aparte las omitidas al revalidar y los errores, y la cascada solo sale si algo se canceló', async () => {

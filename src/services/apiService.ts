@@ -5,7 +5,7 @@ import { IReagendarCita, IAgendaResponse, ICrearCita } from '../interfaces/IReag
 import { AgendaPendienteResponse, AgendaProgramadaResponse } from '../interfaces/IReagendarCita';
 import { AccionCascada } from '../interfaces/ICascadaListaEspera';
 import { isRecordatoriosBotonesEnabled as flagRecordatoriosBotones, isRecordatoriosPayloadEnabled, isOfertaPayloadEnabled, esTelefonoPiloto } from '../utils/listaEsperaFlags';
-import { formatearFechaLarga, formatearHoraHHMM } from '../utils/fechaHora';
+import { formatearFechaConDiaSemana, formatearFechaLarga, formatearHora12h, formatearHoraHHMM } from '../utils/fechaHora';
 import { destinoPlantillaWhatsApp, enmascararTelefono, normalizarTelefonoWhatsApp } from '../utils/telefono';
 import { construirPayloadInvitacion } from '../utils/invitacionPayload';
 import { construirPayloadOferta, esOfertaIdValido } from '../utils/ofertaPayload';
@@ -2289,4 +2289,152 @@ export async function cancelarCitaAutomatica(ejecucionId: string, agendaId: stri
 /** Cierra la ejecución. */
 export async function finalizarCancelacionAutomatica(ejecucionId: string): Promise<FinalizarCancelacionAutomaticaData | null> {
     return llamarBackendCancelacionAutomatica<FinalizarCancelacionAutomaticaData>('finalizar', { ejecucion_id: ejecucionId });
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Avisos de cita cancelada al paciente: proyecto-ips/docs/features/2026-10-23-avisos-cancelacion-paciente.md, sección 5.
+//
+// El backend los encola (cancelación automática de las 13:10 y cancelaciones hechas directamente en Globho que detecta
+// el scraper); el poller `utils/avisosCancelacionPoller.ts` los reserva, envía la plantilla y reporta el resultado.
+// Las rutas exigen el mismo token de la cancelación automática (header `x-cancelacion-token`). Nunca se imprime el
+// token, ni el nombre o el teléfono completo del paciente.
+// ---------------------------------------------------------------------------------------------------------------
+
+export type TipoAvisoCancelacion = 'automatica' | 'globho';
+export type ResultadoEnvioAvisoCancelacion = 'enviado' | 'fallido' | 'descartado';
+
+/** Aviso reservado por el backend (el único punto donde viajan nombre y teléfono). */
+export interface AvisoCancelacionReservado {
+    aviso_id: string;
+    tipo: TipoAvisoCancelacion;
+    agenda_id: string;
+    nombre_paciente: string | null;
+    especialidad: string | null;
+    fecha_cita: string; // 'YYYY-MM-DD'
+    hora_cita: string; // 'HH:mm'
+    profesional: string | null;
+    telefono: string | null;
+}
+
+export interface ReservarAvisosCancelacionData {
+    dentro_de_horario: boolean;
+    avisos: AvisoCancelacionReservado[];
+    descartados: Record<string, number>;
+}
+
+const RUTA_AVISOS_CANCELACION = '/chatbot/avisos-cancelacion';
+export const TIMEOUT_AVISOS_CANCELACION_MS = 20_000;
+
+/** Nombre de la plantilla aprobada en Meta para cada tipo de aviso (configurable por si se renombra en Meta). */
+export function nombrePlantillaAvisoCancelacion(tipo: TipoAvisoCancelacion): string {
+    const valor = tipo === 'automatica'
+        ? process.env.NOMBRE_PLANTILLA_CITA_CANCELADA_SIN_CONFIRMACION
+        : process.env.NOMBRE_PLANTILLA_NOTIFICACION_CITA_CANCELADA;
+    const porDefecto = tipo === 'automatica' ? 'cita_cancelada_sin_confirmacion' : 'notificacion_cita_cancelada';
+    return (valor ?? '').trim() || porDefecto;
+}
+
+/** POST a una ruta de los avisos. Devuelve el `data` de la respuesta o `null` ante cualquier fallo; NUNCA lanza. */
+async function llamarBackendAvisosCancelacion<T>(accion: 'reservar' | 'resultado', body: Record<string, unknown>): Promise<T | null> {
+    const token = tokenCancelacionAutomatica();
+    if (!token) return null;
+    try {
+        const response = await axios.post(`${API_BACKEND_URL}${RUTA_AVISOS_CANCELACION}/${accion}`, body, {
+            headers: { [HEADER_TOKEN_CANCELACION]: token },
+            timeout: TIMEOUT_AVISOS_CANCELACION_MS,
+        });
+        return (response?.data?.data ?? null) as T | null;
+    } catch (error: any) {
+        const status = typeof error?.response?.status === 'number' ? error.response.status : 'sin_respuesta';
+        const cause = typeof error?.response?.data?.cause === 'string' ? error.response.data.cause : (error?.code ?? 'ERROR');
+        console.error(`[avisos-cancelacion] ${accion} falló (status=${status}, cause=${cause})`);
+        return null;
+    }
+}
+
+/** Reserva los avisos listos para enviar (el backend aplica horario, descartes y SKIP LOCKED). */
+export async function reservarAvisosCancelacion(limite: number): Promise<ReservarAvisosCancelacionData | null> {
+    return llamarBackendAvisosCancelacion<ReservarAvisosCancelacionData>('reservar', { limite });
+}
+
+/** Reporta el resultado del envío de un aviso reservado. true si el backend lo registró. */
+export async function registrarResultadoAvisoCancelacion(
+    avisoId: string,
+    resultado: ResultadoEnvioAvisoCancelacion,
+    detalle: { motivo?: string; waMessageId?: string; errorCode?: string } = {}
+): Promise<boolean> {
+    const body: Record<string, unknown> = { aviso_id: avisoId, resultado };
+    if (detalle.motivo) body.motivo = detalle.motivo.slice(0, 40);
+    if (detalle.waMessageId) body.wa_message_id = detalle.waMessageId.slice(0, 100);
+    if (detalle.errorCode) body.error_code = detalle.errorCode.slice(0, 20);
+    return (await llamarBackendAvisosCancelacion<unknown>('resultado', body)) !== null;
+}
+
+export const RESPALDO_ESPECIALIDAD_AVISO = 'consulta';
+
+/**
+ * Envía el aviso de cita cancelada. Las dos plantillas tienen las mismas cinco variables, en este orden:
+ *   {{1}} nombre del paciente, {{2}} especialidad, {{3}} fecha con día de la semana, {{4}} hora en 12 h, {{5}} profesional.
+ * Solo cambia la fecha: `cita_cancelada_sin_confirmacion` lleva el año ('sábado, 24 de Octubre de 2026') y
+ * `notificacion_cita_cancelada` no ('martes, 27 de Octubre').
+ * El único botón ("Hablar con un agente") es de respuesta rápida sin payload: llega como texto y lo atiende
+ * pasoAgenteFlow (KW_HABLAR_CON_UN_AGENTE), que envía el enlace de recepción igual que las demás plantillas.
+ */
+export async function enviarPlantillaAvisoCancelacion(aviso: AvisoCancelacionReservado): Promise<ResultadoEnvioMeta> {
+    const nombrePlantilla = nombrePlantillaAvisoCancelacion(aviso.tipo);
+    const campana: CampanaTraza = aviso.tipo === 'automatica' ? 'aviso_cancel_auto' : 'aviso_cancel_globho';
+    const destino = destinoPlantillaWhatsApp(aviso?.telefono);
+    const trazar = (resultado: ResultadoEnvioMeta): ResultadoEnvioMeta => {
+        trackEnvioWhatsApp({
+            telefono: destino ?? aviso?.telefono ?? null,
+            campana,
+            plantilla: nombrePlantilla,
+            tipoEnvio: 'plantilla',
+            resultado,
+            agendaId: aviso?.agenda_id ?? null,
+        });
+        return resultado;
+    };
+    if (!destino) {
+        return trazar({ exito: false, errorCode: 'telefono_invalido', errorTitulo: 'teléfono no contactable' });
+    }
+    try {
+        const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
+        const parametros = [
+            textoORespaldo(aviso.nombre_paciente, RESPALDO_NOMBRE_INVITACION),
+            textoORespaldo(aviso.especialidad, RESPALDO_ESPECIALIDAD_AVISO),
+            formatearFechaConDiaSemana(aviso.fecha_cita, aviso.tipo === 'automatica'),
+            formatearHora12h(aviso.hora_cita),
+            textoORespaldo(aviso.profesional, RESPALDO_PROFESIONAL_INVITACION),
+        ];
+        const body = {
+            messaging_product: 'whatsapp',
+            to: destino,
+            type: 'template',
+            template: {
+                name: nombrePlantilla,
+                language: { code: 'es_CO' },
+                components: [
+                    { type: 'body', parameters: parametros.map((texto) => ({ type: 'text', text: limpiarParametroPlantilla(texto) })) },
+                ],
+            },
+        };
+        const response = await axios.post(url, body, {
+            headers: {
+                'Authorization': `Bearer ${process.env.jwtToken}`,
+                'Content-Type': 'application/json',
+            },
+            timeout: 15000,
+        });
+        const resultadoEnvio = resultadoEnvioDesdeRespuesta(response.data);
+        console.log(
+            `[avisos-cancelacion] ${nombrePlantilla} ${resultadoEnvio.exito ? 'aceptada por Meta' : 'NO aceptada por Meta'} ` +
+            `(aviso ${aviso.aviso_id}, tel ${enmascararTelefono(destino)})`
+        );
+        return trazar(resultadoEnvio);
+    } catch (error: any) {
+        // No se imprime el error completo: su config.data lleva nombre y teléfono del paciente.
+        console.error(`[avisos-cancelacion] Error enviando ${nombrePlantilla} (aviso ${aviso?.aviso_id}):`, resumirErrorMeta(error));
+        return trazar(resultadoEnvioDesdeError(error));
+    }
 }
