@@ -39,6 +39,7 @@
 import { addKeyword, EVENTS } from '@builderbot/bot';
 import {
     consultarCitasRecordatorio,
+    consultarCitaPorPayload,
     responderRecordatorio,
     registrarActividadBot,
 } from '../../../services/apiService';
@@ -216,8 +217,8 @@ function configDe(state: any): ConfigBoton | undefined {
 async function registrarRespuesta(ctx: any, cfg: ConfigBoton, extra: Record<string, unknown>): Promise<void> {
     await registrarActividadBot('recordatorio_respuesta', ctx.from, {
         accion: cfg.boton === 'reprogramar' ? 'reprograma' : cfg.accion,
-        // Solo es 'payload' si la respuesta se resolvió sin documento (ver crearFlujoEntrada); un payload
-        // presente en un botón que igual pide documento (cancelar) cuenta como 'documento'.
+        // Solo es 'payload' si la cita se identificó sin documento (ver crearFlujoEntrada); si el payload
+        // se rechazó y se pidió el documento, cuenta como 'documento'.
         via: ctx?.__viaPayload === true ? 'payload' : 'documento',
         ...(cfg.boton !== 'confirmo' ? { origen_boton: cfg.boton } : {}),
         ...extra,
@@ -299,6 +300,18 @@ async function elegirCita(ctx: any, fns: Fns, cfg: ConfigBoton, cita: CitaRecord
 /** Solo prepara la cita para el flujo de movimiento. No confirma ni cancela en Globho. */
 async function iniciarReprogramacion(ctx: any, fns: Fns, cfg: ConfigBoton, cita: CitaRecordatorio): Promise<any> {
     const numeroDoc = estado(fns.state).numeroDocRecordatorio;
+    if (!numeroDoc && cita?.cita_id) {
+        // Cita identificada por payload (sin documento): el flujo de reprogramar sí necesita el documento
+        // para consultar las citas. Se pide en el flujo de entrada de Reprogramar, conservando la cita.
+        await esperarRespuesta(fns.state, {
+            recordatorioReingreso: true,
+            recordatorioBoton: 'reprogramar',
+            recordatorioCitaPayload: cita.cita_id,
+            recordatorioViaPayload: false,
+            recordatorioIntentosDoc: 0,
+        });
+        return fns.gotoFlow(FLUJOS_ENTRADA.reprogramar);
+    }
     const citas = numeroDoc ? await consultarCitasPorDocumento('', numeroDoc) : [];
     const completa = citas.find((c: any) => String(c.agenda_id) === cita.cita_id
         || (cita.agenda_id_externa != null && String(c.agenda_id_externa) === String(cita.agenda_id_externa)));
@@ -353,7 +366,10 @@ async function sinCita(ctx: any, fns: Fns, cfg: ConfigBoton, consulta: Resultado
 async function ejecutarRespuesta(ctx: any, fns: Fns, cfg: ConfigBoton, cita: CitaRecordatorio): Promise<any> {
     const { state, flowDynamic, endFlow } = fns;
     const numeroDoc = estado(state).numeroDocRecordatorio;
-    const viaPayload = Boolean(estado(state).recordatorioViaPayload) && cfg.accion === 'confirma';
+    // Confirmar o cancelar sin documento (docs/features/2026-10-17-plantillas-sin-documento.md). Cancelar
+    // llega aquí solo después de "Sí, cancelar", en otro mensaje: por eso se lee del state y no del ctx.
+    const viaPayload = Boolean(estado(state).recordatorioViaPayload);
+    if (viaPayload) ctx.__viaPayload = true;
     if ((!numeroDoc && !viaPayload) || !cita?.cita_id) {
         await terminar(ctx, state);
         await flowDynamic(M.MENSAJE_SIN_IDENTIFICAR);
@@ -371,9 +387,12 @@ async function ejecutarRespuesta(ctx: any, fns: Fns, cfg: ConfigBoton, cita: Cit
     }
 
     try {
-        if (viaPayload && resultado.ok === false) {
-            // Payload rechazado o backend temporalmente no disponible: vuelve al camino ya probado
-            // con documento. Nunca se usa el payload para cancelar sin confirmación explícita.
+        if (viaPayload && resultado.ok === false
+            && (cfg.accion === 'confirma' || resultado.causa === 'PAYLOAD_NO_VALIDO')) {
+            // Payload rechazado (o, al confirmar, backend temporalmente no disponible): vuelve al camino ya
+            // probado con documento. Al cancelar, los demás fallos dan el mensaje de siempre: pedir el
+            // documento no cambiaría una cita que ya no está activa ni un error de Globho.
+            ctx.__viaPayload = false;
             await flowDynamic(MENSAJE_DOCUMENTO_REINTENTO);
             await esperarRespuesta(state, {
                 recordatorioViaPayload: false,
@@ -564,6 +583,26 @@ function crearFlujoEntrada(cfg: ConfigBoton, keyword: string) {
                 await state.update({ recordatorioViaPayload: true, recordatorioCita: { cita_id: payload.citaId } });
                 return ejecutarRespuesta(ctx, fns as Fns, cfg, { cita_id: payload.citaId } as CitaRecordatorio);
             }
+            if (payload && payload.accion === accionEsperada && cfg.accion === 'no_asistira') {
+                // Cancelar sin documento: el backend valida celular, envío y cita; el paciente igual ve su
+                // cita con "Sí, cancelar / No, mantener". Si el payload no sirve, se pide el documento.
+                tomarTurno(state);
+                const consulta = await consultarCitaPorPayload(ctx.from, payload.citaId);
+                if (consulta.ok === true) {
+                    ctx.__viaPayload = true;
+                    await state.update({ recordatorioViaPayload: true });
+                    return elegirCita(ctx, fns as Fns, cfg, consulta.cita);
+                }
+                if (consulta.causa === 'CITA_NO_VALIDA') {
+                    ctx.__viaPayload = true;
+                    await registrarRespuesta(ctx, cfg, { resultado: 'error_o_sin_cita', causa: 'cita_no_valida' });
+                    await terminar(ctx, state);
+                    await flowDynamic(M.MENSAJE_CITA_NO_DISPONIBLE);
+                    return endFlow();
+                }
+                console.warn(`[recordatorios] Payload de cancelación no usable (${consulta.causa}); se solicitará documento.`);
+                await state.update({ recordatorioOcupado: undefined, recordatorioCapturaDesde: Date.now() });
+            }
             if (payload && payload.accion !== accionEsperada) {
                 console.warn('[recordatorios] El payload no coincide con el botón; se solicitará documento.');
             }
@@ -661,6 +700,7 @@ const confirmacionCancelarRecordatorioFlow = addKeyword(EVENTS.ACTION).addAction
             await terminar(ctx, state);
             return endFlow(MENSAJE_CONVERSACION_TERMINADA);
         }
+        if (estado(state).recordatorioViaPayload) ctx.__viaPayload = true;
         const respuesta = respuestaConfirmacion(ctx.body);
         if (respuesta === 'reprogramar') return iniciarReprogramacion(ctx, fns, cfg, cita);
         if (respuesta === 'si') {

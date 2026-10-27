@@ -47,21 +47,104 @@ function usarVarianteConBotones(telefonoPaciente: unknown): boolean {
 }
 
 /**
- * Orden documentado por etiqueta de plantilla: 0 confirmar, 1 necesito cancelar, 2 no podré asistir.
- * Verificar estos índices en Meta Business Manager antes de activar RECORDATORIOS_PAYLOAD_ENABLED.
+ * Orden de los botones de cada plantilla de recordatorio, para armar los payloads LEREC
+ * (proyecto-ips/docs/features/2026-10-17-plantillas-sin-documento.md). Cada variable lista la acción de
+ * cada botón, por índice: C confirmar, X necesito cancelar, N no podré asistir, R reprogramar y `-` un
+ * botón sin payload (p. ej. "Hablar con un agente", que se atiende por su texto). Los botones que
+ * sobran al final también salen sin payload. Vacía o inválida: la plantilla sale sin payload y el
+ * paciente sigue respondiendo con su documento.
+ * Verificado en Meta (German, 2026-10-26): 48h y 24h pendiente = C,X (+ agente); 24h confirmado = X (+ agente).
  */
-function componentesPayloadRecordatorio(citaId: string | undefined, permiteReprogramar = true): any[] {
+export const VARIABLES_ORDEN_PAYLOAD_RECORDATORIO = {
+    '48h': 'RECORDATORIOS_PAYLOAD_ORDEN_48H',
+    '24h_pendiente': 'RECORDATORIOS_PAYLOAD_ORDEN_24H_PENDIENTE',
+    '24h_confirmado': 'RECORDATORIOS_PAYLOAD_ORDEN_24H_CONFIRMADO',
+    '2h': 'RECORDATORIOS_PAYLOAD_ORDEN_2H',
+} as const;
+export type PlantillaPayloadRecordatorio = keyof typeof VARIABLES_ORDEN_PAYLOAD_RECORDATORIO;
+
+const REGEX_ORDEN_PAYLOAD = /^[CXNR-](,[CXNR-])*$/;
+const ordenesInvalidosAvisados = new Set<string>();
+
+/** Acciones por índice ('-' = sin payload), o null si la variable está vacía o es inválida. */
+export function ordenPayloadRecordatorio(plantilla: PlantillaPayloadRecordatorio): string[] | null {
+    const variable = VARIABLES_ORDEN_PAYLOAD_RECORDATORIO[plantilla];
+    const valor = (process.env[variable] ?? '').replace(/\s+/g, '').toUpperCase();
+    if (!valor) return null;
+    const acciones = valor.split(',');
+    const letras = acciones.filter((a) => a !== '-');
+    if (!REGEX_ORDEN_PAYLOAD.test(valor) || new Set(letras).size !== letras.length) {
+        if (!ordenesInvalidosAvisados.has(variable)) {
+            ordenesInvalidosAvisados.add(variable);
+            console.warn(`[Recordatorios] ${variable}="${process.env[variable]}" no es válido (ej. C,X,-): se envía sin payload`);
+        }
+        return null;
+    }
+    return acciones;
+}
+
+function componentesPayloadRecordatorio(
+    citaId: string | undefined,
+    plantilla: PlantillaPayloadRecordatorio,
+    permiteReprogramar = true
+): any[] {
     if (!isRecordatoriosPayloadEnabled() || !citaId) return [];
+    const orden = ordenPayloadRecordatorio(plantilla);
+    if (!orden) return [];
+    // R solo con las plantillas v2 aprobadas (RECORDATORIOS_REPROGRAMAR_ENABLED) y nunca en 2h.
+    const conReprogramar = permiteReprogramar && process.env.RECORDATORIOS_REPROGRAMAR_ENABLED === 'true';
     try {
-        const acciones = ['C', 'X', 'N'] as Array<'C' | 'X' | 'N' | 'R'>;
-        // Solo activar junto con las tres plantillas v2 aprobadas: R se agrega al final (índice 3).
-        if (permiteReprogramar && process.env.RECORDATORIOS_REPROGRAMAR_ENABLED === 'true') acciones.push('R');
-        return acciones.map((accion, indice) => ({
-            type: 'button', sub_type: 'quick_reply', index: String(indice),
-            parameters: [{ type: 'payload', payload: construirPayloadRecordatorio(citaId, accion) }],
-        }));
+        return orden.flatMap((accion, indice) => {
+            if (accion === '-' || (accion === 'R' && !conReprogramar)) return [];
+            return [{
+                type: 'button', sub_type: 'quick_reply', index: String(indice),
+                parameters: [{ type: 'payload', payload: construirPayloadRecordatorio(citaId, accion as 'C' | 'X' | 'N' | 'R') }],
+            }];
+        });
     } catch {
         return [];
+    }
+}
+
+/** Errores de Meta por parámetros/botones de la plantilla (un orden de payload mal configurado). */
+const CODIGOS_META_PARAMETROS = new Set(['100', '131008', '131009', '132000', '132012']);
+function esErrorDeParametrosMeta(error: any): boolean {
+    const metaError = error?.response?.data?.error;
+    if (!metaError) return false;
+    if (CODIGOS_META_PARAMETROS.has(String(metaError.code))) return true;
+    const texto = `${metaError.message ?? ''} ${metaError.error_data?.details ?? ''}`.toLowerCase();
+    return texto.includes('parameter') || texto.includes('button');
+}
+
+/**
+ * Envía una plantilla de recordatorio. Si lleva payloads en los botones y Meta la rechaza por
+ * parámetros, se reintenta UNA vez sin esos payloads: el paciente recibe su recordatorio (y responde con
+ * el documento, como antes) y en el log queda que el orden configurado está mal.
+ */
+async function postPlantillaRecordatorio(url: string, body: any, plantilla: PlantillaPayloadRecordatorio) {
+    const config = {
+        headers: {
+            'Authorization': `Bearer ${process.env.jwtToken}`,
+            'Content-Type': 'application/json'
+        },
+        timeout: 15000 // 15 segundos timeout
+    };
+    try {
+        return await axios.post(url, body, config);
+    } catch (error) {
+        const componentes: any[] = body?.template?.components ?? [];
+        const conPayload = componentes.some((c) => c?.type === 'button');
+        if (!conPayload || !esErrorDeParametrosMeta(error)) throw error;
+        const resumen = resumirErrorMeta(error);
+        console.error(
+            `[Recordatorios] Meta rechazó los payloads de ${VARIABLES_ORDEN_PAYLOAD_RECORDATORIO[plantilla]} ` +
+            `(code ${resumen.code}: ${resumen.mensaje}). Se reenvía sin payload; revisar el orden de botones.`
+        );
+        const sinPayload = {
+            ...body,
+            template: { ...body.template, components: componentes.filter((c) => c?.type !== 'button') },
+        };
+        return await axios.post(url, sinPayload, config);
     }
 }
 
@@ -465,14 +548,8 @@ export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse 
                 ]
             }
         };
-        if (usarBotones) body.template.components.push(...componentesPayloadRecordatorio(cita.cita_id));
-        const response = await axios.post(url, body, {
-            headers: {
-                'Authorization': `Bearer ${process.env.jwtToken}`,
-                'Content-Type': 'application/json'
-            },
-            timeout: 15000 // 15 segundos timeout
-        });
+        if (usarBotones) body.template.components.push(...componentesPayloadRecordatorio(cita.cita_id, '24h_pendiente'));
+        const response = await postPlantillaRecordatorio(url, body, '24h_pendiente');
         console.log('Respuesta de Meta:', response.data);
         if (response.data.messages && response.data.messages.length > 0) {
             console.log('Plantilla enviada correctamente:', response.data);
@@ -540,14 +617,8 @@ export async function enviarPlantillaRecordatorio24h(cita: AgendaProgramadaRespo
                 ]
             }
         };
-        if (usarBotones) body.template.components.push(...componentesPayloadRecordatorio(cita.cita_id));
-        const response = await axios.post(url, body, {
-            headers: {
-                'Authorization': `Bearer ${process.env.jwtToken}`,
-                'Content-Type': 'application/json'
-            },
-            timeout: 15000 // 15 segundos timeout
-        });
+        if (usarBotones) body.template.components.push(...componentesPayloadRecordatorio(cita.cita_id, '24h_confirmado'));
+        const response = await postPlantillaRecordatorio(url, body, '24h_confirmado');
         console.log('Respuesta de Meta:', response.data);
         if (response.data.messages && response.data.messages.length > 0) {
             console.log('Plantilla enviada correctamente:', response.data);
@@ -616,14 +687,8 @@ export async function enviarPlantillaDiaria(cita: AgendaPendienteResponse, campa
                 ]
             }
         };
-        if (usarBotones) body.template.components.push(...componentesPayloadRecordatorio(cita.cita_id, false));
-        const response = await axios.post(url, body, {
-            headers: {
-                'Authorization': `Bearer ${process.env.jwtToken}`,
-                'Content-Type': 'application/json'
-            },
-            timeout: 15000 // 15 segundos timeout
-        });
+        if (usarBotones) body.template.components.push(...componentesPayloadRecordatorio(cita.cita_id, '2h', false));
+        const response = await postPlantillaRecordatorio(url, body, '2h');
         console.log('Respuesta de Meta:', response.data);
         if (response.data.messages && response.data.messages.length > 0) {
             console.log('Plantilla enviada correctamente:', response.data);
@@ -697,14 +762,8 @@ export async function enviarPlantillaRecordatorio(cita: AgendaPendienteResponse,
                 ]
             }
         };
-        if (usarBotones) body.template.components.push(...componentesPayloadRecordatorio(cita.cita_id));
-        const response = await axios.post(url, body, {
-            headers: {
-                'Authorization': `Bearer ${process.env.jwtToken}`,
-                'Content-Type': 'application/json'
-            },
-            timeout: 15000 // 15 segundos timeout
-        });
+        if (usarBotones) body.template.components.push(...componentesPayloadRecordatorio(cita.cita_id, '48h'));
+        const response = await postPlantillaRecordatorio(url, body, '48h');
         console.log('Respuesta de Meta:', response.data);
         if (response.data.messages && response.data.messages.length > 0) {
             console.log('Plantilla enviada correctamente:', response.data);
@@ -1624,6 +1683,31 @@ export async function consultarCitasRecordatorio(documento: string, celular: str
         const causa = status === 404 ? 'PACIENTE_NOT_FOUND' : status === 400 ? 'DOCUMENTO_INVALIDO' : 'ERROR';
         console.error(`Error consultando citas del recordatorio (causa: ${causa}):`, (error as any)?.message ?? error);
         return { ok: false, causa, httpStatus: status };
+    }
+}
+
+export type ResultadoCitaPorPayload =
+    | { ok: true; cita: CitaRecordatorio }
+    | { ok: false; causa: 'PAYLOAD_NO_VALIDO' | 'CITA_NO_VALIDA' | 'ERROR' };
+
+/**
+ * Cita a la que apunta el payload LEREC de un botón de recordatorio:
+ * `POST /chatbot/recordatorios/cita-payload { celular, cita_id }`. Solo lectura. Nunca lanza.
+ * 403 → PAYLOAD_NO_VALIDO (otro celular o sin envío registrado); 409 → CITA_NO_VALIDA (ya no está
+ * activa o ya pasó); cualquier otra cosa → ERROR (el bot vuelve a pedir el documento).
+ */
+export async function consultarCitaPorPayload(celular: string, citaId: string): Promise<ResultadoCitaPorPayload> {
+    try {
+        const url = `${API_BACKEND_URL}/chatbot/recordatorios/cita-payload`;
+        const response = await axios.post(url, { celular, cita_id: citaId }, { timeout: TIMEOUT_BACKEND_RECORDATORIOS_MS });
+        const [cita] = citasRecordatorioDesde([response?.data?.data]) ?? [];
+        return cita ? { ok: true, cita } : { ok: false, causa: 'ERROR' };
+    } catch (error) {
+        registrarFalloBackend('/chatbot/recordatorios/cita-payload', error);
+        const status: number | undefined = (error as any)?.response?.status;
+        const causa = status === 403 ? 'PAYLOAD_NO_VALIDO' : status === 409 ? 'CITA_NO_VALIDA' : 'ERROR';
+        console.error(`Error consultando la cita del payload (causa: ${causa}):`, (error as any)?.message ?? error);
+        return { ok: false, causa };
     }
 }
 
