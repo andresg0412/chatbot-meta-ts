@@ -35,6 +35,7 @@ jest.mock('../../services/apiService', () => {
         ...real,
         registrarActividadBot: jest.fn(async () => true),
         consultarCitasRecordatorio: jest.fn(),
+        consultarCitaPorPayload: jest.fn(),
         responderRecordatorio: jest.fn(),
         responderOfertaCupo: jest.fn(async () => ({ ok: true, code: 200, data: { registrado: true } })),
         confirmarCitaCampahna: jest.fn(async () => ({ ok: true, estado: 'confirmada' })),
@@ -120,6 +121,7 @@ const bot = crearBot(true);
 beforeEach(() => {
     jest.clearAllMocks();
     unaCita();
+    mockedApi.consultarCitaPorPayload.mockResolvedValue({ ok: true, cita: CITA_A as any });
     mockedApi.responderRecordatorio.mockImplementation(async (_c: string, _d: string | undefined, respuesta: string, citaId?: string) =>
         ok({
             cita_id: citaId, agenda_id: citaId, agenda_id_externa: citaId === CITA_B.cita_id ? CITA_B.agenda_id_externa : CITA_A.agenda_id_externa,
@@ -128,6 +130,60 @@ beforeEach(() => {
             profesional: citaId === CITA_B.cita_id ? 'Carlos Gómez Ruiz' : 'Ana Pérez',
             estado_resultado: respuesta === 'confirma' ? 'confirmada' : 'cancelada',
         }));
+});
+
+describe('Necesito cancelar por payload (sin documento)', () => {
+    it('payload válido → muestra la cita; "Sí, cancelar" cancela por payload sin documento', async () => {
+        const from = bot.nuevoNumero();
+        const enviados = await bot.enviar(from, [{ body: 'Necesito cancelar', payload: 'LEREC:A9897918:X' }, 'Sí, cancelar']);
+        const salida = textos(enviados);
+        expect(mockedApi.consultarCitaPorPayload).toHaveBeenCalledWith(from, CITA_A.cita_id);
+        expect(mockedApi.consultarCitasRecordatorio).not.toHaveBeenCalled();
+        expect(salida.join('\n')).not.toMatch(/digita tu número de documento/);
+        expect(enviados.find((e) => e.botones)?.botones).toEqual(['Sí, cancelar', 'No, mantener', 'Reprogramar']);
+        expect(mockedApi.responderRecordatorio).toHaveBeenCalledTimes(1);
+        expect(mockedApi.responderRecordatorio).toHaveBeenCalledWith(from, '', 'no_asistira', CITA_A.cita_id, 'payload');
+        expect(mockedApi.registrarActividadBot).toHaveBeenCalledWith('recordatorio_respuesta', from,
+            expect.objectContaining({ accion: 'no_asistira', via: 'payload', resultado: 'exitoso' }));
+    });
+
+    it('"No, mantener" no cancela', async () => {
+        const from = bot.nuevoNumero();
+        await bot.enviar(from, [{ body: 'Necesito cancelar', payload: 'LEREC:A9897918:X' }, 'No, mantener']);
+        expect(mockedApi.responderRecordatorio).not.toHaveBeenCalled();
+        expect(mockedApi.registrarActividadBot).toHaveBeenCalledWith('recordatorio_respuesta', from,
+            expect.objectContaining({ via: 'payload', resultado: 'mantiene_cita' }));
+    });
+
+    it('payload rechazado (PAYLOAD_NO_VALIDO) → pide el documento como siempre', async () => {
+        mockedApi.consultarCitaPorPayload.mockResolvedValueOnce({ ok: false, causa: 'PAYLOAD_NO_VALIDO' });
+        const from = bot.nuevoNumero();
+        const salida = textos(await bot.enviar(from, [{ body: 'Necesito cancelar', payload: 'LEREC:A9897918:X' }, '1234567890', 'Sí, cancelar']));
+        expect(salida.join('\n')).toMatch(/digita tu número de documento/);
+        expect(mockedApi.responderRecordatorio).toHaveBeenCalledWith(from, '1234567890', 'no_asistira', CITA_A.cita_id);
+    });
+
+    it('cita ya no válida (CITA_NO_VALIDA) → "ya no está disponible" sin pedir documento', async () => {
+        mockedApi.consultarCitaPorPayload.mockResolvedValueOnce({ ok: false, causa: 'CITA_NO_VALIDA' });
+        const from = bot.nuevoNumero();
+        const salida = textos(await bot.enviar(from, [{ body: 'Necesito cancelar', payload: 'LEREC:A9897918:X' }]));
+        expect(salida).toContain(M.MENSAJE_CITA_NO_DISPONIBLE);
+        expect(mockedApi.responderRecordatorio).not.toHaveBeenCalled();
+    });
+
+    it('"Sí, cancelar" con payload rechazado al responder → vuelve a pedir el documento', async () => {
+        mockedApi.responderRecordatorio.mockResolvedValueOnce({ ok: false, causa: 'PAYLOAD_NO_VALIDO' });
+        const from = bot.nuevoNumero();
+        const salida = textos(await bot.enviar(from, [{ body: 'Necesito cancelar', payload: 'LEREC:A9897918:X' }, 'Sí, cancelar']));
+        expect(salida).toContain(MENSAJE_DOCUMENTO_REINTENTO);
+    });
+
+    it('"Reprogramar" desde la confirmación por payload pide el documento', async () => {
+        const from = bot.nuevoNumero();
+        const salida = textos(await bot.enviar(from, [{ body: 'Necesito cancelar', payload: 'LEREC:A9897918:X' }, 'Reprogramar']));
+        expect(mockedApi.responderRecordatorio).not.toHaveBeenCalled();
+        expect(salida[salida.length - 1]).toMatch(/documento/);
+    });
 });
 
 describe('Confirmo asistencia', () => {
@@ -169,11 +225,12 @@ describe('Confirmo asistencia', () => {
         expect(salida.some((texto) => /quedó confirmada/.test(texto))).toBe(true);
     });
 
-    it('el payload de "Necesito cancelar" no cancela sin documento ni confirmación', async () => {
+    it('el payload de "Necesito cancelar" no cancela sin la confirmación "Sí, cancelar"', async () => {
         const from = bot.nuevoNumero();
         const salida = textos(await bot.enviar(from, [{ body: 'Necesito cancelar', payload: 'LEREC:A9897918:X' }]));
         expect(mockedApi.responderRecordatorio).not.toHaveBeenCalled();
-        expect(salida[0]).toMatch(/digita tu número de documento/);
+        expect(salida.join('\n')).not.toMatch(/digita tu número de documento/);
+        expect(salida.join('\n')).toMatch(/¿Confirmas que deseas cancelarla/);
     });
 
     it('1 cita → confirma directo con cita_id y dice cuál', async () => {

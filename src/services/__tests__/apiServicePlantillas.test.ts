@@ -238,6 +238,9 @@ it.each([enviarPlantillaConfirmacion,enviarPlantillaRecordatorio24h,enviarPlanti
         process.env.RECORDATORIOS_BOTONES_ENABLED='true';
         process.env.RECORDATORIOS_PAYLOAD_ENABLED='true';
         process.env.RECORDATORIOS_REPROGRAMAR_ENABLED='true';
+        process.env.RECORDATORIOS_PAYLOAD_ORDEN_48H='C,X,N,R';
+        process.env.RECORDATORIOS_PAYLOAD_ORDEN_24H_PENDIENTE='C,X,N,R';
+        process.env.RECORDATORIOS_PAYLOAD_ORDEN_24H_CONFIRMADO='C,X,N,R';
         await enviar({...cita,cita_id:'A1B2C3D4'});
         const botones=llamadaMeta().template.components.filter((c:any)=>c.type==='button');
         expect(botones.map((b:any)=>b.parameters[0].payload)).toEqual(['LEREC:A1B2C3D4:C','LEREC:A1B2C3D4:X','LEREC:A1B2C3D4:N','LEREC:A1B2C3D4:R']);
@@ -248,6 +251,77 @@ it('Fase 4: recordatorio 2h nunca agrega Reprogramar',async()=>{
     process.env.RECORDATORIOS_BOTONES_ENABLED='true';
     process.env.RECORDATORIOS_PAYLOAD_ENABLED='true';
     process.env.RECORDATORIOS_REPROGRAMAR_ENABLED='true';
+    process.env.RECORDATORIOS_PAYLOAD_ORDEN_2H='C,X,N,R';
     await enviarPlantillaDiaria({...cita,cita_id:'A1B2C3D4'});
     expect(llamadaMeta().template.components.filter((c:any)=>c.type==='button')).toHaveLength(3);
+});
+
+describe('Orden de payload por plantilla (plantillas-sin-documento)', () => {
+    const botonesDe = () => llamadaMeta().template.components.filter((c: any) => c.type === 'button');
+    beforeEach(() => {
+        process.env.RECORDATORIOS_BOTONES_ENABLED = 'true';
+        process.env.RECORDATORIOS_PAYLOAD_ENABLED = 'true';
+    });
+
+    it('48h con C,X: payload en los botones 0 y 1; "Hablar con un agente" (2) sin payload', async () => {
+        process.env.RECORDATORIOS_PAYLOAD_ORDEN_48H = 'C,X';
+        await enviarPlantillaRecordatorio({ ...cita, cita_id: 'A1B2C3D4' });
+        expect(botonesDe().map((b: any) => [b.index, b.parameters[0].payload])).toEqual([
+            ['0', 'LEREC:A1B2C3D4:C'], ['1', 'LEREC:A1B2C3D4:X'],
+        ]);
+    });
+
+    it('24h pendiente con C,X y 24h confirmado con X usan su propia variable', async () => {
+        process.env.RECORDATORIOS_PAYLOAD_ORDEN_24H_PENDIENTE = 'C,X';
+        process.env.RECORDATORIOS_PAYLOAD_ORDEN_24H_CONFIRMADO = 'X';
+        await enviarPlantillaConfirmacion({ ...cita, cita_id: 'A1B2C3D4' });
+        expect(botonesDe().map((b: any) => b.parameters[0].payload)).toEqual(['LEREC:A1B2C3D4:C', 'LEREC:A1B2C3D4:X']);
+        post.mockClear();
+        await enviarPlantillaRecordatorio24h({ ...cita, cita_id: 'A1B2C3D4' });
+        expect(botonesDe().map((b: any) => [b.index, b.parameters[0].payload])).toEqual([['0', 'LEREC:A1B2C3D4:X']]);
+    });
+
+    it('variable vacía o inválida → sin payload; "-" salta un botón', async () => {
+        await enviarPlantillaRecordatorio({ ...cita, cita_id: 'A1B2C3D4' });
+        expect(botonesDe()).toHaveLength(0);
+        post.mockClear();
+        process.env.RECORDATORIOS_PAYLOAD_ORDEN_48H = 'C,C';
+        await enviarPlantillaRecordatorio({ ...cita, cita_id: 'A1B2C3D4' });
+        expect(botonesDe()).toHaveLength(0);
+        post.mockClear();
+        process.env.RECORDATORIOS_PAYLOAD_ORDEN_48H = '-,X';
+        await enviarPlantillaRecordatorio({ ...cita, cita_id: 'A1B2C3D4' });
+        expect(botonesDe().map((b: any) => b.index)).toEqual(['1']);
+    });
+
+    it('R se omite sin RECORDATORIOS_REPROGRAMAR_ENABLED', async () => {
+        process.env.RECORDATORIOS_PAYLOAD_ORDEN_48H = 'C,X,N,R';
+        await enviarPlantillaRecordatorio({ ...cita, cita_id: 'A1B2C3D4' });
+        expect(botonesDe().map((b: any) => b.index)).toEqual(['0', '1', '2']);
+    });
+
+    it('Meta rechaza los parámetros → se reenvía una vez sin payload', async () => {
+        process.env.RECORDATORIOS_PAYLOAD_ORDEN_48H = 'C,X';
+        post.mockRejectedValueOnce({
+            message: 'Request failed with status code 400',
+            response: { status: 400, data: { error: { code: 132000, message: 'Number of parameters does not match' } } },
+        });
+        const r = await enviarPlantillaRecordatorio({ ...cita, cita_id: 'A1B2C3D4' });
+        const llamadas = post.mock.calls.filter((c) => String(c[0]).includes('graph.facebook.com'));
+        expect(llamadas).toHaveLength(2);
+        expect(llamadas[0][1].template.components.some((c: any) => c.type === 'button')).toBe(true);
+        expect(llamadas[1][1].template.components.some((c: any) => c.type === 'button')).toBe(false);
+        expect(r.exito).toBe(true);
+    });
+
+    it('otro error de Meta (no de parámetros) no se reintenta', async () => {
+        process.env.RECORDATORIOS_PAYLOAD_ORDEN_48H = 'C,X';
+        post.mockRejectedValueOnce({
+            message: 'Request failed with status code 400',
+            response: { status: 400, data: { error: { code: 131026, message: 'Message undeliverable' } } },
+        });
+        const r = await enviarPlantillaRecordatorio({ ...cita, cita_id: 'A1B2C3D4' });
+        expect(post.mock.calls.filter((c) => String(c[0]).includes('graph.facebook.com'))).toHaveLength(1);
+        expect(r.exito).toBe(false);
+    });
 });
