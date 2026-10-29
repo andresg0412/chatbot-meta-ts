@@ -25,6 +25,7 @@ import { registrarBloqueoPorCrisis } from './crisisBlacklistStore';
 import { enviarAvisoAsesor } from './avisoAsesor';
 import { enmascararTelefono } from './telefono';
 import { cerrarSesionTraza } from './trazabilidad';
+import { registrarEventoSistema } from './historialMensajes';
 
 /**
  * Palabras/frases que sugieren ideación suicida, autolesión o crisis aguda.
@@ -99,6 +100,10 @@ export function createCrisisInterceptor(getBot: () => CrisisCapableBot | undefin
       }
       // --- Fin del tramo síncrono ---
 
+      // Historial del panel: línea de contexto en la conversación. Se difiere un turno (setImmediate) para que quede
+      // DESPUÉS del mensaje del paciente, que el listener del historial registra justo después de este interceptor.
+      setImmediate(() => registrarEventoSistema(from, 'Protocolo de crisis activado: el flujo automático quedó bloqueado para este número', 'crisis'));
+
       // Trazabilidad: la sesión termina por crisis (`sesion_fin{crisis}`; solo con TRAZABILIDAD_V2_ENABLED).
       cerrarSesionTraza(from, 'crisis');
 
@@ -131,6 +136,8 @@ export function createCrisisInterceptor(getBot: () => CrisisCapableBot | undefin
               console.error(`[crisisProtocol] ALERTA DE CRISIS NO REGISTRADA por correo para ${enmascararTelefono(from)} tras ${resultado.intentos} intentos: nadie fue avisado automáticamente.`);
               return registrarActividadBot('aviso_crisis_fallido', from, { canal: 'email', intentos: resultado.intentos }).catch(() => false);
             }
+            // Historial del panel: constancia (sin texto del paciente) de que el equipo fue avisado.
+            if (resultado.registrada) registrarEventoSistema(from, 'Alerta de crisis registrada para el equipo (correo)', 'crisis');
             if (resultado.correoConfigurado === false) {
               console.error(`[crisisProtocol] La alerta de crisis de ${enmascararTelefono(from)} quedó en la bandeja del backend, pero el correo NO está configurado allí: no se enviará hasta configurarlo.`);
             }

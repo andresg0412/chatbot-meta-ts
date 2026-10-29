@@ -16,6 +16,7 @@
 
 import { isTrazabilidadV2Enabled, registrarMensajeSesionTraza, trackEvento, uuidV5 } from './trazabilidad';
 import { marcarOfertaNoEntregada } from '../services/apiService';
+import { registrarEstadoMeta } from './historialMensajes';
 
 const ESTADOS_META = new Set(['sent', 'delivered', 'read', 'failed']);
 
@@ -170,6 +171,8 @@ export function crearMiddlewareEstadosMeta() {
                 if (ruta === '/webhook' && req?.body && typeof req.body === 'object') {
                     const estados = extraerEstadosWebhook(req.body);
                     for (const estado of estados) {
+                        // Historial del panel: los "chulitos" de entrega. No hace nada con la bandera apagada y nunca lanza.
+                        registrarEstadoMeta(estado.waMessageId, estado.status, estado.ocurridoAt, estado.errorCode);
                         if (estado.status === 'failed' && estado.waMessageId) {
                             void marcarOfertaNoEntregada(estado.waMessageId, estado.errorCode).catch(() => undefined);
                         }

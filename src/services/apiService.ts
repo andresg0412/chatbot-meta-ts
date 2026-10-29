@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { postGraph } from './graphClient';
 import { metricCita } from '../utils/metrics';
 import { IPaciente } from '../interfaces/IPacienteIn';
 import { IReagendarCita, IAgendaResponse, ICrearCita } from '../interfaces/IReagendarCita';
@@ -121,7 +122,7 @@ function esErrorDeParametrosMeta(error: any): boolean {
  * parámetros, se reintenta UNA vez sin esos payloads: el paciente recibe su recordatorio (y responde con
  * el documento, como antes) y en el log queda que el orden configurado está mal.
  */
-async function postPlantillaRecordatorio(url: string, body: any, plantilla: PlantillaPayloadRecordatorio) {
+async function postPlantillaRecordatorio(url: string, body: any, plantilla: PlantillaPayloadRecordatorio, campana: string) {
     const config = {
         headers: {
             'Authorization': `Bearer ${process.env.jwtToken}`,
@@ -130,7 +131,7 @@ async function postPlantillaRecordatorio(url: string, body: any, plantilla: Plan
         timeout: 15000 // 15 segundos timeout
     };
     try {
-        return await axios.post(url, body, config);
+        return await postGraph(url, body, config, { origen: 'campana', campana });
     } catch (error) {
         const componentes: any[] = body?.template?.components ?? [];
         const conPayload = componentes.some((c) => c?.type === 'button');
@@ -144,7 +145,7 @@ async function postPlantillaRecordatorio(url: string, body: any, plantilla: Plan
             ...body,
             template: { ...body.template, components: componentes.filter((c) => c?.type !== 'button') },
         };
-        return await axios.post(url, sinPayload, config);
+        return await postGraph(url, sinPayload, config, { origen: 'campana', campana });
     }
 }
 
@@ -549,7 +550,7 @@ export async function enviarPlantillaConfirmacion(cita: AgendaPendienteResponse 
             }
         };
         if (usarBotones) body.template.components.push(...componentesPayloadRecordatorio(cita.cita_id, '24h_pendiente'));
-        const response = await postPlantillaRecordatorio(url, body, '24h_pendiente');
+        const response = await postPlantillaRecordatorio(url, body, '24h_pendiente', 'execute');
         console.log('Respuesta de Meta:', response.data);
         if (response.data.messages && response.data.messages.length > 0) {
             console.log('Plantilla enviada correctamente:', response.data);
@@ -618,7 +619,7 @@ export async function enviarPlantillaRecordatorio24h(cita: AgendaProgramadaRespo
             }
         };
         if (usarBotones) body.template.components.push(...componentesPayloadRecordatorio(cita.cita_id, '24h_confirmado'));
-        const response = await postPlantillaRecordatorio(url, body, '24h_confirmado');
+        const response = await postPlantillaRecordatorio(url, body, '24h_confirmado', 'execute');
         console.log('Respuesta de Meta:', response.data);
         if (response.data.messages && response.data.messages.length > 0) {
             console.log('Plantilla enviada correctamente:', response.data);
@@ -688,7 +689,7 @@ export async function enviarPlantillaDiaria(cita: AgendaPendienteResponse, campa
             }
         };
         if (usarBotones) body.template.components.push(...componentesPayloadRecordatorio(cita.cita_id, '2h', false));
-        const response = await postPlantillaRecordatorio(url, body, '2h');
+        const response = await postPlantillaRecordatorio(url, body, '2h', 'daily');
         console.log('Respuesta de Meta:', response.data);
         if (response.data.messages && response.data.messages.length > 0) {
             console.log('Plantilla enviada correctamente:', response.data);
@@ -763,7 +764,7 @@ export async function enviarPlantillaRecordatorio(cita: AgendaPendienteResponse,
             }
         };
         if (usarBotones) body.template.components.push(...componentesPayloadRecordatorio(cita.cita_id, '48h'));
-        const response = await postPlantillaRecordatorio(url, body, '48h');
+        const response = await postPlantillaRecordatorio(url, body, '48h', 'reminder');
         console.log('Respuesta de Meta:', response.data);
         if (response.data.messages && response.data.messages.length > 0) {
             console.log('Plantilla enviada correctamente:', response.data);
@@ -1002,13 +1003,13 @@ export async function enviarPlantillaRecuperar(cita: AgendaPendienteResponse, ca
                 ]
             }
         };
-        const response = await axios.post(url, body, {
+        const response = await postGraph(url, body, {
             headers: {
                 'Authorization': `Bearer ${process.env.jwtToken}`,
                 'Content-Type': 'application/json'
             },
             timeout: 15000 // 15 segundos timeout
-        });
+        }, { origen: 'campana', campana: 'recuperacion' });
         console.log('Respuesta de Meta:', response.data);
         if (response.data.messages && response.data.messages.length > 0) {
             console.log('Plantilla enviada correctamente:', response.data);
@@ -1132,13 +1133,13 @@ export async function enviarPlantillaUsuariosConAsistencia(cita: AgendaPendiente
                 ]
             }
         };
-        const response = await axios.post(url, body, {
+        const response = await postGraph(url, body, {
             headers: {
                 'Authorization': `Bearer ${process.env.jwtToken}`,
                 'Content-Type': 'application/json'
             },
             timeout: 15000 // 15 segundos timeout
-        });
+        }, { origen: 'campana', campana: 'conasistencia' });
         console.log('Respuesta de Meta:', response.data);
         if (response.data.messages && response.data.messages.length > 0) {
             console.log('Plantilla enviada correctamente:', response.data);
@@ -1324,13 +1325,13 @@ export async function enviarPlantillaOfertaCupo(
                 "components": componentes
             }
         };
-        const response = await axios.post(url, body, {
+        const response = await postGraph(url, body, {
             headers: {
                 'Authorization': `Bearer ${process.env.jwtToken}`,
                 'Content-Type': 'application/json'
             },
             timeout: 15000 // 15 segundos timeout
-        });
+        }, { origen: 'campana', campana: 'oferta_cupo' });
         // Runbook B9: la respuesta de Meta incluye `contacts[].input/wa_id` (el teléfono completo) —
         // solo se loguea el estado y el id del mensaje.
         if (response.data.messages && response.data.messages.length > 0) {
@@ -1363,7 +1364,7 @@ export async function enviarPlantillaAvisoAsesor(
 ): Promise<ResultadoEnvioMeta> {
     try {
         const url = `https://graph.facebook.com/v22.0/${process.env.numberId}/messages`;
-        const response = await axios.post(url, {
+        const response = await postGraph(url, {
             messaging_product: 'whatsapp',
             to: telefono,
             type: 'template',
@@ -1378,7 +1379,7 @@ export async function enviarPlantillaAvisoAsesor(
         }, {
             headers: { Authorization: `Bearer ${process.env.jwtToken}`, 'Content-Type': 'application/json' },
             timeout: 15000,
-        });
+        }, { origen: 'sistema', campana: 'aviso_asesor' });
         return resultadoEnvioDesdeRespuesta(response.data);
     } catch (error) {
         return resultadoEnvioDesdeError(error);
@@ -1850,13 +1851,13 @@ export async function enviarMensajeTextoMeta(
             type: 'text',
             text: { preview_url: false, body: texto }
         };
-        const response = await axios.post(url, body, {
+        const response = await postGraph(url, body, {
             headers: {
                 'Authorization': `Bearer ${process.env.jwtToken}`,
                 'Content-Type': 'application/json'
             },
             timeout: 15000
-        });
+        }, { origen: 'sistema', campana: 'aviso_asesor' });
         const mensajeWaId = response.data?.messages?.[0]?.id;
         if (mensajeWaId) {
             trazar({ exito: true, mensajeWaId });
@@ -2254,13 +2255,13 @@ export async function enviarPlantillaInvitacionListaEspera(
                 ],
             },
         };
-        const response = await axios.post(url, body, {
+        const response = await postGraph(url, body, {
             headers: {
                 'Authorization': `Bearer ${process.env.jwtToken}`,
                 'Content-Type': 'application/json',
             },
             timeout: 15000,
-        });
+        }, { origen: 'campana', campana });
         const resultadoEnvio = resultadoEnvioDesdeRespuesta(response.data);
         console.log(
             `[invitaciones] Plantilla de invitación ${resultadoEnvio.exito ? 'aceptada por Meta' : 'NO aceptada por Meta'} ` +
@@ -2503,13 +2504,13 @@ export async function enviarPlantillaAvisoCancelacion(aviso: AvisoCancelacionRes
                 ],
             },
         };
-        const response = await axios.post(url, body, {
+        const response = await postGraph(url, body, {
             headers: {
                 'Authorization': `Bearer ${process.env.jwtToken}`,
                 'Content-Type': 'application/json',
             },
             timeout: 15000,
-        });
+        }, { origen: 'campana', campana });
         const resultadoEnvio = resultadoEnvioDesdeRespuesta(response.data);
         console.log(
             `[avisos-cancelacion] ${nombrePlantilla} ${resultadoEnvio.exito ? 'aceptada por Meta' : 'NO aceptada por Meta'} ` +

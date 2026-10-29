@@ -22,6 +22,7 @@ import { isCrisisProtocolEnabled } from './utils/listaEsperaFlags';
 import { iniciarTrazabilidad, trackEvento } from './utils/trazabilidad';
 import { crearListenerMensajeEntrante, crearMiddlewareEstadosMeta } from './utils/trazabilidadMeta';
 import { registrarAlmacenEstado } from './utils/estadoConversacion';
+import { crearListenerHistorial, envolverEnvioProvider, iniciarHistorial, isHistorialEnabled } from './utils/historialMensajes';
 import { registrarHistorialBot } from './utils/capturaPendiente';
 
 const PORT = process.env.PORT ?? 3008
@@ -57,6 +58,15 @@ const main = async () => {
         'message',
         createCrisisInterceptor(() => botInstance, sendRaw)
     );
+
+    // Historial de mensajes del panel (proyecto-ips/docs/features/2026-10-29-historial-mensajes-panel.md, 5.2): guarda
+    // el texto de cada mensaje entrante (también el de números bloqueados por crisis: los listeners corren aunque el
+    // número esté en la lista negra). Va justo después del interceptor de crisis para que `en_blacklist` refleje un
+    // bloqueo de este mismo mensaje. Con HISTORIAL_MENSAJES_ENABLED=false no hace nada. Nunca lanza.
+    adapterProvider.on('message', crearListenerHistorial(() => botInstance));
+    // Salientes del flujo (flowDynamic, botones, listas, PDFs, crisis): se envuelve sendMessageToApi una sola vez. Solo
+    // con la bandera encendida; apagada, el provider queda exactamente como lo entrega @builderbot.
+    if (isHistorialEnabled()) envolverEnvioProvider(adapterProvider);
 
     // Trazabilidad (docs/features/2026-09-29-trazabilidad-usuarios.md, 4.3.4): `msg_entrante` por cada
     // mensaje recibido. Se registra DESPUÉS del interceptor de crisis (así `en_blacklist` ya refleja un
@@ -125,6 +135,7 @@ const main = async () => {
     // Trazabilidad: reenvía el spool de una ejecución anterior, arranca el flush por lotes y guarda la
     // cola en el spool en SIGTERM/SIGINT. No hace nada con TRAZABILIDAD_V2_ENABLED != true.
     iniciarTrazabilidad();
+    iniciarHistorial();
 
     // PASO 1: Limpiar sesiones muy antiguas ANTES de restaurar timers
     cleanupOldSessionsWithoutNotification();
