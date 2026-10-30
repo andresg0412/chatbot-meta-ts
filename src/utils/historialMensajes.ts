@@ -105,12 +105,22 @@ function urlBase(): string | null {
 // Utilidades de forma de datos
 // ---------------------------------------------------------------------------
 
+/**
+ * Corta a `max` unidades UTF-16 sin partir un par sustituto (emoji): una mitad suelta viaja como "\ud83d" en el JSON,
+ * Postgres la rechaza al leer el jsonb del lote y ese lote se reintentaría para siempre, bloqueando la cola.
+ */
+function cortarSeguro(s: string, max: number): string {
+    if (s.length <= max) return s;
+    const c = s.charCodeAt(max - 1);
+    return s.slice(0, c >= 0xd800 && c <= 0xdbff ? max - 1 : max);
+}
+
 /** Trunca a MAX_TEXTO caracteres dejando "[…]" al final. Nada si no hay texto. */
 export function truncarTexto(valor: unknown): string | null {
     if (valor === null || valor === undefined) return null;
     const s = String(valor);
     if (s === '') return null;
-    return s.length > MAX_TEXTO ? `${s.slice(0, MAX_TEXTO - 3)}[…]` : s;
+    return s.length > MAX_TEXTO ? `${cortarSeguro(s, MAX_TEXTO - 3)}[…]` : s;
 }
 
 /** Limita el `contenido` serializado: si se pasa, se reemplaza por una marca (no se pierde el mensaje). */
@@ -129,7 +139,7 @@ const corto = (v: unknown, max: number): string | null => {
     if (v === null || v === undefined) return null;
     const s = String(v);
     if (s === '') return null;
-    return s.length > max ? s.slice(0, max) : s;
+    return cortarSeguro(s, max);
 };
 
 // ---------------------------------------------------------------------------
@@ -234,7 +244,9 @@ export async function flushHistorial(): Promise<void> {
                 fallosConsecutivos = 0;
                 noAntesDe = 0;
             }
-            while (colaEstados.length > 0) {
+            // `cola.length === 0`: si llegó un mensaje mientras se enviaban estados, su estado (que siempre llega después)
+            // podría salir antes que la fila y perderse; esos estados esperan al siguiente flush, que envía primero el mensaje.
+            while (colaEstados.length > 0 && cola.length === 0) {
                 const lote = colaEstados.splice(0, LOTE_MAX_ESTADOS);
                 const resultado = await postHistorial('estados', { estados: lote }, lote.length);
                 if (resultado === 'reintentar') {

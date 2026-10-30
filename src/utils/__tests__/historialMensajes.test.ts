@@ -324,6 +324,10 @@ describe('salientes: body de Graph → mensaje', () => {
         expect(truncarTexto(undefined)).toBeNull();
         expect(truncarTexto('a'.repeat(MAX_TEXTO))!.length).toBe(MAX_TEXTO);
         expect(truncarTexto('a'.repeat(MAX_TEXTO + 1))!.length).toBe(MAX_TEXTO);
+        // El corte no parte un emoji (par sustituto): una mitad suelta haría que Postgres rechace el lote entero.
+        const conEmoji = truncarTexto('a'.repeat(MAX_TEXTO - 4) + '😀'.repeat(10))!;
+        expect(conEmoji.endsWith('[…]')).toBe(true);
+        expect(/[\ud800-\udbff](?![\udc00-\udfff])/.test(conEmoji)).toBe(false);
     });
 });
 
