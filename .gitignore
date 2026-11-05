@@ -23,3 +23,7 @@ src/utils/crisisBlacklistDB.json
 
 # Trazabilidad (docs/features/2026-09-29-trazabilidad-usuarios.md): spool de eventos pendientes (runtime, escrito por el bot)
 src/utils/trazabilidadSpool.jsonl
+
+# Historial de mensajes del panel (docs/features/2026-10-29-historial-mensajes-panel.md): spool de mensajes pendientes.
+# Contiene TEXTO de pacientes (dato sensible): nunca versionarlo (runtime, escrito por el bot, permisos 0600).
+src/utils/historialSpool.jsonl
